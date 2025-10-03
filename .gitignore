@@ -1,1 +1,4 @@
 .claude/
+.codeBase/frontend-desktop/node_modules/
+.codeBase/frontend-mobile/node_modules/
+.codeBase/frontend-web/node_modules/
