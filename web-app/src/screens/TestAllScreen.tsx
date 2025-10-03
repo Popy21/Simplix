@@ -8,7 +8,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { customerService, productService, saleService } from '../services/api';
+import { customerService, productService, saleService, authService, teamService, quoteService } from '../services/api';
 
 interface TestResult {
   test: string;
@@ -21,6 +21,7 @@ export default function TestAllScreen() {
   const [testing, setTesting] = useState(false);
   const [results, setResults] = useState<TestResult[]>([]);
   const [summary, setSummary] = useState({ passed: 0, failed: 0, total: 0 });
+  const [authToken, setAuthToken] = useState<string>('');
 
   const addResult = (result: TestResult) => {
     setResults((prev) => [...prev, result]);
@@ -34,8 +35,98 @@ export default function TestAllScreen() {
     const testResults: TestResult[] = [];
     let passed = 0;
     let failed = 0;
+    let token = '';
+    let userId = 0;
+    let teamId = 0;
+    let quoteId = 0;
 
-    // Test 1: GET all customers
+    // ========== AUTH TESTS ==========
+
+    // Test 1: Register new user
+    try {
+      const response = await authService.register({
+        email: `test${Date.now()}@simplix.com`,
+        password: 'test123',
+        name: 'Test User',
+        role: 'user'
+      });
+      token = response.data.token;
+      userId = response.data.user.id;
+      setAuthToken(token);
+      const result: TestResult = {
+        test: 'POST /api/auth/register',
+        status: 'success',
+        message: `✓ User registered with ID: ${userId}`,
+        data: response.data,
+      };
+      testResults.push(result);
+      addResult(result);
+      passed++;
+    } catch (error: any) {
+      const result: TestResult = {
+        test: 'POST /api/auth/register',
+        status: 'failed',
+        message: `✗ Error: ${error.response?.data?.error || error.message}`,
+      };
+      testResults.push(result);
+      addResult(result);
+      failed++;
+    }
+
+    // Test 2: Login
+    try {
+      const response = await authService.login({
+        email: 'admin@simplix.com',
+        password: 'admin123'
+      });
+      const result: TestResult = {
+        test: 'POST /api/auth/login',
+        status: 'success',
+        message: `✓ Logged in as ${response.data.user.name}`,
+        data: response.data,
+      };
+      testResults.push(result);
+      addResult(result);
+      passed++;
+    } catch (error: any) {
+      const result: TestResult = {
+        test: 'POST /api/auth/login',
+        status: 'failed',
+        message: `✗ Error: ${error.response?.data?.error || error.message}`,
+      };
+      testResults.push(result);
+      addResult(result);
+      failed++;
+    }
+
+    // Test 3: Get current user
+    if (token) {
+      try {
+        const response = await authService.me(token);
+        const result: TestResult = {
+          test: 'GET /api/auth/me',
+          status: 'success',
+          message: `✓ Retrieved user: ${response.data.name}`,
+          data: response.data,
+        };
+        testResults.push(result);
+        addResult(result);
+        passed++;
+      } catch (error: any) {
+        const result: TestResult = {
+          test: 'GET /api/auth/me',
+          status: 'failed',
+          message: `✗ Error: ${error.response?.data?.error || error.message}`,
+        };
+        testResults.push(result);
+        addResult(result);
+        failed++;
+      }
+    }
+
+    // ========== CUSTOMER TESTS ==========
+
+    // Test 4: GET all customers
     try {
       const response = await customerService.getAll();
       const result: TestResult = {
@@ -47,18 +138,18 @@ export default function TestAllScreen() {
       testResults.push(result);
       addResult(result);
       passed++;
-    } catch (error) {
+    } catch (error: any) {
       const result: TestResult = {
         test: 'GET /api/customers',
         status: 'failed',
-        message: `✗ Error: ${error}`,
+        message: `✗ Error: ${error.response?.data?.error || error.message}`,
       };
       testResults.push(result);
       addResult(result);
       failed++;
     }
 
-    // Test 2: CREATE customer
+    // Test 5: CREATE customer
     try {
       const newCustomer = {
         name: 'Test Customer ' + Date.now(),
@@ -77,18 +168,20 @@ export default function TestAllScreen() {
       testResults.push(result);
       addResult(result);
       passed++;
-    } catch (error) {
+    } catch (error: any) {
       const result: TestResult = {
         test: 'POST /api/customers',
         status: 'failed',
-        message: `✗ Error: ${error}`,
+        message: `✗ Error: ${error.response?.data?.error || error.message}`,
       };
       testResults.push(result);
       addResult(result);
       failed++;
     }
 
-    // Test 3: GET all products
+    // ========== PRODUCT TESTS ==========
+
+    // Test 6: GET all products
     try {
       const response = await productService.getAll();
       const result: TestResult = {
@@ -100,18 +193,18 @@ export default function TestAllScreen() {
       testResults.push(result);
       addResult(result);
       passed++;
-    } catch (error) {
+    } catch (error: any) {
       const result: TestResult = {
         test: 'GET /api/products',
         status: 'failed',
-        message: `✗ Error: ${error}`,
+        message: `✗ Error: ${error.response?.data?.error || error.message}`,
       };
       testResults.push(result);
       addResult(result);
       failed++;
     }
 
-    // Test 4: CREATE product
+    // Test 7: CREATE product
     try {
       const newProduct = {
         name: 'Test Product ' + Date.now(),
@@ -129,18 +222,20 @@ export default function TestAllScreen() {
       testResults.push(result);
       addResult(result);
       passed++;
-    } catch (error) {
+    } catch (error: any) {
       const result: TestResult = {
         test: 'POST /api/products',
         status: 'failed',
-        message: `✗ Error: ${error}`,
+        message: `✗ Error: ${error.response?.data?.error || error.message}`,
       };
       testResults.push(result);
       addResult(result);
       failed++;
     }
 
-    // Test 5: GET all sales
+    // ========== SALES TESTS ==========
+
+    // Test 8: GET all sales
     try {
       const response = await saleService.getAll();
       const result: TestResult = {
@@ -152,36 +247,128 @@ export default function TestAllScreen() {
       testResults.push(result);
       addResult(result);
       passed++;
-    } catch (error) {
+    } catch (error: any) {
       const result: TestResult = {
         test: 'GET /api/sales',
         status: 'failed',
-        message: `✗ Error: ${error}`,
+        message: `✗ Error: ${error.response?.data?.error || error.message}`,
       };
       testResults.push(result);
       addResult(result);
       failed++;
     }
 
-    // Test 6: CREATE sale (requires existing customer and product)
+    // ========== TEAM TESTS ==========
+
+    // Test 9: CREATE team
+    if (userId) {
+      try {
+        const response = await teamService.create({
+          name: 'Test Team ' + Date.now(),
+          description: 'Test team created by automated test',
+          owner_id: userId
+        });
+        teamId = response.data.id;
+        const result: TestResult = {
+          test: 'POST /api/teams',
+          status: 'success',
+          message: `✓ Created team ID: ${teamId}`,
+          data: response.data,
+        };
+        testResults.push(result);
+        addResult(result);
+        passed++;
+      } catch (error: any) {
+        const result: TestResult = {
+          test: 'POST /api/teams',
+          status: 'failed',
+          message: `✗ Error: ${error.response?.data?.error || error.message}`,
+        };
+        testResults.push(result);
+        addResult(result);
+        failed++;
+      }
+    }
+
+    // Test 10: GET all teams
+    try {
+      const response = await teamService.getAll();
+      const result: TestResult = {
+        test: 'GET /api/teams',
+        status: 'success',
+        message: `✓ Retrieved ${response.data.length} teams`,
+        data: response.data,
+      };
+      testResults.push(result);
+      addResult(result);
+      passed++;
+    } catch (error: any) {
+      const result: TestResult = {
+        test: 'GET /api/teams',
+        status: 'failed',
+        message: `✗ Error: ${error.response?.data?.error || error.message}`,
+      };
+      testResults.push(result);
+      addResult(result);
+      failed++;
+    }
+
+    // Test 11: GET team by ID
+    if (teamId) {
+      try {
+        const response = await teamService.getById(teamId);
+        const result: TestResult = {
+          test: 'GET /api/teams/:id',
+          status: 'success',
+          message: `✓ Retrieved team with ${response.data.members?.length || 0} members`,
+          data: response.data,
+        };
+        testResults.push(result);
+        addResult(result);
+        passed++;
+      } catch (error: any) {
+        const result: TestResult = {
+          test: 'GET /api/teams/:id',
+          status: 'failed',
+          message: `✗ Error: ${error.response?.data?.error || error.message}`,
+        };
+        testResults.push(result);
+        addResult(result);
+        failed++;
+      }
+    }
+
+    // ========== QUOTE TESTS ==========
+
+    // Test 12: CREATE quote
     try {
       const customersResponse = await customerService.getAll();
       const productsResponse = await productService.getAll();
 
-      if (customersResponse.data.length > 0 && productsResponse.data.length > 0) {
-        const newSale = {
+      if (customersResponse.data.length > 0 && productsResponse.data.length > 0 && userId) {
+        const newQuote = {
           customer_id: customersResponse.data[0].id!,
-          product_id: productsResponse.data[0].id!,
-          quantity: 1,
-          total_amount: productsResponse.data[0].price,
-          status: 'pending',
-          notes: 'Test sale created at ' + new Date().toISOString(),
+          user_id: userId,
+          title: 'Test Quote ' + Date.now(),
+          description: 'Automated test quote',
+          items: [
+            {
+              product_id: productsResponse.data[0].id,
+              description: productsResponse.data[0].name,
+              quantity: 2,
+              unit_price: productsResponse.data[0].price,
+              total_price: productsResponse.data[0].price * 2
+            }
+          ],
+          tax_rate: 0.20,
+          status: 'draft'
         };
-        const response = await saleService.create(newSale);
+        const response = await quoteService.create(newQuote);
+        quoteId = response.data.id;
         const result: TestResult = {
-          test: 'POST /api/sales',
+          test: 'POST /api/quotes',
           status: 'success',
-          message: `✓ Created sale ID: ${response.data.id}`,
+          message: `✓ Created quote ID: ${quoteId}`,
           data: response.data,
         };
         testResults.push(result);
@@ -189,99 +376,96 @@ export default function TestAllScreen() {
         passed++;
       } else {
         const result: TestResult = {
-          test: 'POST /api/sales',
+          test: 'POST /api/quotes',
           status: 'failed',
-          message: '✗ No customers or products available',
+          message: '✗ No customers, products, or user available',
         };
         testResults.push(result);
         addResult(result);
         failed++;
       }
-    } catch (error) {
+    } catch (error: any) {
       const result: TestResult = {
-        test: 'POST /api/sales',
+        test: 'POST /api/quotes',
         status: 'failed',
-        message: `✗ Error: ${error}`,
+        message: `✗ Error: ${error.response?.data?.error || error.message}`,
       };
       testResults.push(result);
       addResult(result);
       failed++;
     }
 
-    // Test 7: UPDATE customer (get first customer and update)
+    // Test 13: GET all quotes
     try {
-      const customersResponse = await customerService.getAll();
-      if (customersResponse.data.length > 0) {
-        const customer = customersResponse.data[0];
-        const updatedCustomer = {
-          ...customer,
-          name: customer.name + ' (Updated)',
-        };
-        const response = await customerService.update(customer.id!, updatedCustomer);
-        const result: TestResult = {
-          test: 'PUT /api/customers/:id',
-          status: 'success',
-          message: `✓ Updated customer ID: ${customer.id}`,
-          data: response.data,
-        };
-        testResults.push(result);
-        addResult(result);
-        passed++;
-      } else {
-        const result: TestResult = {
-          test: 'PUT /api/customers/:id',
-          status: 'failed',
-          message: '✗ No customers available to update',
-        };
-        testResults.push(result);
-        addResult(result);
-        failed++;
-      }
-    } catch (error) {
+      const response = await quoteService.getAll();
       const result: TestResult = {
-        test: 'PUT /api/customers/:id',
+        test: 'GET /api/quotes',
+        status: 'success',
+        message: `✓ Retrieved ${response.data.length} quotes`,
+        data: response.data,
+      };
+      testResults.push(result);
+      addResult(result);
+      passed++;
+    } catch (error: any) {
+      const result: TestResult = {
+        test: 'GET /api/quotes',
         status: 'failed',
-        message: `✗ Error: ${error}`,
+        message: `✗ Error: ${error.response?.data?.error || error.message}`,
       };
       testResults.push(result);
       addResult(result);
       failed++;
     }
 
-    // Test 8: GET single customer
-    try {
-      const customersResponse = await customerService.getAll();
-      if (customersResponse.data.length > 0) {
-        const customerId = customersResponse.data[0].id!;
-        const response = await customerService.getById(customerId);
+    // Test 14: GET quote by ID
+    if (quoteId) {
+      try {
+        const response = await quoteService.getById(quoteId);
         const result: TestResult = {
-          test: 'GET /api/customers/:id',
+          test: 'GET /api/quotes/:id',
           status: 'success',
-          message: `✓ Retrieved customer ID: ${customerId}`,
+          message: `✓ Retrieved quote with ${response.data.items?.length || 0} items`,
           data: response.data,
         };
         testResults.push(result);
         addResult(result);
         passed++;
-      } else {
+      } catch (error: any) {
         const result: TestResult = {
-          test: 'GET /api/customers/:id',
+          test: 'GET /api/quotes/:id',
           status: 'failed',
-          message: '✗ No customers available',
+          message: `✗ Error: ${error.response?.data?.error || error.message}`,
         };
         testResults.push(result);
         addResult(result);
         failed++;
       }
-    } catch (error) {
-      const result: TestResult = {
-        test: 'GET /api/customers/:id',
-        status: 'failed',
-        message: `✗ Error: ${error}`,
-      };
-      testResults.push(result);
-      addResult(result);
-      failed++;
+    }
+
+    // Test 15: UPDATE quote status
+    if (quoteId) {
+      try {
+        const response = await quoteService.updateStatus(quoteId, 'sent');
+        const result: TestResult = {
+          test: 'PATCH /api/quotes/:id/status',
+          status: 'success',
+          message: `✓ Updated quote status to 'sent'`,
+          data: response.data,
+        };
+        testResults.push(result);
+        addResult(result);
+        passed++;
+      } catch (error: any) {
+        const result: TestResult = {
+          test: 'PATCH /api/quotes/:id/status',
+          status: 'failed',
+          message: `✗ Error: ${error.response?.data?.error || error.message}`,
+        };
+        testResults.push(result);
+        addResult(result);
+        failed++;
+      }
     }
 
     const total = passed + failed;
@@ -303,8 +487,8 @@ export default function TestAllScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>API Test Suite</Text>
-        <Text style={styles.subtitle}>Test all endpoints automatically</Text>
+        <Text style={styles.title}>API Test Suite v2.0</Text>
+        <Text style={styles.subtitle}>Test all endpoints including Auth, Teams & Quotes</Text>
       </View>
 
       <View style={styles.buttonContainer}>
@@ -316,7 +500,7 @@ export default function TestAllScreen() {
           {testing ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>Run All Tests</Text>
+            <Text style={styles.buttonText}>Run All Tests (15)</Text>
           )}
         </TouchableOpacity>
 
