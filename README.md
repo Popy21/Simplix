@@ -1,2 +1,0 @@
-# Simplix
-Simple Sale CRM
