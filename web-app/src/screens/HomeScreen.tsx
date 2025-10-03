@@ -48,17 +48,8 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           onPress={() => navigation.navigate('TestAll')}
         >
           <Text style={styles.menuIcon}>🧪</Text>
-          <Text style={styles.menuText}>Test All</Text>
-          <Text style={styles.menuDescription}>Run automated API tests (Core)</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.menuItem, styles.testV3MenuItem]}
-          onPress={() => navigation.navigate('TestV3')}
-        >
-          <Text style={styles.menuIcon}>⚡</Text>
-          <Text style={styles.menuText}>Test API v3.0</Text>
-          <Text style={styles.menuDescription}>Test Analytics, Search, Bulk & Reports</Text>
+          <Text style={styles.menuText}>Complete API Tests</Text>
+          <Text style={styles.menuDescription}>Test all 60+ endpoints (Core + v3.0)</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -116,12 +107,7 @@ const styles = StyleSheet.create({
   },
   testMenuItem: {
     borderWidth: 2,
-    borderColor: '#FF9800',
-    backgroundColor: '#FFF3E0',
-  },
-  testV3MenuItem: {
-    borderWidth: 2,
-    borderColor: '#9C27B0',
-    backgroundColor: '#F3E5F5',
+    borderColor: '#2196F3',
+    backgroundColor: '#E3F2FD',
   },
 });
