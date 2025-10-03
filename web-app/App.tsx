@@ -6,6 +6,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import CustomersScreen from './src/screens/CustomersScreen';
 import ProductsScreen from './src/screens/ProductsScreen';
 import SalesScreen from './src/screens/SalesScreen';
+import TestAllScreen from './src/screens/TestAllScreen';
 import { RootStackParamList } from './src/navigation/types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -44,6 +45,11 @@ export default function App() {
           name="Sales"
           component={SalesScreen}
           options={{ title: 'Sales' }}
+        />
+        <Stack.Screen
+          name="TestAll"
+          component={TestAllScreen}
+          options={{ title: 'Test All API' }}
         />
       </Stack.Navigator>
       <StatusBar style="auto" />

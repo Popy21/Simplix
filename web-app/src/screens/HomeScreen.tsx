@@ -42,6 +42,15 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           <Text style={styles.menuText}>Sales</Text>
           <Text style={styles.menuDescription}>View and create sales</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.menuItem, styles.testMenuItem]}
+          onPress={() => navigation.navigate('TestAll')}
+        >
+          <Text style={styles.menuIcon}>🧪</Text>
+          <Text style={styles.menuText}>Test All</Text>
+          <Text style={styles.menuDescription}>Run automated API tests</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -95,5 +104,10 @@ const styles = StyleSheet.create({
   menuDescription: {
     fontSize: 14,
     color: '#666',
+  },
+  testMenuItem: {
+    borderWidth: 2,
+    borderColor: '#FF9800',
+    backgroundColor: '#FFF3E0',
   },
 });
