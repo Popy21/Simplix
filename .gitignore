@@ -2,3 +2,46 @@
 .codeBase/frontend-desktop/node_modules/
 .codeBase/frontend-mobile/node_modules/
 .codeBase/frontend-web/node_modules/
+
+# API
+api/node_modules/
+api/dist/
+api/data/
+api/.env
+
+# Web App
+web-app/node_modules/
+web-app/.expo/
+web-app/dist/
+web-app/.expo-shared/
+web-app/web-build/
+
+# Mobile App (Flutter)
+mobile-app/.dart_tool/
+mobile-app/.flutter-plugins
+mobile-app/.flutter-plugins-dependencies
+mobile-app/.packages
+mobile-app/build/
+mobile-app/ios/Pods/
+mobile-app/ios/.symlinks/
+mobile-app/ios/Flutter/Flutter.framework
+mobile-app/ios/Flutter/Flutter.podspec
+mobile-app/.ios/
+mobile-app/.android/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
