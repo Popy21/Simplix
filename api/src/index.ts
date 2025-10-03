@@ -11,6 +11,10 @@ import analyticsRouter from './routes/analytics';
 import searchRouter from './routes/search';
 import bulkRouter from './routes/bulk';
 import reportsRouter from './routes/reports';
+import notificationsRouter from './routes/notifications';
+import tasksRouter from './routes/tasks';
+import pipelineRouter from './routes/pipeline';
+import campaignsRouter from './routes/campaigns';
 
 dotenv.config();
 
@@ -26,7 +30,7 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/', (req: Request, res: Response) => {
   res.json({
     message: 'Simplix Sales CRM API',
-    version: '3.0.0',
+    version: '4.0.0',
     endpoints: {
       auth: '/api/auth',
       customers: '/api/customers',
@@ -37,7 +41,11 @@ app.get('/', (req: Request, res: Response) => {
       analytics: '/api/analytics',
       search: '/api/search',
       bulk: '/api/bulk',
-      reports: '/api/reports'
+      reports: '/api/reports',
+      notifications: '/api/notifications',
+      tasks: '/api/tasks',
+      pipeline: '/api/pipeline',
+      campaigns: '/api/campaigns'
     }
   });
 });
@@ -52,6 +60,10 @@ app.use('/api/analytics', analyticsRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/bulk', bulkRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/notifications', notificationsRouter);
+app.use('/api/tasks', tasksRouter);
+app.use('/api/pipeline', pipelineRouter);
+app.use('/api/campaigns', campaignsRouter);
 
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: Function) => {

@@ -18,6 +18,10 @@ import {
   searchService,
   bulkService,
   reportsService,
+  notificationsService,
+  tasksService,
+  pipelineService,
+  campaignsService,
 } from '../services/api';
 
 interface TestResult {
@@ -949,6 +953,309 @@ export default function TestAllScreen() {
       'Reports'
     );
 
+    // ========== NOTIFICATIONS TESTS ==========
+    
+    let notificationId = 0;
+
+    if (userId) {
+      const notifResult = await test(
+        'POST /api/notifications',
+        async () => {
+          const response = await notificationsService.create({
+            user_id: userId,
+            title: 'Test Notification',
+            message: 'This is a test notification',
+            type: 'info',
+          });
+          return {
+            message: `✓ Created notification ID: ${response.data.id}`,
+            data: response.data,
+            returnValue: response.data.id,
+          };
+        },
+        'Notifications'
+      );
+
+      if (notifResult) notificationId = notifResult;
+
+      await test(
+        'GET /api/notifications/user/:userId',
+        async () => {
+          const response = await notificationsService.getByUser(userId);
+          return {
+            message: `✓ Retrieved ${response.data.length} notifications`,
+            data: response.data,
+          };
+        },
+        'Notifications'
+      );
+
+      await test(
+        'GET /api/notifications/user/:userId/unread-count',
+        async () => {
+          const response = await notificationsService.getUnreadCount(userId);
+          return {
+            message: `✓ Unread count: ${response.data.count}`,
+            data: response.data,
+          };
+        },
+        'Notifications'
+      );
+
+      if (notificationId) {
+        await test(
+          'PATCH /api/notifications/:id/read',
+          async () => {
+            const response = await notificationsService.markAsRead(notificationId);
+            return {
+              message: `✓ Marked notification as read`,
+              data: response.data,
+            };
+          },
+          'Notifications'
+        );
+      }
+    }
+
+    // ========== TASKS TESTS ==========
+
+    let taskId = 0;
+
+    if (userId && customerId) {
+      const taskResult = await test(
+        'POST /api/tasks',
+        async () => {
+          const response = await tasksService.create({
+            title: 'Test Task',
+            description: 'Follow up with customer',
+            assigned_to: userId,
+            customer_id: customerId,
+            due_date: '2025-12-31',
+            priority: 'high',
+            status: 'pending',
+          });
+          return {
+            message: `✓ Created task ID: ${response.data.id}`,
+            data: response.data,
+            returnValue: response.data.id,
+          };
+        },
+        'Tasks'
+      );
+
+      if (taskResult) taskId = taskResult;
+
+      await test(
+        'GET /api/tasks',
+        async () => {
+          const response = await tasksService.getAll();
+          return {
+            message: `✓ Retrieved ${response.data.length} tasks`,
+            data: response.data,
+          };
+        },
+        'Tasks'
+      );
+
+      await test(
+        'GET /api/tasks/user/:userId',
+        async () => {
+          const response = await tasksService.getByUser(userId);
+          return {
+            message: `✓ Retrieved ${response.data.length} tasks for user`,
+            data: response.data,
+          };
+        },
+        'Tasks'
+      );
+
+      if (taskId) {
+        await test(
+          'PATCH /api/tasks/:id/status',
+          async () => {
+            const response = await tasksService.updateStatus(taskId, 'in-progress');
+            return {
+              message: `✓ Updated task status to in-progress`,
+              data: response.data,
+            };
+          },
+          'Tasks'
+        );
+      }
+    }
+
+    // ========== PIPELINE TESTS ==========
+
+    let stageId = 0;
+    let opportunityId = 0;
+
+    const stageResult = await test(
+      'POST /api/pipeline/stages',
+      async () => {
+        const response = await pipelineService.createStage({
+          name: 'Qualification',
+          color: '#4CAF50',
+          position: 1,
+        });
+        return {
+          message: `✓ Created pipeline stage ID: ${response.data.id}`,
+          data: response.data,
+          returnValue: response.data.id,
+        };
+      },
+      'Pipeline'
+    );
+
+    if (stageResult) stageId = stageResult;
+
+    await test(
+      'GET /api/pipeline/stages',
+      async () => {
+        const response = await pipelineService.getStages();
+        return {
+          message: `✓ Retrieved ${response.data.length} pipeline stages`,
+          data: response.data,
+        };
+      },
+      'Pipeline'
+    );
+
+    if (stageId && customerId && userId) {
+      const oppResult = await test(
+        'POST /api/pipeline/opportunities',
+        async () => {
+          const response = await pipelineService.createOpportunity({
+            name: 'Test Opportunity',
+            customer_id: customerId,
+            user_id: userId,
+            stage_id: stageId,
+            value: 50000,
+            probability: 75,
+            expected_close_date: '2025-12-31',
+            description: 'Major deal opportunity',
+          });
+          return {
+            message: `✓ Created opportunity ID: ${response.data.id}`,
+            data: response.data,
+            returnValue: response.data.id,
+          };
+        },
+        'Pipeline'
+      );
+
+      if (oppResult) opportunityId = oppResult;
+
+      await test(
+        'GET /api/pipeline/opportunities',
+        async () => {
+          const response = await pipelineService.getOpportunities();
+          return {
+            message: `✓ Retrieved ${response.data.length} opportunities`,
+            data: response.data,
+          };
+        },
+        'Pipeline'
+      );
+
+      await test(
+        'GET /api/pipeline/summary',
+        async () => {
+          const response = await pipelineService.getSummary();
+          return {
+            message: `✓ Retrieved pipeline summary with ${response.data.length} stages`,
+            data: response.data,
+          };
+        },
+        'Pipeline'
+      );
+    }
+
+    // ========== CAMPAIGNS TESTS ==========
+
+    let campaignId = 0;
+
+    const campaignResult = await test(
+      'POST /api/campaigns',
+      async () => {
+        const response = await campaignsService.create({
+          name: 'Test Campaign',
+          subject: 'Special Offer',
+          content: 'Check out our amazing products!',
+          status: 'draft',
+        });
+        return {
+          message: `✓ Created campaign ID: ${response.data.id}`,
+          data: response.data,
+          returnValue: response.data.id,
+        };
+      },
+      'Campaigns'
+    );
+
+    if (campaignResult) campaignId = campaignResult;
+
+    await test(
+      'GET /api/campaigns',
+      async () => {
+        const response = await campaignsService.getAll();
+        return {
+          message: `✓ Retrieved ${response.data.length} campaigns`,
+          data: response.data,
+        };
+      },
+      'Campaigns'
+    );
+
+    if (campaignId && customerId) {
+      await test(
+        'POST /api/campaigns/:id/recipients',
+        async () => {
+          const response = await campaignsService.addRecipients(campaignId, [customerId]);
+          return {
+            message: `✓ Added recipients to campaign`,
+            data: response.data,
+          };
+        },
+        'Campaigns'
+      );
+
+      await test(
+        'GET /api/campaigns/:id/recipients',
+        async () => {
+          const response = await campaignsService.getRecipients(campaignId);
+          return {
+            message: `✓ Retrieved ${response.data.length} campaign recipients`,
+            data: response.data,
+          };
+        },
+        'Campaigns'
+      );
+
+      await test(
+        'PATCH /api/campaigns/:id/status',
+        async () => {
+          const response = await campaignsService.updateStatus(campaignId, 'scheduled');
+          return {
+            message: `✓ Updated campaign status to scheduled`,
+            data: response.data,
+          };
+        },
+        'Campaigns'
+      );
+
+      await test(
+        'GET /api/campaigns/:id/stats',
+        async () => {
+          const response = await campaignsService.getStats(campaignId);
+          return {
+            message: `✓ Retrieved campaign stats`,
+            data: response.data,
+          };
+        },
+        'Campaigns'
+      );
+    }
+
     // ========== CLEANUP TESTS (DELETE) ==========
 
     if (quoteId) {
@@ -1007,6 +1314,76 @@ export default function TestAllScreen() {
       );
     }
 
+    if (campaignId) {
+      await test(
+        'DELETE /api/campaigns/:id',
+        async () => {
+          const response = await campaignsService.delete(campaignId);
+          return {
+            message: `✓ Deleted campaign ID: ${campaignId}`,
+            data: response.data,
+          };
+        },
+        'Cleanup'
+      );
+    }
+
+    if (opportunityId) {
+      await test(
+        'DELETE /api/pipeline/opportunities/:id',
+        async () => {
+          const response = await pipelineService.deleteOpportunity(opportunityId);
+          return {
+            message: `✓ Deleted opportunity ID: ${opportunityId}`,
+            data: response.data,
+          };
+        },
+        'Cleanup'
+      );
+    }
+
+    if (stageId) {
+      await test(
+        'DELETE /api/pipeline/stages/:id',
+        async () => {
+          const response = await pipelineService.deleteStage(stageId);
+          return {
+            message: `✓ Deleted pipeline stage ID: ${stageId}`,
+            data: response.data,
+          };
+        },
+        'Cleanup'
+      );
+    }
+
+    if (taskId) {
+      await test(
+        'DELETE /api/tasks/:id',
+        async () => {
+          const response = await tasksService.delete(taskId);
+          return {
+            message: `✓ Deleted task ID: ${taskId}`,
+            data: response.data,
+          };
+        },
+        'Cleanup'
+      );
+    }
+
+    if (notificationId) {
+      await test(
+        'DELETE /api/notifications/:id',
+        async () => {
+          const response = await notificationsService.delete(notificationId);
+          return {
+            message: `✓ Deleted notification ID: ${notificationId}`,
+            data: response.data,
+          };
+        },
+        'Cleanup'
+      );
+    }
+
     if (customerId) {
       await test(
         'DELETE /api/customers/:id',
@@ -1033,7 +1410,7 @@ export default function TestAllScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Complete API Test Suite</Text>
         <Text style={styles.subtitle}>
-          Testing 60+ endpoints across all categories
+          Testing 80+ endpoints across all categories
         </Text>
       </View>
 

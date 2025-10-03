@@ -127,3 +127,80 @@ export const reportsService = {
     api.get('/reports/revenue', { params }),
   inventory: () => api.get('/reports/inventory'),
 };
+
+// Notifications API
+export const notificationsService = {
+  getByUser: (userId: number, unreadOnly?: boolean) =>
+    api.get(`/notifications/user/${userId}${unreadOnly ? '?unreadOnly=true' : ''}`),
+  getById: (id: number) => api.get(`/notifications/${id}`),
+  create: (data: { user_id: number; title: string; message: string; type?: string; link?: string }) =>
+    api.post('/notifications', data),
+  markAsRead: (id: number) => api.patch(`/notifications/${id}/read`),
+  markAllAsRead: (userId: number) => api.patch(`/notifications/user/${userId}/read-all`),
+  delete: (id: number) => api.delete(`/notifications/${id}`),
+  getUnreadCount: (userId: number) => api.get(`/notifications/user/${userId}/unread-count`),
+};
+
+// Tasks API
+export const tasksService = {
+  getAll: (params?: { userId?: number; status?: string; priority?: string }) =>
+    api.get('/tasks', { params }),
+  getById: (id: number) => api.get(`/tasks/${id}`),
+  create: (data: { title: string; description?: string; assigned_to: number; customer_id?: number; due_date?: string; priority?: string; status?: string }) =>
+    api.post('/tasks', data),
+  update: (id: number, data: any) => api.put(`/tasks/${id}`, data),
+  updateStatus: (id: number, status: string) => api.patch(`/tasks/${id}/status`, { status }),
+  delete: (id: number) => api.delete(`/tasks/${id}`),
+  getByUser: (userId: number, status?: string) =>
+    api.get(`/tasks/user/${userId}${status ? `?status=${status}` : ''}`),
+  getOverdue: () => api.get('/tasks/overdue/all'),
+};
+
+// Pipeline API
+export const pipelineService = {
+  // Stages
+  getStages: () => api.get('/pipeline/stages'),
+  getStageById: (id: number) => api.get(`/pipeline/stages/${id}`),
+  createStage: (data: { name: string; color?: string; position?: number }) =>
+    api.post('/pipeline/stages', data),
+  updateStage: (id: number, data: any) => api.put(`/pipeline/stages/${id}`, data),
+  deleteStage: (id: number) => api.delete(`/pipeline/stages/${id}`),
+  
+  // Opportunities
+  getOpportunities: (params?: { stageId?: number; userId?: number; customerId?: number }) =>
+    api.get('/pipeline/opportunities', { params }),
+  getOpportunityById: (id: number) => api.get(`/pipeline/opportunities/${id}`),
+  createOpportunity: (data: { name: string; customer_id: number; user_id: number; stage_id: number; value?: number; probability?: number; expected_close_date?: string; description?: string }) =>
+    api.post('/pipeline/opportunities', data),
+  updateOpportunity: (id: number, data: any) => api.put(`/pipeline/opportunities/${id}`, data),
+  moveOpportunity: (id: number, stage_id: number) =>
+    api.patch(`/pipeline/opportunities/${id}/stage`, { stage_id }),
+  deleteOpportunity: (id: number) => api.delete(`/pipeline/opportunities/${id}`),
+  
+  // Summary
+  getSummary: () => api.get('/pipeline/summary'),
+};
+
+// Campaigns API
+export const campaignsService = {
+  getAll: (status?: string) => api.get('/campaigns', { params: { status } }),
+  getById: (id: number) => api.get(`/campaigns/${id}`),
+  create: (data: { name: string; subject: string; content: string; status?: string; scheduled_date?: string }) =>
+    api.post('/campaigns', data),
+  update: (id: number, data: any) => api.put(`/campaigns/${id}`, data),
+  updateStatus: (id: number, status: string) =>
+    api.patch(`/campaigns/${id}/status`, { status }),
+  delete: (id: number) => api.delete(`/campaigns/${id}`),
+  
+  // Recipients
+  getRecipients: (id: number) => api.get(`/campaigns/${id}/recipients`),
+  addRecipients: (id: number, customer_ids: number[]) =>
+    api.post(`/campaigns/${id}/recipients`, { customer_ids }),
+  
+  // Send & Track
+  send: (id: number) => api.post(`/campaigns/${id}/send`),
+  track: (id: number, action: 'open' | 'click', customer_id: number) =>
+    api.post(`/campaigns/${id}/track/${action}`, { customer_id }),
+  getStats: (id: number) => api.get(`/campaigns/${id}/stats`),
+};
+

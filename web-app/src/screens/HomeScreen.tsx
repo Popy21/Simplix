@@ -43,14 +43,14 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           <Text style={styles.menuDescription}>View and create sales</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.menuItem, styles.testMenuItem]}
-          onPress={() => navigation.navigate('TestAll')}
-        >
-          <Text style={styles.menuIcon}>🧪</Text>
-          <Text style={styles.menuText}>Complete API Tests</Text>
-          <Text style={styles.menuDescription}>Test all 60+ endpoints (Core + v3.0)</Text>
-        </TouchableOpacity>
+                  <TouchableOpacity
+            style={[styles.menuItem, styles.testMenuItem]}
+            onPress={() => navigation.navigate('TestAll')}
+          >
+            <Text style={styles.menuIcon}>🧪</Text>
+            <Text style={styles.menuText}>Complete API Tests</Text>
+            <Text style={styles.menuDescription}>Test all 80+ endpoints (Core + v4.0)</Text>
+          </TouchableOpacity>
       </View>
     </ScrollView>
   );

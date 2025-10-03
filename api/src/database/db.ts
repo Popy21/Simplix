@@ -135,6 +135,102 @@ function initializeDatabase() {
       )
     `);
 
+    // Create Notifications table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        type TEXT DEFAULT 'info',
+        link TEXT,
+        is_read INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id)
+      )
+    `);
+
+    // Create Tasks table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        assigned_to INTEGER NOT NULL,
+        customer_id INTEGER,
+        due_date DATETIME,
+        priority TEXT DEFAULT 'medium',
+        status TEXT DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (assigned_to) REFERENCES users (id),
+        FOREIGN KEY (customer_id) REFERENCES customers (id)
+      )
+    `);
+
+    // Create Pipeline Stages table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS pipeline_stages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        color TEXT DEFAULT '#2196F3',
+        position INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create Opportunities table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS opportunities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        customer_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        stage_id INTEGER NOT NULL,
+        value REAL DEFAULT 0,
+        probability INTEGER DEFAULT 50,
+        expected_close_date DATETIME,
+        description TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES customers (id),
+        FOREIGN KEY (user_id) REFERENCES users (id),
+        FOREIGN KEY (stage_id) REFERENCES pipeline_stages (id)
+      )
+    `);
+
+    // Create Campaigns table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS campaigns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        content TEXT NOT NULL,
+        status TEXT DEFAULT 'draft',
+        scheduled_date DATETIME,
+        sent_count INTEGER DEFAULT 0,
+        opened_count INTEGER DEFAULT 0,
+        clicked_count INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create Campaign Recipients table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS campaign_recipients (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        campaign_id INTEGER NOT NULL,
+        customer_id INTEGER NOT NULL,
+        status TEXT DEFAULT 'pending',
+        opened INTEGER DEFAULT 0,
+        clicked INTEGER DEFAULT 0,
+        sent_at DATETIME,
+        FOREIGN KEY (campaign_id) REFERENCES campaigns (id) ON DELETE CASCADE,
+        FOREIGN KEY (customer_id) REFERENCES customers (id)
+      )
+    `);
+
     console.log('Database tables initialized');
   });
 }

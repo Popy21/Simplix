@@ -191,7 +191,7 @@ router.get('/recent-activity', (req: Request, res: Response) => {
 
   // Get recent sales
   db.all(
-    `SELECT 'sale' as type, id, customer_id, created_at FROM sales ORDER BY created_at DESC LIMIT ?`,
+    `SELECT 'sale' as type, id, customer_id, id as created_at FROM sales ORDER BY id DESC LIMIT ?`,
     [limit],
     (err, sales) => {
       if (err) {
@@ -201,7 +201,7 @@ router.get('/recent-activity', (req: Request, res: Response) => {
 
       // Get recent quotes
       db.all(
-        `SELECT 'quote' as type, id, customer_id, created_at FROM quotes ORDER BY created_at DESC LIMIT ?`,
+        `SELECT 'quote' as type, id, customer_id, id as created_at FROM quotes ORDER BY id DESC LIMIT ?`,
         [limit],
         (err, quotes) => {
           if (err) {
@@ -211,7 +211,7 @@ router.get('/recent-activity', (req: Request, res: Response) => {
 
           // Get recent customers
           db.all(
-            `SELECT 'customer' as type, id, name, created_at FROM customers ORDER BY created_at DESC LIMIT ?`,
+            `SELECT 'customer' as type, id, name, id as created_at FROM customers ORDER BY id DESC LIMIT ?`,
             [limit],
             (err, customers) => {
               if (err) {
