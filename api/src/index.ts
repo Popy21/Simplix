@@ -4,6 +4,9 @@ import dotenv from 'dotenv';
 import customersRouter from './routes/customers';
 import productsRouter from './routes/products';
 import salesRouter from './routes/sales';
+import authRouter from './routes/auth';
+import teamsRouter from './routes/teams';
+import quotesRouter from './routes/quotes';
 
 dotenv.config();
 
@@ -19,18 +22,24 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/', (req: Request, res: Response) => {
   res.json({
     message: 'Simplix Sales CRM API',
-    version: '1.0.0',
+    version: '2.0.0',
     endpoints: {
+      auth: '/api/auth',
       customers: '/api/customers',
       products: '/api/products',
-      sales: '/api/sales'
+      sales: '/api/sales',
+      teams: '/api/teams',
+      quotes: '/api/quotes'
     }
   });
 });
 
+app.use('/api/auth', authRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/sales', salesRouter);
+app.use('/api/teams', teamsRouter);
+app.use('/api/quotes', quotesRouter);
 
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: Function) => {
