@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import {
   customerService,
@@ -37,9 +38,77 @@ export default function TestAllScreen() {
   const [results, setResults] = useState<TestResult[]>([]);
   const [summary, setSummary] = useState({ passed: 0, failed: 0, total: 0 });
   const [categoryStats, setCategoryStats] = useState<Record<string, { passed: number; failed: number }>>({});
+  
+  // SQL Injection Testing
+  const [sqlTestQuery, setSqlTestQuery] = useState('');
+  const [sqlTestResults, setSqlTestResults] = useState<Array<{ query: string; status: 'safe' | 'vulnerable' | 'error'; message: string }>>([]);
+  const [testingSql, setTestingSql] = useState(false);
 
   const addResult = (result: TestResult) => {
     setResults((prev) => [...prev, result]);
+  };
+
+  // SQL Injection Test Function
+  const testSqlInjection = async (query: string) => {
+    setTestingSql(true);
+    try {
+      // Test on search endpoint (most vulnerable to SQL injection)
+      const response = await searchService.global(query);
+      
+      // If we get a valid response, it means the API handled it safely
+      setSqlTestResults(prev => [...prev, {
+        query,
+        status: 'safe',
+        message: `✅ Query handled safely. API returned ${response.data.customers?.length || 0} customers, ${response.data.products?.length || 0} products.`
+      }]);
+    } catch (error: any) {
+      // Check if it's a proper error (safe) or a SQL error (vulnerable)
+      const errorMessage = error?.response?.data?.error || error?.message || 'Unknown error';
+      
+      if (errorMessage.toLowerCase().includes('sql') || 
+          errorMessage.toLowerCase().includes('syntax') ||
+          errorMessage.toLowerCase().includes('sqlite')) {
+        setSqlTestResults(prev => [...prev, {
+          query,
+          status: 'vulnerable',
+          message: `⚠️ VULNERABLE! SQL error exposed: ${errorMessage}`
+        }]);
+      } else {
+        setSqlTestResults(prev => [...prev, {
+          query,
+          status: 'safe',
+          message: `✅ Query rejected safely. Error: ${errorMessage}`
+        }]);
+      }
+    }
+    setTestingSql(false);
+  };
+
+  // Run automated SQL injection tests
+  const runSqlInjectionTests = async () => {
+    setSqlTestResults([]);
+    setTestingSql(true);
+
+    const maliciousQueries = [
+      "' OR '1'='1",
+      "'; DROP TABLE customers; --",
+      "' UNION SELECT * FROM users --",
+      "admin'--",
+      "' OR 1=1--",
+      "1' AND '1'='1",
+      "'; DELETE FROM products WHERE '1'='1",
+      "' OR 'x'='x",
+      "%' AND 1=0 UNION ALL SELECT 'admin', '81dc9bdb52d04dc20036dbd8313ed055",
+      "1' UNION SELECT NULL, table_name FROM information_schema.tables--"
+    ];
+
+    for (const query of maliciousQueries) {
+      await testSqlInjection(query);
+      // Small delay between tests
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    setTestingSql(false);
   };
 
   const runAllTests = async () => {
@@ -1442,6 +1511,92 @@ export default function TestAllScreen() {
         </ScrollView>
       )}
 
+      {/* SQL Injection Security Testing Section */}
+      <View style={styles.sqlTestSection}>
+        <Text style={styles.sqlTestTitle}>🛡️ SQL Injection Security Test</Text>
+        <Text style={styles.sqlTestSubtitle}>
+          Test if the API is vulnerable to SQL injection attacks
+        </Text>
+
+        <View style={styles.sqlInputContainer}>
+          <TextInput
+            style={styles.sqlInput}
+            placeholder="Enter SQL injection attempt (e.g., ' OR '1'='1)"
+            value={sqlTestQuery}
+            onChangeText={setSqlTestQuery}
+            editable={!testingSql}
+          />
+          <TouchableOpacity
+            style={[styles.sqlTestButton, testingSql && styles.buttonDisabled]}
+            onPress={() => {
+              if (sqlTestQuery.trim()) {
+                testSqlInjection(sqlTestQuery);
+              }
+            }}
+            disabled={testingSql || !sqlTestQuery.trim()}
+          >
+            <Text style={styles.sqlTestButtonText}>Test</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.sqlAutoTestButton, testingSql && styles.buttonDisabled]}
+          onPress={runSqlInjectionTests}
+          disabled={testingSql}
+        >
+          {testingSql ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Run 10 Common SQL Injection Attacks</Text>
+          )}
+        </TouchableOpacity>
+
+        {sqlTestResults.length > 0 && (
+          <View style={styles.sqlResultsContainer}>
+            <Text style={styles.sqlResultsTitle}>
+              Test Results ({sqlTestResults.length} tests)
+            </Text>
+            <ScrollView style={styles.sqlResultsScroll} nestedScrollEnabled>
+              {sqlTestResults.map((result, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.sqlResultItem,
+                    result.status === 'safe' ? styles.sqlSafeResult : styles.sqlVulnerableResult
+                  ]}
+                >
+                  <Text style={styles.sqlResultQuery}>Query: {result.query}</Text>
+                  <Text
+                    style={[
+                      styles.sqlResultMessage,
+                      result.status === 'safe' ? styles.successText : styles.warningText
+                    ]}
+                  >
+                    {result.message}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+            
+            {/* Summary */}
+            <View style={styles.sqlSummaryContainer}>
+              <View style={styles.sqlSummaryItem}>
+                <Text style={styles.sqlSummaryLabel}>Safe:</Text>
+                <Text style={styles.successText}>
+                  {sqlTestResults.filter(r => r.status === 'safe').length}
+                </Text>
+              </View>
+              <View style={styles.sqlSummaryItem}>
+                <Text style={styles.sqlSummaryLabel}>Vulnerable:</Text>
+                <Text style={styles.warningText}>
+                  {sqlTestResults.filter(r => r.status === 'vulnerable').length}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+      </View>
+
       <TouchableOpacity
         style={[styles.button, testing && styles.buttonDisabled]}
         onPress={runAllTests}
@@ -1624,5 +1779,116 @@ const styles = StyleSheet.create({
   },
   testMessage: {
     fontSize: 12,
+  },
+  // SQL Injection Test Styles
+  sqlTestSection: {
+    backgroundColor: '#fff3cd',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: '#ffc107',
+  },
+  sqlTestTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  sqlTestSubtitle: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 15,
+  },
+  sqlInputContainer: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  sqlInput: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    marginRight: 10,
+    fontSize: 14,
+  },
+  sqlTestButton: {
+    backgroundColor: '#ffc107',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    justifyContent: 'center',
+  },
+  sqlTestButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  sqlAutoTestButton: {
+    backgroundColor: '#ff9800',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  sqlResultsContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+  },
+  sqlResultsTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  sqlResultsScroll: {
+    maxHeight: 300,
+  },
+  sqlResultItem: {
+    padding: 10,
+    marginBottom: 8,
+    borderRadius: 6,
+    borderLeftWidth: 3,
+  },
+  sqlSafeResult: {
+    backgroundColor: '#e8f5e9',
+    borderLeftColor: '#4CAF50',
+  },
+  sqlVulnerableResult: {
+    backgroundColor: '#fff3e0',
+    borderLeftColor: '#ff9800',
+  },
+  sqlResultQuery: {
+    fontSize: 11,
+    fontFamily: 'monospace',
+    color: '#666',
+    marginBottom: 5,
+  },
+  sqlResultMessage: {
+    fontSize: 12,
+  },
+  sqlSummaryContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  sqlSummaryItem: {
+    alignItems: 'center',
+  },
+  sqlSummaryLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 5,
+  },
+  warningText: {
+    color: '#ff9800',
+    fontWeight: 'bold',
   },
 });
