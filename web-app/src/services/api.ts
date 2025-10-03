@@ -72,3 +72,58 @@ export const quoteService = {
   delete: (id: number) => api.delete(`/quotes/${id}`),
   updateStatus: (id: number, status: string) => api.patch(`/quotes/${id}/status`, { status }),
 };
+
+// Analytics API
+export const analyticsService = {
+  getDashboard: () => api.get('/analytics/dashboard'),
+  getSalesByPeriod: (period: 'day' | 'month' | 'year' = 'month') =>
+    api.get(`/analytics/sales-by-period?period=${period}`),
+  getTopCustomers: (limit: number = 10) => api.get(`/analytics/top-customers?limit=${limit}`),
+  getTopProducts: (limit: number = 10) => api.get(`/analytics/top-products?limit=${limit}`),
+  getQuotesConversion: () => api.get('/analytics/quotes-conversion'),
+  getRecentActivity: (limit: number = 20) => api.get(`/analytics/recent-activity?limit=${limit}`),
+  getLowStock: (threshold: number = 10) => api.get(`/analytics/low-stock?threshold=${threshold}`),
+};
+
+// Search API
+export const searchService = {
+  global: (q: string) => api.get(`/search?q=${encodeURIComponent(q)}`),
+  customers: (params: { q?: string; company?: string; email?: string }) =>
+    api.get('/search/customers', { params }),
+  products: (params: { q?: string; minPrice?: number; maxPrice?: number; inStock?: boolean }) =>
+    api.get('/search/products', { params }),
+  sales: (params: { customerId?: number; productId?: number; status?: string; startDate?: string; endDate?: string }) =>
+    api.get('/search/sales', { params }),
+  quotes: (params: { customerId?: number; userId?: number; status?: string; startDate?: string; endDate?: string }) =>
+    api.get('/search/quotes', { params }),
+};
+
+// Bulk Operations API
+export const bulkService = {
+  createCustomers: (customers: any[]) => api.post('/bulk/customers', { customers }),
+  createProducts: (products: any[]) => api.post('/bulk/products', { products }),
+  deleteCustomers: (ids: number[]) => api.delete('/bulk/customers', { data: { ids } }),
+  deleteProducts: (ids: number[]) => api.delete('/bulk/products', { data: { ids } }),
+  deleteSales: (ids: number[]) => api.delete('/bulk/sales', { data: { ids } }),
+  updateProductStock: (updates: Array<{ id: number; stock: number }>) =>
+    api.patch('/bulk/products/stock', { updates }),
+  updateSalesStatus: (ids: number[], status: string) =>
+    api.patch('/bulk/sales/status', { ids, status }),
+  updateQuotesStatus: (ids: number[], status: string) =>
+    api.patch('/bulk/quotes/status', { ids, status }),
+};
+
+// Reports API
+export const reportsService = {
+  sales: (params: { startDate: string; endDate: string; groupBy?: 'day' | 'month' | 'year' }) =>
+    api.get('/reports/sales', { params }),
+  customers: () => api.get('/reports/customers'),
+  products: () => api.get('/reports/products'),
+  quotes: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/reports/quotes', { params }),
+  teams: () => api.get('/reports/teams'),
+  users: () => api.get('/reports/users'),
+  revenue: (params: { startDate?: string; endDate?: string; groupBy?: 'day' | 'month' | 'year' }) =>
+    api.get('/reports/revenue', { params }),
+  inventory: () => api.get('/reports/inventory'),
+};
