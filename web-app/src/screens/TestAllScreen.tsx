@@ -21,7 +21,6 @@ export default function TestAllScreen() {
   const [testing, setTesting] = useState(false);
   const [results, setResults] = useState<TestResult[]>([]);
   const [summary, setSummary] = useState({ passed: 0, failed: 0, total: 0 });
-  const [authToken, setAuthToken] = useState<string>('');
 
   const addResult = (result: TestResult) => {
     setResults((prev) => [...prev, result]);
@@ -32,440 +31,440 @@ export default function TestAllScreen() {
     setResults([]);
     setSummary({ passed: 0, failed: 0, total: 0 });
 
-    const testResults: TestResult[] = [];
     let passed = 0;
     let failed = 0;
     let token = '';
     let userId = 0;
+    let customerId = 0;
+    let productId = 0;
+    let saleId = 0;
     let teamId = 0;
     let quoteId = 0;
 
+    const test = async (testName: string, testFn: () => Promise<any>) => {
+      try {
+        const result = await testFn();
+        const testResult: TestResult = {
+          test: testName,
+          status: 'success',
+          message: result.message,
+          data: result.data,
+        };
+        addResult(testResult);
+        passed++;
+        return result.returnValue;
+      } catch (error: any) {
+        const testResult: TestResult = {
+          test: testName,
+          status: 'failed',
+          message: `✗ Error: ${error.response?.data?.error || error.message}`,
+        };
+        addResult(testResult);
+        failed++;
+        return null;
+      }
+    };
+
     // ========== AUTH TESTS ==========
 
-    // Test 1: Register new user
-    try {
+    const authResult = await test('POST /api/auth/register', async () => {
       const response = await authService.register({
         email: `test${Date.now()}@simplix.com`,
         password: 'test123',
         name: 'Test User',
         role: 'user'
       });
-      token = response.data.token;
-      userId = response.data.user.id;
-      setAuthToken(token);
-      const result: TestResult = {
-        test: 'POST /api/auth/register',
-        status: 'success',
-        message: `✓ User registered with ID: ${userId}`,
+      return {
+        message: `✓ User registered with ID: ${response.data.user.id}`,
         data: response.data,
+        returnValue: { token: response.data.token, userId: response.data.user.id }
       };
-      testResults.push(result);
-      addResult(result);
-      passed++;
-    } catch (error: any) {
-      const result: TestResult = {
-        test: 'POST /api/auth/register',
-        status: 'failed',
-        message: `✗ Error: ${error.response?.data?.error || error.message}`,
-      };
-      testResults.push(result);
-      addResult(result);
-      failed++;
+    });
+
+    if (authResult) {
+      token = authResult.token;
+      userId = authResult.userId;
     }
 
-    // Test 2: Login
-    try {
+    await test('POST /api/auth/login', async () => {
       const response = await authService.login({
         email: 'admin@simplix.com',
         password: 'admin123'
       });
-      const result: TestResult = {
-        test: 'POST /api/auth/login',
-        status: 'success',
+      return {
         message: `✓ Logged in as ${response.data.user.name}`,
         data: response.data,
       };
-      testResults.push(result);
-      addResult(result);
-      passed++;
-    } catch (error: any) {
-      const result: TestResult = {
-        test: 'POST /api/auth/login',
-        status: 'failed',
-        message: `✗ Error: ${error.response?.data?.error || error.message}`,
-      };
-      testResults.push(result);
-      addResult(result);
-      failed++;
-    }
+    });
 
-    // Test 3: Get current user
     if (token) {
-      try {
+      await test('GET /api/auth/me', async () => {
         const response = await authService.me(token);
-        const result: TestResult = {
-          test: 'GET /api/auth/me',
-          status: 'success',
+        return {
           message: `✓ Retrieved user: ${response.data.name}`,
           data: response.data,
         };
-        testResults.push(result);
-        addResult(result);
-        passed++;
-      } catch (error: any) {
-        const result: TestResult = {
-          test: 'GET /api/auth/me',
-          status: 'failed',
-          message: `✗ Error: ${error.response?.data?.error || error.message}`,
-        };
-        testResults.push(result);
-        addResult(result);
-        failed++;
-      }
+      });
     }
 
     // ========== CUSTOMER TESTS ==========
 
-    // Test 4: GET all customers
-    try {
+    await test('GET /api/customers', async () => {
       const response = await customerService.getAll();
-      const result: TestResult = {
-        test: 'GET /api/customers',
-        status: 'success',
+      return {
         message: `✓ Retrieved ${response.data.length} customers`,
         data: response.data,
       };
-      testResults.push(result);
-      addResult(result);
-      passed++;
-    } catch (error: any) {
-      const result: TestResult = {
-        test: 'GET /api/customers',
-        status: 'failed',
-        message: `✗ Error: ${error.response?.data?.error || error.message}`,
-      };
-      testResults.push(result);
-      addResult(result);
-      failed++;
-    }
+    });
 
-    // Test 5: CREATE customer
-    try {
-      const newCustomer = {
+    const customerResult = await test('POST /api/customers', async () => {
+      const response = await customerService.create({
         name: 'Test Customer ' + Date.now(),
         email: `test${Date.now()}@test.com`,
         phone: '0600000000',
         company: 'Test Company',
-        address: 'Test Address',
-      };
-      const response = await customerService.create(newCustomer);
-      const result: TestResult = {
-        test: 'POST /api/customers',
-        status: 'success',
+      });
+      return {
         message: `✓ Created customer ID: ${response.data.id}`,
         data: response.data,
+        returnValue: response.data.id
       };
-      testResults.push(result);
-      addResult(result);
-      passed++;
-    } catch (error: any) {
-      const result: TestResult = {
-        test: 'POST /api/customers',
-        status: 'failed',
-        message: `✗ Error: ${error.response?.data?.error || error.message}`,
-      };
-      testResults.push(result);
-      addResult(result);
-      failed++;
+    });
+
+    if (customerResult) customerId = customerResult;
+
+    if (customerId) {
+      await test('GET /api/customers/:id', async () => {
+        const response = await customerService.getById(customerId);
+        return {
+          message: `✓ Retrieved customer ID: ${customerId}`,
+          data: response.data,
+        };
+      });
+
+      await test('PUT /api/customers/:id', async () => {
+        const response = await customerService.update(customerId, {
+          name: 'Updated Customer',
+          email: `updated${Date.now()}@test.com`,
+          phone: '0611111111',
+          company: 'Updated Company',
+        });
+        return {
+          message: `✓ Updated customer ID: ${customerId}`,
+          data: response.data,
+        };
+      });
     }
 
     // ========== PRODUCT TESTS ==========
 
-    // Test 6: GET all products
-    try {
+    await test('GET /api/products', async () => {
       const response = await productService.getAll();
-      const result: TestResult = {
-        test: 'GET /api/products',
-        status: 'success',
+      return {
         message: `✓ Retrieved ${response.data.length} products`,
         data: response.data,
       };
-      testResults.push(result);
-      addResult(result);
-      passed++;
-    } catch (error: any) {
-      const result: TestResult = {
-        test: 'GET /api/products',
-        status: 'failed',
-        message: `✗ Error: ${error.response?.data?.error || error.message}`,
-      };
-      testResults.push(result);
-      addResult(result);
-      failed++;
-    }
+    });
 
-    // Test 7: CREATE product
-    try {
-      const newProduct = {
+    const productResult = await test('POST /api/products', async () => {
+      const response = await productService.create({
         name: 'Test Product ' + Date.now(),
-        description: 'Test product for automated testing',
+        description: 'Test product',
         price: 99.99,
         stock: 10,
-      };
-      const response = await productService.create(newProduct);
-      const result: TestResult = {
-        test: 'POST /api/products',
-        status: 'success',
+      });
+      return {
         message: `✓ Created product ID: ${response.data.id}`,
         data: response.data,
+        returnValue: response.data.id
       };
-      testResults.push(result);
-      addResult(result);
-      passed++;
-    } catch (error: any) {
-      const result: TestResult = {
-        test: 'POST /api/products',
-        status: 'failed',
-        message: `✗ Error: ${error.response?.data?.error || error.message}`,
-      };
-      testResults.push(result);
-      addResult(result);
-      failed++;
+    });
+
+    if (productResult) productId = productResult;
+
+    if (productId) {
+      await test('GET /api/products/:id', async () => {
+        const response = await productService.getById(productId);
+        return {
+          message: `✓ Retrieved product ID: ${productId}`,
+          data: response.data,
+        };
+      });
+
+      await test('PUT /api/products/:id', async () => {
+        const response = await productService.update(productId, {
+          name: 'Updated Product',
+          description: 'Updated description',
+          price: 149.99,
+          stock: 20,
+        });
+        return {
+          message: `✓ Updated product ID: ${productId}`,
+          data: response.data,
+        };
+      });
     }
 
     // ========== SALES TESTS ==========
 
-    // Test 8: GET all sales
-    try {
+    await test('GET /api/sales', async () => {
       const response = await saleService.getAll();
-      const result: TestResult = {
-        test: 'GET /api/sales',
-        status: 'success',
+      return {
         message: `✓ Retrieved ${response.data.length} sales`,
         data: response.data,
       };
-      testResults.push(result);
-      addResult(result);
-      passed++;
-    } catch (error: any) {
-      const result: TestResult = {
-        test: 'GET /api/sales',
-        status: 'failed',
-        message: `✗ Error: ${error.response?.data?.error || error.message}`,
-      };
-      testResults.push(result);
-      addResult(result);
-      failed++;
+    });
+
+    if (customerId && productId) {
+      const saleResult = await test('POST /api/sales', async () => {
+        const response = await saleService.create({
+          customer_id: customerId,
+          product_id: productId,
+          quantity: 2,
+          total_amount: 299.98,
+          status: 'completed',
+        });
+        return {
+          message: `✓ Created sale ID: ${response.data.id}`,
+          data: response.data,
+          returnValue: response.data.id
+        };
+      });
+
+      if (saleResult) saleId = saleResult;
+
+      if (saleId) {
+        await test('GET /api/sales/:id', async () => {
+          const response = await saleService.getById(saleId);
+          return {
+            message: `✓ Retrieved sale ID: ${saleId}`,
+            data: response.data,
+          };
+        });
+
+        await test('PUT /api/sales/:id', async () => {
+          const response = await saleService.update(saleId, {
+            customer_id: customerId,
+            product_id: productId,
+            quantity: 3,
+            total_amount: 449.97,
+            status: 'completed',
+          });
+          return {
+            message: `✓ Updated sale ID: ${saleId}`,
+            data: response.data,
+          };
+        });
+      }
     }
 
     // ========== TEAM TESTS ==========
 
-    // Test 9: CREATE team
     if (userId) {
-      try {
+      const teamResult = await test('POST /api/teams', async () => {
         const response = await teamService.create({
           name: 'Test Team ' + Date.now(),
-          description: 'Test team created by automated test',
+          description: 'Test team',
           owner_id: userId
         });
-        teamId = response.data.id;
-        const result: TestResult = {
-          test: 'POST /api/teams',
-          status: 'success',
-          message: `✓ Created team ID: ${teamId}`,
+        return {
+          message: `✓ Created team ID: ${response.data.id}`,
           data: response.data,
+          returnValue: response.data.id
         };
-        testResults.push(result);
-        addResult(result);
-        passed++;
-      } catch (error: any) {
-        const result: TestResult = {
-          test: 'POST /api/teams',
-          status: 'failed',
-          message: `✗ Error: ${error.response?.data?.error || error.message}`,
-        };
-        testResults.push(result);
-        addResult(result);
-        failed++;
-      }
+      });
+
+      if (teamResult) teamId = teamResult;
     }
 
-    // Test 10: GET all teams
-    try {
+    await test('GET /api/teams', async () => {
       const response = await teamService.getAll();
-      const result: TestResult = {
-        test: 'GET /api/teams',
-        status: 'success',
+      return {
         message: `✓ Retrieved ${response.data.length} teams`,
         data: response.data,
       };
-      testResults.push(result);
-      addResult(result);
-      passed++;
-    } catch (error: any) {
-      const result: TestResult = {
-        test: 'GET /api/teams',
-        status: 'failed',
-        message: `✗ Error: ${error.response?.data?.error || error.message}`,
-      };
-      testResults.push(result);
-      addResult(result);
-      failed++;
-    }
+    });
 
-    // Test 11: GET team by ID
     if (teamId) {
-      try {
+      await test('GET /api/teams/:id', async () => {
         const response = await teamService.getById(teamId);
-        const result: TestResult = {
-          test: 'GET /api/teams/:id',
-          status: 'success',
+        return {
           message: `✓ Retrieved team with ${response.data.members?.length || 0} members`,
           data: response.data,
         };
-        testResults.push(result);
-        addResult(result);
-        passed++;
-      } catch (error: any) {
-        const result: TestResult = {
-          test: 'GET /api/teams/:id',
-          status: 'failed',
-          message: `✗ Error: ${error.response?.data?.error || error.message}`,
+      });
+
+      await test('PUT /api/teams/:id', async () => {
+        const response = await teamService.update(teamId, {
+          name: 'Updated Team',
+          description: 'Updated description',
+        });
+        return {
+          message: `✓ Updated team ID: ${teamId}`,
+          data: response.data,
         };
-        testResults.push(result);
-        addResult(result);
-        failed++;
+      });
+
+      // Team member tests
+      if (userId) {
+        await test('POST /api/teams/:id/members', async () => {
+          const response = await teamService.addMember(teamId, {
+            user_id: userId,
+            role: 'developer'
+          });
+          return {
+            message: `✓ Added member to team ID: ${teamId}`,
+            data: response.data,
+          };
+        });
+
+        await test('PUT /api/teams/:id/members/:memberId', async () => {
+          const response = await teamService.updateMemberRole(teamId, userId, 'admin');
+          return {
+            message: `✓ Updated member role in team ID: ${teamId}`,
+            data: response.data,
+          };
+        });
+
+        await test('DELETE /api/teams/:id/members/:memberId', async () => {
+          const response = await teamService.removeMember(teamId, userId);
+          return {
+            message: `✓ Removed member from team ID: ${teamId}`,
+            data: response.data,
+          };
+        });
       }
     }
 
     // ========== QUOTE TESTS ==========
 
-    // Test 12: CREATE quote
-    try {
-      const customersResponse = await customerService.getAll();
-      const productsResponse = await productService.getAll();
-
-      if (customersResponse.data.length > 0 && productsResponse.data.length > 0 && userId) {
-        const newQuote = {
-          customer_id: customersResponse.data[0].id!,
+    if (customerId && productId && userId) {
+      const quoteResult = await test('POST /api/quotes', async () => {
+        const response = await quoteService.create({
+          customer_id: customerId,
           user_id: userId,
           title: 'Test Quote ' + Date.now(),
           description: 'Automated test quote',
           items: [
             {
-              product_id: productsResponse.data[0].id,
-              description: productsResponse.data[0].name,
+              product_id: productId,
+              description: 'Test Product',
               quantity: 2,
-              unit_price: productsResponse.data[0].price,
-              total_price: productsResponse.data[0].price * 2
+              unit_price: 149.99,
+              total_price: 299.98
             }
           ],
           tax_rate: 0.20,
           status: 'draft'
-        };
-        const response = await quoteService.create(newQuote);
-        quoteId = response.data.id;
-        const result: TestResult = {
-          test: 'POST /api/quotes',
-          status: 'success',
-          message: `✓ Created quote ID: ${quoteId}`,
+        });
+        return {
+          message: `✓ Created quote ID: ${response.data.id}`,
           data: response.data,
+          returnValue: response.data.id
         };
-        testResults.push(result);
-        addResult(result);
-        passed++;
-      } else {
-        const result: TestResult = {
-          test: 'POST /api/quotes',
-          status: 'failed',
-          message: '✗ No customers, products, or user available',
-        };
-        testResults.push(result);
-        addResult(result);
-        failed++;
-      }
-    } catch (error: any) {
-      const result: TestResult = {
-        test: 'POST /api/quotes',
-        status: 'failed',
-        message: `✗ Error: ${error.response?.data?.error || error.message}`,
-      };
-      testResults.push(result);
-      addResult(result);
-      failed++;
+      });
+
+      if (quoteResult) quoteId = quoteResult;
     }
 
-    // Test 13: GET all quotes
-    try {
+    await test('GET /api/quotes', async () => {
       const response = await quoteService.getAll();
-      const result: TestResult = {
-        test: 'GET /api/quotes',
-        status: 'success',
+      return {
         message: `✓ Retrieved ${response.data.length} quotes`,
         data: response.data,
       };
-      testResults.push(result);
-      addResult(result);
-      passed++;
-    } catch (error: any) {
-      const result: TestResult = {
-        test: 'GET /api/quotes',
-        status: 'failed',
-        message: `✗ Error: ${error.response?.data?.error || error.message}`,
-      };
-      testResults.push(result);
-      addResult(result);
-      failed++;
-    }
+    });
 
-    // Test 14: GET quote by ID
     if (quoteId) {
-      try {
+      await test('GET /api/quotes/:id', async () => {
         const response = await quoteService.getById(quoteId);
-        const result: TestResult = {
-          test: 'GET /api/quotes/:id',
-          status: 'success',
+        return {
           message: `✓ Retrieved quote with ${response.data.items?.length || 0} items`,
           data: response.data,
         };
-        testResults.push(result);
-        addResult(result);
-        passed++;
-      } catch (error: any) {
-        const result: TestResult = {
-          test: 'GET /api/quotes/:id',
-          status: 'failed',
-          message: `✗ Error: ${error.response?.data?.error || error.message}`,
-        };
-        testResults.push(result);
-        addResult(result);
-        failed++;
-      }
-    }
+      });
 
-    // Test 15: UPDATE quote status
-    if (quoteId) {
-      try {
+      await test('PATCH /api/quotes/:id/status', async () => {
         const response = await quoteService.updateStatus(quoteId, 'sent');
-        const result: TestResult = {
-          test: 'PATCH /api/quotes/:id/status',
-          status: 'success',
+        return {
           message: `✓ Updated quote status to 'sent'`,
           data: response.data,
         };
-        testResults.push(result);
-        addResult(result);
-        passed++;
-      } catch (error: any) {
-        const result: TestResult = {
-          test: 'PATCH /api/quotes/:id/status',
-          status: 'failed',
-          message: `✗ Error: ${error.response?.data?.error || error.message}`,
+      });
+
+      await test('PUT /api/quotes/:id', async () => {
+        const response = await quoteService.update(quoteId, {
+          title: 'Updated Quote',
+          description: 'Updated description',
+          status: 'accepted',
+          items: [
+            {
+              product_id: productId,
+              description: 'Updated Product',
+              quantity: 3,
+              unit_price: 149.99,
+              total_price: 449.97
+            }
+          ],
+          tax_rate: 0.20
+        });
+        return {
+          message: `✓ Updated quote ID: ${quoteId}`,
+          data: response.data,
         };
-        testResults.push(result);
-        addResult(result);
-        failed++;
-      }
+      });
+    }
+
+    // ========== DELETE TESTS ==========
+
+    if (saleId) {
+      await test('DELETE /api/sales/:id', async () => {
+        const response = await saleService.delete(saleId);
+        return {
+          message: `✓ Deleted sale ID: ${saleId}`,
+          data: response.data,
+        };
+      });
+    }
+
+    if (quoteId) {
+      await test('DELETE /api/quotes/:id', async () => {
+        const response = await quoteService.delete(quoteId);
+        return {
+          message: `✓ Deleted quote ID: ${quoteId}`,
+          data: response.data,
+        };
+      });
+    }
+
+    if (teamId) {
+      await test('DELETE /api/teams/:id', async () => {
+        const response = await teamService.delete(teamId);
+        return {
+          message: `✓ Deleted team ID: ${teamId}`,
+          data: response.data,
+        };
+      });
+    }
+
+    if (productId) {
+      await test('DELETE /api/products/:id', async () => {
+        const response = await productService.delete(productId);
+        return {
+          message: `✓ Deleted product ID: ${productId}`,
+          data: response.data,
+        };
+      });
+    }
+
+    if (customerId) {
+      await test('DELETE /api/customers/:id', async () => {
+        const response = await customerService.delete(customerId);
+        return {
+          message: `✓ Deleted customer ID: ${customerId}`,
+          data: response.data,
+        };
+      });
     }
 
     const total = passed + failed;
@@ -487,8 +486,8 @@ export default function TestAllScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>API Test Suite v2.0</Text>
-        <Text style={styles.subtitle}>Test all endpoints including Auth, Teams & Quotes</Text>
+        <Text style={styles.title}>API Test Suite v3.0</Text>
+        <Text style={styles.subtitle}>Complete CRUD testing for all endpoints</Text>
       </View>
 
       <View style={styles.buttonContainer}>
@@ -500,7 +499,7 @@ export default function TestAllScreen() {
           {testing ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>Run All Tests (15)</Text>
+            <Text style={styles.buttonText}>Run All Tests (30+)</Text>
           )}
         </TouchableOpacity>
 
