@@ -1,0 +1,103 @@
+Onboarding – Gestion d’équipes
+
+Responsable : BOUACHRAOUI Adel, Alexis Lorenzatti
+Contexte : Pilotage d’équipes pour Simplix (Web + Mobile).
+Principes : efficacité, transparence, sécurité (Zero Trust, RGPD/NIS2, données UE).
+
+⸻
+
+0) Sommaire
+	1.	Objectifs & périmètre
+	2.	Équipe & rôles
+	3.	Processus d’onboarding (S-0 → S-12)
+	4.	Rituels sacrificiel d’équipe & standards
+	5.	Recrutement (Salle 304)
+	6.	Sécurité & conformité
+	7.	Modèles prêts à l’emploi
+	8.	Liens utiles
+
+⸻
+
+1) Objectifs & périmètre
+	•	Aligner rapidement chaque membre sur la mission Simplix (CRM, devis/factures, reporting, offline, sécu béton).
+	•	Poser des règles de fonctionnement (cadences, décisions, communication).
+	•	Mettre en place un parcours d’intégration clair (jusqu’au premier livrable).
+	•	Garantir sécurité & conformité dès le jour 1.
+
+⸻
+
+2) Équipe & rôles
+
+Profils recherchés
+	•	Marketing & Communication (growth, social, brand)
+	•	Business Dev B2B (PME/ETI)
+	•	Produit & Tech : Full‑Stack TypeScript, Mobile/PWA, DevOps/Sécu, Product Design
+
+Besoins (headcount cible)
+	•	2 Dév front/back
+	•	1–2 UX/UI
+	•	2 Infra
+	•	4 Cyber
+	•	1–2 Marketing
+	•	1–2 Communication
+
+
+⸻
+
+3) Processus d’onboarding (S‑0 → S+12)
+
+Pré‑boarding (S‑0 → S+1)
+	•	Création des comptes : mail, SSO/IdP, Git, outils (CRM, Figma, Notion/Drive).
+	•	2FA activée + gestionnaire de mots de passe.
+	•	Droits d’accès par rôle (moindre privilège).
+	•	Matériel, badge, accès réseau/VPN.
+	•	Pack d’accueil : vision, OKR, organigramme, charte sécurité.
+
+Semaine 0
+	•	Accueil 60–90 min : mission, produit, orga, outillage.
+	•	Installation environnement :
+	•	Dev : Node LTS, pnpm, Git, accès repos, variables/Vault, CI.
+	•	Design : Figma, design system, librairies.
+	•	BizDev : CRM, pipeline, séquences, templates.
+	•	Marketing/Com : Brand book, calendrier éditorial.
+
+Semaine 1 
+	•	Mini‑mission de prise en main (≤1 jour) avec livrable visible.
+       (A definir par chaques équipes)
+	•	Lecture specs/architecture + revue guidée du code/maquettes.
+	•	Réunion entre équipes pour clarifier les attentes et les objectifs.
+
+Semaines 2
+	•	Participation complète aux rituels (daily, rétro, démo).
+	•	Premières fonctionalitées livré en prod, en cours de test par les autres équipes pour une intégration à 100%.
+	•	Checkpoint : feedback 360, plan pour la suite, besoins formation ou d'aide interne/externe.
+
+Récapitulatif des critères “onboardé” :
+
+	•	Accès & outils opérationnels ✅
+	•	Compréhension de la mission & du périmètre ✅
+	•	1 livrable concret réalisé ✅
+	•	Rituels et canaux maîtrisés ✅
+
+⸻
+
+4) Rituels d’équipe & standards
+	•	Weekly (2x–15 min) : plannification, avancées clés, risques, décisions, difficulté.
+	•	Sprint : planning → exécution → démo → rétrospective.
+	•	1:1 (bi‑hebdo, 30 min) : objectifs, feedback, carrière.
+	
+  Standards :
+	•	Communication asynchrone d’abord (Teams + documention Github).
+	•	Definition of Done : code + tests + doc + sécurité.
+	•	Post‑mortems sans blâme pour incidents.
+
+
+⸻
+
+5) Sécurité & conformité (indispensable)
+	•	Comptes uniquement via SSO + 2FA.
+	•	Moindre privilège : accès au strict nécessaire par rôle.
+	•	Données UE : pas de stockage perso ; usage outils
+
+
+-----
