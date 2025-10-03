@@ -35,6 +35,7 @@ export default function TestAllScreen() {
     let failed = 0;
     let token = '';
     let userId = 0;
+    let userId2 = 0; // Second user for team member tests
     let customerId = 0;
     let productId = 0;
     let saleId = 0;
@@ -105,6 +106,25 @@ export default function TestAllScreen() {
           data: response.data,
         };
       });
+    }
+
+    // Register second user for team member tests
+    const authResult2 = await test('POST /api/auth/register (User 2)', async () => {
+      const response = await authService.register({
+        email: `test2${Date.now()}@simplix.com`,
+        password: 'test123',
+        name: 'Test User 2',
+        role: 'user'
+      });
+      return {
+        message: `✓ User 2 registered with ID: ${response.data.user.id}`,
+        data: response.data,
+        returnValue: response.data.user.id
+      };
+    });
+
+    if (authResult2) {
+      userId2 = authResult2;
     }
 
     // ========== CUSTOMER TESTS ==========
@@ -305,34 +325,41 @@ export default function TestAllScreen() {
         };
       });
 
-      // Team member tests
-      if (userId) {
-        await test('POST /api/teams/:id/members', async () => {
+      // Team member tests - use userId2 (different from team owner)
+      if (userId2) {
+        let memberId = 0;
+
+        const memberResult = await test('POST /api/teams/:id/members', async () => {
           const response = await teamService.addMember(teamId, {
-            user_id: userId,
+            user_id: userId2,
             role: 'developer'
           });
           return {
-            message: `✓ Added member to team ID: ${teamId}`,
+            message: `✓ Added member (user ${userId2}) to team ID: ${teamId}`,
             data: response.data,
+            returnValue: response.data.id
           };
         });
 
-        await test('PUT /api/teams/:id/members/:memberId', async () => {
-          const response = await teamService.updateMemberRole(teamId, userId, 'admin');
-          return {
-            message: `✓ Updated member role in team ID: ${teamId}`,
-            data: response.data,
-          };
-        });
+        if (memberResult) memberId = memberResult;
 
-        await test('DELETE /api/teams/:id/members/:memberId', async () => {
-          const response = await teamService.removeMember(teamId, userId);
-          return {
-            message: `✓ Removed member from team ID: ${teamId}`,
-            data: response.data,
-          };
-        });
+        if (memberId) {
+          await test('PUT /api/teams/:id/members/:memberId', async () => {
+            const response = await teamService.updateMemberRole(teamId, memberId, 'admin');
+            return {
+              message: `✓ Updated member role in team ID: ${teamId}`,
+              data: response.data,
+            };
+          });
+
+          await test('DELETE /api/teams/:id/members/:memberId', async () => {
+            const response = await teamService.removeMember(teamId, memberId);
+            return {
+              message: `✓ Removed member from team ID: ${teamId}`,
+              data: response.data,
+            };
+          });
+        }
       }
     }
 
