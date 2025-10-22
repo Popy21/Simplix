@@ -4,7 +4,7 @@ import { pool as db } from '../database/db';
 const router = express.Router();
 
 // Sales report by date range
-router.get('/sales', (req: Request, res: Response) => {
+router.get('/sales', async (req: Request, res: Response) => {
   const { startDate, endDate, groupBy = 'day' } = req.query;
 
   if (!startDate || !endDate) {
@@ -12,35 +12,34 @@ router.get('/sales', (req: Request, res: Response) => {
     return;
   }
 
-  let dateFormat = '%Y-%m-%d';
-  if (groupBy === 'month') dateFormat = '%Y-%m';
-  if (groupBy === 'year') dateFormat = '%Y';
+  let dateFormat = 'YYYY-MM-DD';
+  if (groupBy === 'month') dateFormat = 'YYYY-MM';
+  if (groupBy === 'year') dateFormat = 'YYYY';
 
   const query = `
     SELECT
-      strftime('${dateFormat}', sale_date) as date,
+      to_char(sale_date, '${dateFormat}') as date,
       COUNT(*) as total_sales,
       SUM(quantity) as total_quantity,
       SUM(total_amount) as total_revenue,
       AVG(total_amount) as average_sale,
       status
     FROM sales
-    WHERE sale_date BETWEEN ? AND ?
+    WHERE sale_date BETWEEN $1 AND $2
     GROUP BY date, status
     ORDER BY date DESC
   `;
 
-  db.all(query, [startDate, endDate], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, [startDate, endDate]);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Customer report with sales summary
-router.get('/customers', (req: Request, res: Response) => {
+router.get('/customers', async (req: Request, res: Response) => {
   const query = `
     SELECT
       c.*,
@@ -56,17 +55,16 @@ router.get('/customers', (req: Request, res: Response) => {
     ORDER BY total_revenue DESC
   `;
 
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, []);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Product performance report
-router.get('/products', (req: Request, res: Response) => {
+router.get('/products', async (req: Request, res: Response) => {
   const query = `
     SELECT
       p.*,
@@ -81,17 +79,16 @@ router.get('/products', (req: Request, res: Response) => {
     ORDER BY total_revenue DESC
   `;
 
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, []);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Quotes report with conversion metrics
-router.get('/quotes', (req: Request, res: Response) => {
+router.get('/quotes', async (req: Request, res: Response) => {
   const { startDate, endDate } = req.query;
 
   let query = `
@@ -100,7 +97,7 @@ router.get('/quotes', (req: Request, res: Response) => {
       c.name as customer_name,
       c.company as customer_company,
       u.name as created_by,
-      (julianday(q.updated_at) - julianday(q.created_at)) as days_to_update
+      EXTRACT(EPOCH FROM (q.updated_at - q.created_at))/86400 as days_to_update
     FROM quotes q
     LEFT JOIN customers c ON q.customer_id = c.id
     LEFT JOIN users u ON q.user_id = u.id
@@ -108,30 +105,32 @@ router.get('/quotes', (req: Request, res: Response) => {
   `;
 
   const params: any[] = [];
+  let paramCount = 1;
 
   if (startDate && typeof startDate === 'string') {
-    query += ' AND q.created_at >= ?';
+    query += ` AND q.created_at >= $${paramCount}`;
     params.push(startDate);
+    paramCount++;
   }
 
   if (endDate && typeof endDate === 'string') {
-    query += ' AND q.created_at <= ?';
+    query += ` AND q.created_at <= $${paramCount}`;
     params.push(endDate);
+    paramCount++;
   }
 
   query += ' ORDER BY q.created_at DESC';
 
-  db.all(query, params, (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Team performance report
-router.get('/teams', (req: Request, res: Response) => {
+router.get('/teams', async (req: Request, res: Response) => {
   const query = `
     SELECT
       t.*,
@@ -147,17 +146,16 @@ router.get('/teams', (req: Request, res: Response) => {
     ORDER BY total_quote_value DESC
   `;
 
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, []);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // User performance report
-router.get('/users', (req: Request, res: Response) => {
+router.get('/users', async (req: Request, res: Response) => {
   const query = `
     SELECT
       u.id,
@@ -175,26 +173,25 @@ router.get('/users', (req: Request, res: Response) => {
     ORDER BY total_quote_value DESC
   `;
 
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, []);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Revenue report by period
-router.get('/revenue', (req: Request, res: Response) => {
+router.get('/revenue', async (req: Request, res: Response) => {
   const { startDate, endDate, groupBy = 'month' } = req.query;
 
-  let dateFormat = '%Y-%m';
-  if (groupBy === 'day') dateFormat = '%Y-%m-%d';
-  if (groupBy === 'year') dateFormat = '%Y';
+  let dateFormat = 'YYYY-MM';
+  if (groupBy === 'day') dateFormat = 'YYYY-MM-DD';
+  if (groupBy === 'year') dateFormat = 'YYYY';
 
   let query = `
     SELECT
-      strftime('${dateFormat}', sale_date) as period,
+      to_char(sale_date, '${dateFormat}') as period,
       SUM(total_amount) as revenue,
       COUNT(*) as sales_count,
       AVG(total_amount) as avg_sale
@@ -203,30 +200,32 @@ router.get('/revenue', (req: Request, res: Response) => {
   `;
 
   const params: any[] = [];
+  let paramCount = 1;
 
   if (startDate && typeof startDate === 'string') {
-    query += ' AND sale_date >= ?';
+    query += ` AND sale_date >= $${paramCount}`;
     params.push(startDate);
+    paramCount++;
   }
 
   if (endDate && typeof endDate === 'string') {
-    query += ' AND sale_date <= ?';
+    query += ` AND sale_date <= $${paramCount}`;
     params.push(endDate);
+    paramCount++;
   }
 
   query += ' GROUP BY period ORDER BY period DESC';
 
-  db.all(query, params, (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Inventory report
-router.get('/inventory', (req: Request, res: Response) => {
+router.get('/inventory', async (req: Request, res: Response) => {
   const query = `
     SELECT
       p.*,
@@ -245,13 +244,12 @@ router.get('/inventory', (req: Request, res: Response) => {
     ORDER BY stock_value DESC
   `;
 
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, []);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

@@ -5,9 +5,9 @@ import { Sale } from '../models/types';
 const router = express.Router();
 
 // Get all sales with customer and product details
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const query = `
-    SELECT 
+    SELECT
       s.*,
       c.name as customer_name,
       p.name as product_name,
@@ -17,21 +17,20 @@ router.get('/', (req: Request, res: Response) => {
     LEFT JOIN products p ON s.product_id = p.id
     ORDER BY s.sale_date DESC
   `;
-  
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+
+  try {
+    const result = await db.query(query);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get sale by ID
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const query = `
-    SELECT 
+    SELECT
       s.*,
       c.name as customer_name,
       p.name as product_name,
@@ -39,24 +38,23 @@ router.get('/:id', (req: Request, res: Response) => {
     FROM sales s
     LEFT JOIN customers c ON s.customer_id = c.id
     LEFT JOIN products p ON s.product_id = p.id
-    WHERE s.id = ?
+    WHERE s.id = $1
   `;
-  
-  db.get(query, [id], (err, row) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    if (!row) {
+
+  try {
+    const result = await db.query(query, [id]);
+    if (result.rows.length === 0) {
       res.status(404).json({ error: 'Sale not found' });
       return;
     }
-    res.json(row);
-  });
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Create sale
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const sale: Sale = req.body;
   const { customer_id, product_id, quantity, total_amount, status, notes } = sale;
 
@@ -65,55 +63,50 @@ router.post('/', (req: Request, res: Response) => {
     return;
   }
 
-  db.run(
-    'INSERT INTO sales (customer_id, product_id, quantity, total_amount, status, notes) VALUES (?, ?, ?, ?, ?, ?)',
-    [customer_id, product_id, quantity, total_amount, status || 'pending', notes],
-    function (err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      res.status(201).json({ id: this.lastID, ...sale });
-    }
-  );
+  try {
+    const result = await db.query(
+      'INSERT INTO sales (customer_id, product_id, quantity, total_amount, status, notes) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [customer_id, product_id, quantity, total_amount, status || 'pending', notes]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Update sale
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { customer_id, product_id, quantity, total_amount, status, notes } = req.body;
 
-  db.run(
-    'UPDATE sales SET customer_id = ?, product_id = ?, quantity = ?, total_amount = ?, status = ?, notes = ? WHERE id = ?',
-    [customer_id, product_id, quantity, total_amount, status, notes, id],
-    function (err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      if (this.changes === 0) {
-        res.status(404).json({ error: 'Sale not found' });
-        return;
-      }
-      res.json({ id, ...req.body });
+  try {
+    const result = await db.query(
+      'UPDATE sales SET customer_id = $1, product_id = $2, quantity = $3, total_amount = $4, status = $5, notes = $6 WHERE id = $7 RETURNING *',
+      [customer_id, product_id, quantity, total_amount, status, notes, id]
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Sale not found' });
+      return;
     }
-  );
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Delete sale
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  db.run('DELETE FROM sales WHERE id = ?', [id], function (err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    if (this.changes === 0) {
+  try {
+    const result = await db.query('DELETE FROM sales WHERE id = $1', [id]);
+    if (result.rowCount === 0) {
       res.status(404).json({ error: 'Sale not found' });
       return;
     }
     res.json({ message: 'Sale deleted successfully' });
-  });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

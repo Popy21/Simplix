@@ -58,47 +58,38 @@ router.post('/register', async (req: Request, res: Response) => {
 
   try {
     // Check if user already exists
-    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, row) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
+    const existingUser = await db.query('SELECT * FROM users WHERE email = $1', [email]);
 
-      if (row) {
-        res.status(400).json({ error: 'User already exists' });
-        return;
-      }
+    if (existingUser.rows.length > 0) {
+      res.status(400).json({ error: 'User already exists' });
+      return;
+    }
 
-      // Hash password with stronger algorithm
-      const hashedPassword = await bcrypt.hash(password, 12);
+    // Hash password with stronger algorithm
+    const hashedPassword = await bcrypt.hash(password, 12);
 
-      // Create user
-      db.run(
-        'INSERT INTO users (email, password, name, role) VALUES (?, ?, ?, ?)',
-        [email, hashedPassword, name, role || 'user'],
-        function (err) {
-          if (err) {
-            res.status(500).json({ error: err.message });
-            return;
-          }
+    // Create user
+    const result = await db.query(
+      'INSERT INTO users (email, password, name, role) VALUES ($1, $2, $3, $4) RETURNING *',
+      [email, hashedPassword, name, role || 'user']
+    );
 
-          const token = jwt.sign(
-            { id: this.lastID, email, role: role || 'user' },
-            JWT_SECRET,
-            { expiresIn: '7d' }
-          );
+    const user = result.rows[0];
 
-          res.status(201).json({
-            user: {
-              id: this.lastID,
-              email,
-              name,
-              role: role || 'user',
-            },
-            token,
-          });
-        }
-      );
+    const token = jwt.sign(
+      { id: user.id, email, role: role || 'user' },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      user: {
+        id: user.id,
+        email,
+        name,
+        role: role || 'user',
+      },
+      token,
     });
   } catch (error) {
     res.status(500).json({ error: 'Registration failed' });
@@ -106,7 +97,7 @@ router.post('/register', async (req: Request, res: Response) => {
 });
 
 // Login
-router.post('/login', (req: Request, res: Response) => {
+router.post('/login', async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -114,17 +105,15 @@ router.post('/login', (req: Request, res: Response) => {
     return;
   }
 
-  db.get('SELECT * FROM users WHERE email = ?', [email], async (err, row: any) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
+  try {
+    const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
 
-    if (!row) {
+    if (result.rows.length === 0) {
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
 
+    const row = result.rows[0];
     const validPassword = await bcrypt.compare(password, row.password);
 
     if (!validPassword) {
@@ -148,33 +137,33 @@ router.post('/login', (req: Request, res: Response) => {
       },
       token,
     });
-  });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get current user (protected route)
-router.get('/me', authenticateToken, (req: AuthRequest, res: Response) => {
+router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => {
   if (!req.user) {
     res.status(401).json({ error: 'User not authenticated' });
     return;
   }
 
-  db.get(
-    'SELECT id, email, name, role, team_id, created_at, updated_at FROM users WHERE id = ?',
-    [req.user.id],
-    (err, row) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
+  try {
+    const result = await db.query(
+      'SELECT id, email, name, role, team_id, created_at, updated_at FROM users WHERE id = $1',
+      [req.user.id]
+    );
 
-      if (!row) {
-        res.status(404).json({ error: 'User not found' });
-        return;
-      }
-
-      res.json(row);
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
     }
-  );
+
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Change password (protected route)
@@ -220,49 +209,36 @@ router.post('/change-password', authenticateToken, async (req: AuthRequest, res:
 
   try {
     // Get user from database
-    db.get(
-      'SELECT * FROM users WHERE id = ?',
-      [req.user.id],
-      async (err, row: any) => {
-        if (err) {
-          res.status(500).json({ error: err.message });
-          return;
-        }
+    const userResult = await db.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
 
-        if (!row) {
-          res.status(404).json({ error: 'User not found' });
-          return;
-        }
+    if (userResult.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
 
-        // Verify current password
-        const validPassword = await bcrypt.compare(currentPassword, row.password);
+    const row = userResult.rows[0];
 
-        if (!validPassword) {
-          res.status(401).json({ error: 'Current password is incorrect' });
-          return;
-        }
+    // Verify current password
+    const validPassword = await bcrypt.compare(currentPassword, row.password);
 
-        // Hash new password
-        const hashedPassword = await bcrypt.hash(newPassword, 12);
+    if (!validPassword) {
+      res.status(401).json({ error: 'Current password is incorrect' });
+      return;
+    }
 
-        // Update password
-        db.run(
-          'UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-          [hashedPassword, req.user!.id],
-          (err) => {
-            if (err) {
-              res.status(500).json({ error: err.message });
-              return;
-            }
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-            res.json({
-              message: 'Password updated successfully',
-              timestamp: new Date().toISOString()
-            });
-          }
-        );
-      }
+    // Update password
+    await db.query(
+      'UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [hashedPassword, req.user.id]
     );
+
+    res.json({
+      message: 'Password updated successfully',
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to change password' });
   }
