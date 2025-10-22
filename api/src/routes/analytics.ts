@@ -4,90 +4,54 @@ import { pool as db } from '../database/db';
 const router = express.Router();
 
 // Get dashboard statistics
-router.get('/dashboard', (req: Request, res: Response) => {
+router.get('/dashboard', async (req: Request, res: Response) => {
   const stats: any = {};
 
-  // Get total counts
-  db.get('SELECT COUNT(*) as count FROM customers', [], (err, result: any) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    stats.totalCustomers = result.count;
+  try {
+    // Get total counts
+    const customersResult = await db.query('SELECT COUNT(*) as count FROM customers', []);
+    stats.totalCustomers = customersResult.rows[0].count;
 
-    db.get('SELECT COUNT(*) as count FROM products', [], (err, result: any) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      stats.totalProducts = result.count;
+    const productsResult = await db.query('SELECT COUNT(*) as count FROM products', []);
+    stats.totalProducts = productsResult.rows[0].count;
 
-      db.get('SELECT COUNT(*) as count FROM sales', [], (err, result: any) => {
-        if (err) {
-          res.status(500).json({ error: err.message });
-          return;
-        }
-        stats.totalSales = result.count;
+    const salesResult = await db.query('SELECT COUNT(*) as count FROM sales', []);
+    stats.totalSales = salesResult.rows[0].count;
 
-        db.get('SELECT COUNT(*) as count FROM quotes', [], (err, result: any) => {
-          if (err) {
-            res.status(500).json({ error: err.message });
-            return;
-          }
-          stats.totalQuotes = result.count;
+    const quotesResult = await db.query('SELECT COUNT(*) as count FROM quotes', []);
+    stats.totalQuotes = quotesResult.rows[0].count;
 
-          db.get('SELECT COUNT(*) as count FROM teams', [], (err, result: any) => {
-            if (err) {
-              res.status(500).json({ error: err.message });
-              return;
-            }
-            stats.totalTeams = result.count;
+    const teamsResult = await db.query('SELECT COUNT(*) as count FROM teams', []);
+    stats.totalTeams = teamsResult.rows[0].count;
 
-            db.get('SELECT COUNT(*) as count FROM users', [], (err, result: any) => {
-              if (err) {
-                res.status(500).json({ error: err.message });
-                return;
-              }
-              stats.totalUsers = result.count;
+    const usersResult = await db.query('SELECT COUNT(*) as count FROM users', []);
+    stats.totalUsers = usersResult.rows[0].count;
 
-              // Get revenue stats
-              db.get('SELECT SUM(total_amount) as total FROM sales WHERE status = "completed"', [], (err, result: any) => {
-                if (err) {
-                  res.status(500).json({ error: err.message });
-                  return;
-                }
-                stats.totalRevenue = result.total || 0;
+    // Get revenue stats
+    const revenueResult = await db.query('SELECT SUM(total_amount) as total FROM sales WHERE status = $1', ['completed']);
+    stats.totalRevenue = revenueResult.rows[0].total || 0;
 
-                // Get pending quotes value
-                db.get('SELECT SUM(total_amount) as total FROM quotes WHERE status IN ("draft", "sent")', [], (err, result: any) => {
-                  if (err) {
-                    res.status(500).json({ error: err.message });
-                    return;
-                  }
-                  stats.pendingQuotesValue = result.total || 0;
+    // Get pending quotes value
+    const pendingQuotesResult = await db.query('SELECT SUM(total_amount) as total FROM quotes WHERE status IN ($1, $2)', ['draft', 'sent']);
+    stats.pendingQuotesValue = pendingQuotesResult.rows[0].total || 0;
 
-                  res.json(stats);
-                });
-              });
-            });
-          });
-        });
-      });
-    });
-  });
+    res.json(stats);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get sales statistics by period
-router.get('/sales-by-period', (req: Request, res: Response) => {
+router.get('/sales-by-period', async (req: Request, res: Response) => {
   const { period = 'month' } = req.query;
 
-  let dateFormat = '%Y-%m';
-  if (period === 'day') dateFormat = '%Y-%m-%d';
-  if (period === 'year') dateFormat = '%Y';
+  let dateFormat = 'YYYY-MM';
+  if (period === 'day') dateFormat = 'YYYY-MM-DD';
+  if (period === 'year') dateFormat = 'YYYY';
 
   const query = `
     SELECT
-      strftime('${dateFormat}', sale_date) as period,
+      to_char(sale_date, '${dateFormat}') as period,
       COUNT(*) as count,
       SUM(total_amount) as revenue
     FROM sales
@@ -97,17 +61,16 @@ router.get('/sales-by-period', (req: Request, res: Response) => {
     LIMIT 12
   `;
 
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, []);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get top customers by revenue
-router.get('/top-customers', (req: Request, res: Response) => {
+router.get('/top-customers', async (req: Request, res: Response) => {
   const { limit = 10 } = req.query;
 
   const query = `
@@ -122,20 +85,19 @@ router.get('/top-customers', (req: Request, res: Response) => {
     LEFT JOIN sales s ON c.id = s.customer_id AND s.status = 'completed'
     GROUP BY c.id
     ORDER BY total_revenue DESC
-    LIMIT ?
+    LIMIT $1
   `;
 
-  db.all(query, [limit], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, [limit]);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get top products by sales
-router.get('/top-products', (req: Request, res: Response) => {
+router.get('/top-products', async (req: Request, res: Response) => {
   const { limit = 10 } = req.query;
 
   const query = `
@@ -151,20 +113,19 @@ router.get('/top-products', (req: Request, res: Response) => {
     LEFT JOIN sales s ON p.id = s.product_id AND s.status = 'completed'
     GROUP BY p.id
     ORDER BY total_revenue DESC
-    LIMIT ?
+    LIMIT $1
   `;
 
-  db.all(query, [limit], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, [limit]);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get quotes conversion rate
-router.get('/quotes-conversion', (req: Request, res: Response) => {
+router.get('/quotes-conversion', async (req: Request, res: Response) => {
   const query = `
     SELECT
       status,
@@ -174,83 +135,65 @@ router.get('/quotes-conversion', (req: Request, res: Response) => {
     GROUP BY status
   `;
 
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, []);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get recent activity
-router.get('/recent-activity', (req: Request, res: Response) => {
+router.get('/recent-activity', async (req: Request, res: Response) => {
   const { limit = 20 } = req.query;
 
-  const activities: any[] = [];
+  try {
+    // Get recent sales
+    const salesResult = await db.query(
+      `SELECT 'sale' as type, id, customer_id, sale_date as created_at FROM sales ORDER BY sale_date DESC LIMIT $1`,
+      [limit]
+    );
 
-  // Get recent sales
-  db.all(
-    `SELECT 'sale' as type, id, customer_id, sale_date as created_at FROM sales ORDER BY sale_date DESC LIMIT ?`,
-    [limit],
-    (err, sales) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
+    // Get recent quotes
+    const quotesResult = await db.query(
+      `SELECT 'quote' as type, id, customer_id, created_at FROM quotes ORDER BY created_at DESC LIMIT $1`,
+      [limit]
+    );
 
-      // Get recent quotes
-      db.all(
-        `SELECT 'quote' as type, id, customer_id, created_at FROM quotes ORDER BY created_at DESC LIMIT ?`,
-        [limit],
-        (err, quotes) => {
-          if (err) {
-            res.status(500).json({ error: err.message });
-            return;
-          }
+    // Get recent customers
+    const customersResult = await db.query(
+      `SELECT 'customer' as type, id, name, created_at FROM customers ORDER BY created_at DESC LIMIT $1`,
+      [limit]
+    );
 
-          // Get recent customers
-          db.all(
-            `SELECT 'customer' as type, id, name, created_at FROM customers ORDER BY created_at DESC LIMIT ?`,
-            [limit],
-            (err, customers) => {
-              if (err) {
-                res.status(500).json({ error: err.message });
-                return;
-              }
+    // Combine and sort
+    const combined = [...salesResult.rows, ...quotesResult.rows, ...customersResult.rows]
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, Number(limit));
 
-              // Combine and sort
-              const combined = [...sales, ...quotes, ...customers]
-                .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                .slice(0, Number(limit));
-
-              res.json(combined);
-            }
-          );
-        }
-      );
-    }
-  );
+    res.json(combined);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get low stock products
-router.get('/low-stock', (req: Request, res: Response) => {
+router.get('/low-stock', async (req: Request, res: Response) => {
   const { threshold = 10 } = req.query;
 
   const query = `
     SELECT *
     FROM products
-    WHERE stock <= ?
+    WHERE stock <= $1
     ORDER BY stock ASC
   `;
 
-  db.all(query, [threshold], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, [threshold]);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

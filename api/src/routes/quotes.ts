@@ -5,7 +5,7 @@ import { Quote, QuoteItem } from '../models/types';
 const router = express.Router();
 
 // Get all quotes
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const query = `
     SELECT
       q.*,
@@ -17,17 +17,16 @@ router.get('/', (req: Request, res: Response) => {
     ORDER BY q.created_at DESC
   `;
 
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, []);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get quote by ID with items
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   const quoteQuery = `
@@ -40,40 +39,33 @@ router.get('/:id', (req: Request, res: Response) => {
     FROM quotes q
     LEFT JOIN customers c ON q.customer_id = c.id
     LEFT JOIN users u ON q.user_id = u.id
-    WHERE q.id = ?
+    WHERE q.id = $1
   `;
 
   const itemsQuery = `
     SELECT qi.*, p.name as product_name
     FROM quote_items qi
     LEFT JOIN products p ON qi.product_id = p.id
-    WHERE qi.quote_id = ?
+    WHERE qi.quote_id = $1
   `;
 
-  db.get(quoteQuery, [id], (err, quote) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
+  try {
+    const quoteResult = await db.query(quoteQuery, [id]);
 
-    if (!quote) {
+    if (quoteResult.rows.length === 0) {
       res.status(404).json({ error: 'Quote not found' });
       return;
     }
 
-    db.all(itemsQuery, [id], (err, items) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-
-      res.json({ ...quote, items });
-    });
-  });
+    const itemsResult = await db.query(itemsQuery, [id]);
+    res.json({ ...quoteResult.rows[0], items: itemsResult.rows });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Create quote with items
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const {
     customer_id,
     user_id,
@@ -98,68 +90,55 @@ router.post('/', (req: Request, res: Response) => {
   const calculatedTaxAmount = calculatedSubtotal * (tax_rate || 0);
   const calculatedTotal = calculatedSubtotal + calculatedTaxAmount;
 
-  db.run(
-    `INSERT INTO quotes (customer_id, user_id, title, description, subtotal, tax_rate, tax_amount, total_amount, status, valid_until)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
+  try {
+    const quoteResult = await db.query(
+      `INSERT INTO quotes (customer_id, user_id, title, description, subtotal, tax_rate, tax_amount, total_amount, status, valid_until)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING *`,
+      [
+        customer_id,
+        user_id,
+        title,
+        description,
+        calculatedSubtotal,
+        tax_rate || 0,
+        calculatedTaxAmount,
+        calculatedTotal,
+        status || 'draft',
+        valid_until
+      ]
+    );
+
+    const quoteId = quoteResult.rows[0].id;
+
+    // Insert quote items
+    for (const item of items) {
+      await db.query(
+        'INSERT INTO quote_items (quote_id, product_id, description, quantity, unit_price, total_price) VALUES ($1, $2, $3, $4, $5, $6)',
+        [quoteId, item.product_id, item.description, item.quantity, item.unit_price, item.total_price]
+      );
+    }
+
+    res.status(201).json({
+      id: quoteId,
       customer_id,
       user_id,
       title,
       description,
-      calculatedSubtotal,
-      tax_rate || 0,
-      calculatedTaxAmount,
-      calculatedTotal,
-      status || 'draft',
-      valid_until
-    ],
-    function (err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-
-      const quoteId = this.lastID;
-
-      // Insert quote items
-      const itemInserts = items.map((item: QuoteItem) => {
-        return new Promise((resolve, reject) => {
-          db.run(
-            'INSERT INTO quote_items (quote_id, product_id, description, quantity, unit_price, total_price) VALUES (?, ?, ?, ?, ?, ?)',
-            [quoteId, item.product_id, item.description, item.quantity, item.unit_price, item.total_price],
-            function (err) {
-              if (err) reject(err);
-              else resolve(this.lastID);
-            }
-          );
-        });
-      });
-
-      Promise.all(itemInserts)
-        .then(() => {
-          res.status(201).json({
-            id: quoteId,
-            customer_id,
-            user_id,
-            title,
-            description,
-            subtotal: calculatedSubtotal,
-            tax_rate: tax_rate || 0,
-            tax_amount: calculatedTaxAmount,
-            total_amount: calculatedTotal,
-            status: status || 'draft',
-            items
-          });
-        })
-        .catch((error) => {
-          res.status(500).json({ error: 'Failed to create quote items' });
-        });
-    }
-  );
+      subtotal: calculatedSubtotal,
+      tax_rate: tax_rate || 0,
+      tax_amount: calculatedTaxAmount,
+      total_amount: calculatedTotal,
+      status: status || 'draft',
+      items
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Update quote
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const {
     title,
@@ -184,81 +163,59 @@ router.put('/:id', (req: Request, res: Response) => {
     calculatedTotal = calculatedSubtotal + calculatedTaxAmount;
   }
 
-  db.run(
-    `UPDATE quotes
-     SET title = ?, description = ?, subtotal = ?, tax_rate = ?, tax_amount = ?, total_amount = ?, status = ?, valid_until = ?, updated_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
-    [title, description, calculatedSubtotal, tax_rate, calculatedTaxAmount, calculatedTotal, status, valid_until, id],
-    function (err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
+  try {
+    const result = await db.query(
+      `UPDATE quotes
+       SET title = $1, description = $2, subtotal = $3, tax_rate = $4, tax_amount = $5, total_amount = $6, status = $7, valid_until = $8, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $9`,
+      [title, description, calculatedSubtotal, tax_rate, calculatedTaxAmount, calculatedTotal, status, valid_until, id]
+    );
 
-      if (this.changes === 0) {
-        res.status(404).json({ error: 'Quote not found' });
-        return;
-      }
-
-      // Update items if provided
-      if (items) {
-        // Delete existing items
-        db.run('DELETE FROM quote_items WHERE quote_id = ?', [id], (err) => {
-          if (err) {
-            res.status(500).json({ error: 'Failed to update quote items' });
-            return;
-          }
-
-          // Insert new items
-          const itemInserts = items.map((item: QuoteItem) => {
-            return new Promise((resolve, reject) => {
-              db.run(
-                'INSERT INTO quote_items (quote_id, product_id, description, quantity, unit_price, total_price) VALUES (?, ?, ?, ?, ?, ?)',
-                [id, item.product_id, item.description, item.quantity, item.unit_price, item.total_price],
-                function (err) {
-                  if (err) reject(err);
-                  else resolve(this.lastID);
-                }
-              );
-            });
-          });
-
-          Promise.all(itemInserts)
-            .then(() => {
-              res.json({ id, ...req.body });
-            })
-            .catch((error) => {
-              res.status(500).json({ error: 'Failed to update quote items' });
-            });
-        });
-      } else {
-        res.json({ id, ...req.body });
-      }
-    }
-  );
-});
-
-// Delete quote
-router.delete('/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-
-  db.run('DELETE FROM quotes WHERE id = ?', [id], function (err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Quote not found' });
       return;
     }
 
-    if (this.changes === 0) {
+    // Update items if provided
+    if (items) {
+      // Delete existing items
+      await db.query('DELETE FROM quote_items WHERE quote_id = $1', [id]);
+
+      // Insert new items
+      for (const item of items) {
+        await db.query(
+          'INSERT INTO quote_items (quote_id, product_id, description, quantity, unit_price, total_price) VALUES ($1, $2, $3, $4, $5, $6)',
+          [id, item.product_id, item.description, item.quantity, item.unit_price, item.total_price]
+        );
+      }
+    }
+
+    res.json({ id, ...req.body });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete quote
+router.delete('/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const result = await db.query('DELETE FROM quotes WHERE id = $1', [id]);
+
+    if (result.rowCount === 0) {
       res.status(404).json({ error: 'Quote not found' });
       return;
     }
 
     res.json({ message: 'Quote deleted successfully' });
-  });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Update quote status
-router.patch('/:id/status', (req: Request, res: Response) => {
+router.patch('/:id/status', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -267,23 +224,21 @@ router.patch('/:id/status', (req: Request, res: Response) => {
     return;
   }
 
-  db.run(
-    'UPDATE quotes SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [status, id],
-    function (err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
+  try {
+    const result = await db.query(
+      'UPDATE quotes SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [status, id]
+    );
 
-      if (this.changes === 0) {
-        res.status(404).json({ error: 'Quote not found' });
-        return;
-      }
-
-      res.json({ id, status });
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Quote not found' });
+      return;
     }
-  );
+
+    res.json({ id, status });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

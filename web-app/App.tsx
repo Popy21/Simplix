@@ -11,6 +11,12 @@ import RegisterScreen from './src/screens/RegisterScreen';
 
 // App Screens
 import HomeScreen from './src/screens/HomeScreen';
+import DashboardScreen from './src/screens/DashboardScreen';
+import PipelineScreen from './src/screens/PipelineScreen';
+import TasksScreen from './src/screens/TasksScreen';
+import ContactsScreen from './src/screens/ContactsScreen';
+import AnalyticsScreen from './src/screens/AnalyticsScreen';
+import InvoicesScreen from './src/screens/InvoicesScreen';
 import CustomersScreen from './src/screens/CustomersScreen';
 import ProductsScreen from './src/screens/ProductsScreen';
 import SalesScreen from './src/screens/SalesScreen';
@@ -37,11 +43,12 @@ function Navigation() {
       <Stack.Navigator
         screenOptions={{
           headerStyle: {
-            backgroundColor: '#667eea',
+            backgroundColor: '#FFFFFF',
           },
-          headerTintColor: '#fff',
+          headerTintColor: '#007AFF',
           headerTitleStyle: {
-            fontWeight: 'bold',
+            fontWeight: '600',
+            fontSize: 17,
           },
         }}
       >
@@ -60,42 +67,119 @@ function Navigation() {
             />
           </>
         ) : (
-          // App Stack
+          // App Stack - Home as main hub
           <>
             <Stack.Screen
               name="Home"
               component={HomeScreen}
-              options={{ title: 'Simplix CRM' }}
+              options={{ 
+                title: 'Simplix CRM',
+                headerShown: false 
+              }}
+            />
+            <Stack.Screen
+              name="Dashboard"
+              component={DashboardScreen}
+              options={{ 
+                title: 'Tableau de Bord',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Pipeline"
+              component={PipelineScreen}
+              options={{ 
+                title: 'Pipeline des Ventes',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Tasks"
+              component={TasksScreen}
+              options={{ 
+                title: 'Tâches',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Contacts"
+              component={ContactsScreen}
+              options={{ 
+                title: 'Contacts',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Analytics"
+              component={AnalyticsScreen}
+              options={{ 
+                title: 'Analytics & Rapports',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Invoices"
+              component={InvoicesScreen}
+              options={{ 
+                title: 'Facturation',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
             />
             <Stack.Screen
               name="Customers"
               component={CustomersScreen}
-              options={{ title: 'Customers' }}
+              options={{ 
+                title: 'Base Clients',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
             />
             <Stack.Screen
               name="Products"
               component={ProductsScreen}
-              options={{ title: 'Products' }}
+              options={{ 
+                title: 'Catalogue Produits',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
             />
             <Stack.Screen
               name="Sales"
               component={SalesScreen}
-              options={{ title: 'Sales' }}
-            />
-            <Stack.Screen
-              name="TestAll"
-              component={TestAllScreen}
-              options={{ title: 'Complete API Tests' }}
+              options={{ 
+                title: 'Historique des Ventes',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
             />
             <Stack.Screen
               name="ChangePassword"
               component={ChangePasswordScreen}
-              options={{ headerShown: false }}
+              options={{ 
+                title: 'Changer le mot de passe',
+                headerShown: true,
+                presentation: 'modal',
+              }}
+            />
+            <Stack.Screen
+              name="TestAll"
+              component={TestAllScreen}
+              options={{ 
+                title: 'Tests API',
+                headerShown: true,
+                presentation: 'modal',
+              }}
             />
           </>
         )}
       </Stack.Navigator>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
     </NavigationContainer>
   );
 }

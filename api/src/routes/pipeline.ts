@@ -6,35 +6,33 @@ const router = express.Router();
 // ========== PIPELINE STAGES ==========
 
 // Get all pipeline stages
-router.get('/stages', (req: Request, res: Response) => {
-  db.all('SELECT * FROM pipeline_stages ORDER BY position ASC', [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+router.get('/stages', async (req: Request, res: Response) => {
+  try {
+    const result = await db.query('SELECT * FROM pipeline_stages ORDER BY position ASC', []);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get stage by ID
-router.get('/stages/:id', (req: Request, res: Response) => {
+router.get('/stages/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  db.get('SELECT * FROM pipeline_stages WHERE id = ?', [id], (err, row) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    if (!row) {
+  try {
+    const result = await db.query('SELECT * FROM pipeline_stages WHERE id = $1', [id]);
+    if (result.rows.length === 0) {
       res.status(404).json({ error: 'Stage not found' });
       return;
     }
-    res.json(row);
-  });
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Create pipeline stage
-router.post('/stages', (req: Request, res: Response) => {
+router.post('/stages', async (req: Request, res: Response) => {
   const { name, color, position } = req.body;
 
   if (!name) {
@@ -44,63 +42,61 @@ router.post('/stages', (req: Request, res: Response) => {
 
   const query = `
     INSERT INTO pipeline_stages (name, color, position)
-    VALUES (?, ?, ?)
+    VALUES ($1, $2, $3)
+    RETURNING *
   `;
 
-  db.run(query, [name, color || '#2196F3', position || 0], function(err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.status(201).json({ id: this.lastID, message: 'Stage created successfully' });
-  });
+  try {
+    const result = await db.query(query, [name, color || '#2196F3', position || 0]);
+    res.status(201).json({ id: result.rows[0].id, message: 'Stage created successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Update pipeline stage
-router.put('/stages/:id', (req: Request, res: Response) => {
+router.put('/stages/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, color, position } = req.body;
 
   const query = `
     UPDATE pipeline_stages
-    SET name = ?, color = ?, position = ?
-    WHERE id = ?
+    SET name = $1, color = $2, position = $3
+    WHERE id = $4
   `;
 
-  db.run(query, [name, color, position, id], function(err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    if (this.changes === 0) {
+  try {
+    const result = await db.query(query, [name, color, position, id]);
+    if (result.rowCount === 0) {
       res.status(404).json({ error: 'Stage not found' });
       return;
     }
     res.json({ message: 'Stage updated successfully' });
-  });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Delete pipeline stage
-router.delete('/stages/:id', (req: Request, res: Response) => {
+router.delete('/stages/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  db.run('DELETE FROM pipeline_stages WHERE id = ?', [id], function(err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    if (this.changes === 0) {
+  try {
+    const result = await db.query('DELETE FROM pipeline_stages WHERE id = $1', [id]);
+    if (result.rowCount === 0) {
       res.status(404).json({ error: 'Stage not found' });
       return;
     }
     res.json({ message: 'Stage deleted successfully' });
-  });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ========== OPPORTUNITIES ==========
 
 // Get all opportunities
-router.get('/opportunities', (req: Request, res: Response) => {
+router.get('/opportunities', async (req: Request, res: Response) => {
   const { stageId, userId, customerId } = req.query;
 
   let query = `
@@ -113,35 +109,38 @@ router.get('/opportunities', (req: Request, res: Response) => {
     WHERE 1=1
   `;
   const params: any[] = [];
+  let paramCount = 1;
 
   if (stageId) {
-    query += ' AND o.stage_id = ?';
+    query += ` AND o.stage_id = $${paramCount}`;
     params.push(stageId);
+    paramCount++;
   }
 
   if (userId) {
-    query += ' AND o.user_id = ?';
+    query += ` AND o.user_id = $${paramCount}`;
     params.push(userId);
+    paramCount++;
   }
 
   if (customerId) {
-    query += ' AND o.customer_id = ?';
+    query += ` AND o.customer_id = $${paramCount}`;
     params.push(customerId);
+    paramCount++;
   }
 
   query += ' ORDER BY o.expected_close_date ASC';
 
-  db.all(query, params, (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get opportunity by ID
-router.get('/opportunities/:id', (req: Request, res: Response) => {
+router.get('/opportunities/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   const query = `
@@ -151,24 +150,23 @@ router.get('/opportunities/:id', (req: Request, res: Response) => {
     LEFT JOIN customers c ON o.customer_id = c.id
     LEFT JOIN users u ON o.user_id = u.id
     LEFT JOIN pipeline_stages s ON o.stage_id = s.id
-    WHERE o.id = ?
+    WHERE o.id = $1
   `;
 
-  db.get(query, [id], (err, row) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    if (!row) {
+  try {
+    const result = await db.query(query, [id]);
+    if (result.rows.length === 0) {
       res.status(404).json({ error: 'Opportunity not found' });
       return;
     }
-    res.json(row);
-  });
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Create opportunity
-router.post('/opportunities', (req: Request, res: Response) => {
+router.post('/opportunities', async (req: Request, res: Response) => {
   const { name, customer_id, user_id, stage_id, value, probability, expected_close_date, description } = req.body;
 
   if (!name || !customer_id || !user_id || !stage_id) {
@@ -178,52 +176,49 @@ router.post('/opportunities', (req: Request, res: Response) => {
 
   const query = `
     INSERT INTO opportunities (name, customer_id, user_id, stage_id, value, probability, expected_close_date, description)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    RETURNING *
   `;
 
-  db.run(
-    query,
-    [name, customer_id, user_id, stage_id, value || 0, probability || 50, expected_close_date, description],
-    function(err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      res.status(201).json({ id: this.lastID, message: 'Opportunity created successfully' });
-    }
-  );
+  try {
+    const result = await db.query(
+      query,
+      [name, customer_id, user_id, stage_id, value || 0, probability || 50, expected_close_date, description]
+    );
+    res.status(201).json({ id: result.rows[0].id, message: 'Opportunity created successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Update opportunity
-router.put('/opportunities/:id', (req: Request, res: Response) => {
+router.put('/opportunities/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, customer_id, user_id, stage_id, value, probability, expected_close_date, description } = req.body;
 
   const query = `
     UPDATE opportunities
-    SET name = ?, customer_id = ?, user_id = ?, stage_id = ?, value = ?, probability = ?, expected_close_date = ?, description = ?
-    WHERE id = ?
+    SET name = $1, customer_id = $2, user_id = $3, stage_id = $4, value = $5, probability = $6, expected_close_date = $7, description = $8
+    WHERE id = $9
   `;
 
-  db.run(
-    query,
-    [name, customer_id, user_id, stage_id, value, probability, expected_close_date, description, id],
-    function(err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      if (this.changes === 0) {
-        res.status(404).json({ error: 'Opportunity not found' });
-        return;
-      }
-      res.json({ message: 'Opportunity updated successfully' });
+  try {
+    const result = await db.query(
+      query,
+      [name, customer_id, user_id, stage_id, value, probability, expected_close_date, description, id]
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Opportunity not found' });
+      return;
     }
-  );
+    res.json({ message: 'Opportunity updated successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Move opportunity to different stage
-router.patch('/opportunities/:id/stage', (req: Request, res: Response) => {
+router.patch('/opportunities/:id/stage', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { stage_id } = req.body;
 
@@ -232,38 +227,36 @@ router.patch('/opportunities/:id/stage', (req: Request, res: Response) => {
     return;
   }
 
-  db.run('UPDATE opportunities SET stage_id = ? WHERE id = ?', [stage_id, id], function(err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    if (this.changes === 0) {
+  try {
+    const result = await db.query('UPDATE opportunities SET stage_id = $1 WHERE id = $2', [stage_id, id]);
+    if (result.rowCount === 0) {
       res.status(404).json({ error: 'Opportunity not found' });
       return;
     }
     res.json({ message: 'Opportunity moved to new stage' });
-  });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Delete opportunity
-router.delete('/opportunities/:id', (req: Request, res: Response) => {
+router.delete('/opportunities/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  db.run('DELETE FROM opportunities WHERE id = ?', [id], function(err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    if (this.changes === 0) {
+  try {
+    const result = await db.query('DELETE FROM opportunities WHERE id = $1', [id]);
+    if (result.rowCount === 0) {
       res.status(404).json({ error: 'Opportunity not found' });
       return;
     }
     res.json({ message: 'Opportunity deleted successfully' });
-  });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get pipeline summary
-router.get('/summary', (req: Request, res: Response) => {
+router.get('/summary', async (req: Request, res: Response) => {
   const query = `
     SELECT
       s.id as stage_id,
@@ -278,13 +271,12 @@ router.get('/summary', (req: Request, res: Response) => {
     ORDER BY s.position ASC
   `;
 
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, []);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

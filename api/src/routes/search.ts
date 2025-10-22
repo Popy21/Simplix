@@ -4,7 +4,7 @@ import { pool as db } from '../database/db';
 const router = express.Router();
 
 // Global search across all entities
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { q } = req.query;
 
   if (!q || typeof q !== 'string') {
@@ -21,118 +21,105 @@ router.get('/', (req: Request, res: Response) => {
     users: [],
   };
 
-  // Search customers
-  db.all(
-    `SELECT * FROM customers WHERE name LIKE ? OR email LIKE ? OR company LIKE ? LIMIT 10`,
-    [searchTerm, searchTerm, searchTerm],
-    (err, customers) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      results.customers = customers;
+  try {
+    // Search customers
+    const customersResult = await db.query(
+      `SELECT * FROM customers WHERE name LIKE $1 OR email LIKE $1 OR company LIKE $1 LIMIT 10`,
+      [searchTerm]
+    );
+    results.customers = customersResult.rows;
 
-      // Search products
-      db.all(
-        `SELECT * FROM products WHERE name LIKE ? OR description LIKE ? LIMIT 10`,
-        [searchTerm, searchTerm],
-        (err, products) => {
-          if (err) {
-            res.status(500).json({ error: err.message });
-            return;
-          }
-          results.products = products;
+    // Search products
+    const productsResult = await db.query(
+      `SELECT * FROM products WHERE name LIKE $1 OR description LIKE $1 LIMIT 10`,
+      [searchTerm]
+    );
+    results.products = productsResult.rows;
 
-          // Search quotes
-          db.all(
-            `SELECT q.*, c.name as customer_name FROM quotes q
-             LEFT JOIN customers c ON q.customer_id = c.id
-             WHERE q.title LIKE ? OR q.description LIKE ? LIMIT 10`,
-            [searchTerm, searchTerm],
-            (err, quotes) => {
-              if (err) {
-                res.status(500).json({ error: err.message });
-                return;
-              }
-              results.quotes = quotes;
+    // Search quotes
+    const quotesResult = await db.query(
+      `SELECT q.*, c.name as customer_name FROM quotes q
+       LEFT JOIN customers c ON q.customer_id = c.id
+       WHERE q.title LIKE $1 OR q.description LIKE $1 LIMIT 10`,
+      [searchTerm]
+    );
+    results.quotes = quotesResult.rows;
 
-              // Search users
-              db.all(
-                `SELECT id, name, email, role FROM users WHERE name LIKE ? OR email LIKE ? LIMIT 10`,
-                [searchTerm, searchTerm],
-                (err, users) => {
-                  if (err) {
-                    res.status(500).json({ error: err.message });
-                    return;
-                  }
-                  results.users = users;
+    // Search users
+    const usersResult = await db.query(
+      `SELECT id, name, email, role FROM users WHERE name LIKE $1 OR email LIKE $1 LIMIT 10`,
+      [searchTerm]
+    );
+    results.users = usersResult.rows;
 
-                  res.json(results);
-                }
-              );
-            }
-          );
-        }
-      );
-    }
-  );
+    res.json(results);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Search customers with filters
-router.get('/customers', (req: Request, res: Response) => {
+router.get('/customers', async (req: Request, res: Response) => {
   const { q, company, email } = req.query;
 
   let query = 'SELECT * FROM customers WHERE 1=1';
   const params: any[] = [];
+  let paramCount = 1;
 
   if (q && typeof q === 'string') {
-    query += ' AND (name LIKE ? OR email LIKE ? OR company LIKE ?)';
+    query += ` AND (name LIKE $${paramCount} OR email LIKE $${paramCount} OR company LIKE $${paramCount})`;
     const searchTerm = `%${q}%`;
-    params.push(searchTerm, searchTerm, searchTerm);
+    params.push(searchTerm);
+    paramCount++;
   }
 
   if (company && typeof company === 'string') {
-    query += ' AND company LIKE ?';
+    query += ` AND company LIKE $${paramCount}`;
     params.push(`%${company}%`);
+    paramCount++;
   }
 
   if (email && typeof email === 'string') {
-    query += ' AND email LIKE ?';
+    query += ` AND email LIKE $${paramCount}`;
     params.push(`%${email}%`);
+    paramCount++;
   }
 
   query += ' ORDER BY created_at DESC LIMIT 50';
 
-  db.all(query, params, (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Search products with filters
-router.get('/products', (req: Request, res: Response) => {
+router.get('/products', async (req: Request, res: Response) => {
   const { q, minPrice, maxPrice, inStock } = req.query;
 
   let query = 'SELECT * FROM products WHERE 1=1';
   const params: any[] = [];
+  let paramCount = 1;
 
   if (q && typeof q === 'string') {
-    query += ' AND (name LIKE ? OR description LIKE ?)';
+    query += ` AND (name LIKE $${paramCount} OR description LIKE $${paramCount})`;
     const searchTerm = `%${q}%`;
-    params.push(searchTerm, searchTerm);
+    params.push(searchTerm);
+    paramCount++;
   }
 
   if (minPrice) {
-    query += ' AND price >= ?';
+    query += ` AND price >= $${paramCount}`;
     params.push(Number(minPrice));
+    paramCount++;
   }
 
   if (maxPrice) {
-    query += ' AND price <= ?';
+    query += ` AND price <= $${paramCount}`;
     params.push(Number(maxPrice));
+    paramCount++;
   }
 
   if (inStock === 'true') {
@@ -141,17 +128,16 @@ router.get('/products', (req: Request, res: Response) => {
 
   query += ' ORDER BY created_at DESC LIMIT 50';
 
-  db.all(query, params, (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Search sales with filters
-router.get('/sales', (req: Request, res: Response) => {
+router.get('/sales', async (req: Request, res: Response) => {
   const { customerId, productId, status, startDate, endDate } = req.query;
 
   let query = `
@@ -162,45 +148,50 @@ router.get('/sales', (req: Request, res: Response) => {
     WHERE 1=1
   `;
   const params: any[] = [];
+  let paramCount = 1;
 
   if (customerId) {
-    query += ' AND s.customer_id = ?';
+    query += ` AND s.customer_id = $${paramCount}`;
     params.push(Number(customerId));
+    paramCount++;
   }
 
   if (productId) {
-    query += ' AND s.product_id = ?';
+    query += ` AND s.product_id = $${paramCount}`;
     params.push(Number(productId));
+    paramCount++;
   }
 
   if (status && typeof status === 'string') {
-    query += ' AND s.status = ?';
+    query += ` AND s.status = $${paramCount}`;
     params.push(status);
+    paramCount++;
   }
 
   if (startDate && typeof startDate === 'string') {
-    query += ' AND s.sale_date >= ?';
+    query += ` AND s.sale_date >= $${paramCount}`;
     params.push(startDate);
+    paramCount++;
   }
 
   if (endDate && typeof endDate === 'string') {
-    query += ' AND s.sale_date <= ?';
+    query += ` AND s.sale_date <= $${paramCount}`;
     params.push(endDate);
+    paramCount++;
   }
 
   query += ' ORDER BY s.sale_date DESC LIMIT 100';
 
-  db.all(query, params, (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Search quotes with filters
-router.get('/quotes', (req: Request, res: Response) => {
+router.get('/quotes', async (req: Request, res: Response) => {
   const { customerId, userId, status, startDate, endDate } = req.query;
 
   let query = `
@@ -211,41 +202,46 @@ router.get('/quotes', (req: Request, res: Response) => {
     WHERE 1=1
   `;
   const params: any[] = [];
+  let paramCount = 1;
 
   if (customerId) {
-    query += ' AND q.customer_id = ?';
+    query += ` AND q.customer_id = $${paramCount}`;
     params.push(Number(customerId));
+    paramCount++;
   }
 
   if (userId) {
-    query += ' AND q.user_id = ?';
+    query += ` AND q.user_id = $${paramCount}`;
     params.push(Number(userId));
+    paramCount++;
   }
 
   if (status && typeof status === 'string') {
-    query += ' AND q.status = ?';
+    query += ` AND q.status = $${paramCount}`;
     params.push(status);
+    paramCount++;
   }
 
   if (startDate && typeof startDate === 'string') {
-    query += ' AND q.created_at >= ?';
+    query += ` AND q.created_at >= $${paramCount}`;
     params.push(startDate);
+    paramCount++;
   }
 
   if (endDate && typeof endDate === 'string') {
-    query += ' AND q.created_at <= ?';
+    query += ` AND q.created_at <= $${paramCount}`;
     params.push(endDate);
+    paramCount++;
   }
 
   query += ' ORDER BY q.created_at DESC LIMIT 100';
 
-  db.all(query, params, (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

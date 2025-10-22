@@ -4,57 +4,56 @@ import { pool as db } from '../database/db';
 const router = express.Router();
 
 // Get all tasks
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { userId, status, priority } = req.query;
 
   let query = 'SELECT * FROM tasks WHERE 1=1';
   const params: any[] = [];
+  let paramCount = 1;
 
   if (userId) {
-    query += ' AND assigned_to = ?';
+    query += ` AND assigned_to = $${paramCount++}`;
     params.push(userId);
   }
 
   if (status) {
-    query += ' AND status = ?';
+    query += ` AND status = $${paramCount++}`;
     params.push(status);
   }
 
   if (priority) {
-    query += ' AND priority = ?';
+    query += ` AND priority = $${paramCount++}`;
     params.push(priority);
   }
 
   query += ' ORDER BY due_date ASC';
 
-  db.all(query, params, (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get task by ID
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  db.get('SELECT * FROM tasks WHERE id = ?', [id], (err, row) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    if (!row) {
+  try {
+    const result = await db.query('SELECT * FROM tasks WHERE id = $1', [id]);
+    if (result.rows.length === 0) {
       res.status(404).json({ error: 'Task not found' });
       return;
     }
-    res.json(row);
-  });
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Create task
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { title, description, assigned_to, customer_id, due_date, priority, status } = req.body;
 
   if (!title || !assigned_to) {
@@ -64,52 +63,50 @@ router.post('/', (req: Request, res: Response) => {
 
   const query = `
     INSERT INTO tasks (title, description, assigned_to, customer_id, due_date, priority, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING *
   `;
 
-  db.run(
-    query,
-    [title, description, assigned_to, customer_id, due_date, priority || 'medium', status || 'pending'],
-    function(err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      res.status(201).json({ id: this.lastID, message: 'Task created successfully' });
-    }
-  );
+  try {
+    const result = await db.query(
+      query,
+      [title, description, assigned_to, customer_id, due_date, priority || 'medium', status || 'pending']
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Update task
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { title, description, assigned_to, customer_id, due_date, priority, status } = req.body;
 
   const query = `
     UPDATE tasks
-    SET title = ?, description = ?, assigned_to = ?, customer_id = ?, due_date = ?, priority = ?, status = ?
-    WHERE id = ?
+    SET title = $1, description = $2, assigned_to = $3, customer_id = $4, due_date = $5, priority = $6, status = $7
+    WHERE id = $8
+    RETURNING *
   `;
 
-  db.run(
-    query,
-    [title, description, assigned_to, customer_id, due_date, priority, status, id],
-    function(err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      if (this.changes === 0) {
-        res.status(404).json({ error: 'Task not found' });
-        return;
-      }
-      res.json({ message: 'Task updated successfully' });
+  try {
+    const result = await db.query(
+      query,
+      [title, description, assigned_to, customer_id, due_date, priority, status, id]
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Task not found' });
+      return;
     }
-  );
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Update task status
-router.patch('/:id/status', (req: Request, res: Response) => {
+router.patch('/:id/status', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -118,76 +115,72 @@ router.patch('/:id/status', (req: Request, res: Response) => {
     return;
   }
 
-  db.run('UPDATE tasks SET status = ? WHERE id = ?', [status, id], function(err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    if (this.changes === 0) {
+  try {
+    const result = await db.query('UPDATE tasks SET status = $1 WHERE id = $2 RETURNING *', [status, id]);
+    if (result.rowCount === 0) {
       res.status(404).json({ error: 'Task not found' });
       return;
     }
-    res.json({ message: 'Task status updated successfully' });
-  });
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Delete task
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  db.run('DELETE FROM tasks WHERE id = ?', [id], function(err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    if (this.changes === 0) {
+  try {
+    const result = await db.query('DELETE FROM tasks WHERE id = $1', [id]);
+    if (result.rowCount === 0) {
       res.status(404).json({ error: 'Task not found' });
       return;
     }
     res.json({ message: 'Task deleted successfully' });
-  });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get tasks by user
-router.get('/user/:userId', (req: Request, res: Response) => {
+router.get('/user/:userId', async (req: Request, res: Response) => {
   const { userId } = req.params;
   const { status } = req.query;
 
-  let query = 'SELECT * FROM tasks WHERE assigned_to = ?';
+  let query = 'SELECT * FROM tasks WHERE assigned_to = $1';
   const params: any[] = [userId];
 
   if (status) {
-    query += ' AND status = ?';
+    query += ' AND status = $2';
     params.push(status);
   }
 
   query += ' ORDER BY due_date ASC';
 
-  db.all(query, params, (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get overdue tasks
-router.get('/overdue/all', (req: Request, res: Response) => {
+router.get('/overdue/all', async (req: Request, res: Response) => {
   const query = `
     SELECT * FROM tasks
     WHERE status != 'completed'
-      AND due_date < date('now')
+      AND due_date < CURRENT_DATE
     ORDER BY due_date ASC
   `;
 
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(query);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;
