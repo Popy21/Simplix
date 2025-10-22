@@ -9,6 +9,7 @@ import {
   Modal,
   Alert,
   Platform,
+  FlatList,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
@@ -110,6 +111,16 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
   const [selectedFilter, setSelectedFilter] = useState<InvoiceStatus | 'all'>('all');
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [newInvoiceModalVisible, setNewInvoiceModalVisible] = useState(false);
+  const [newInvoiceForm, setNewInvoiceForm] = useState({
+    number: `INV-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
+    customer: '',
+    customerEmail: '',
+    date: new Date().toISOString().split('T')[0],
+    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    status: 'draft' as InvoiceStatus,
+    notes: '',
+  });
 
   const statusConfig = {
     draft: { label: 'Brouillon', color: '#8E8E93', bgColor: '#8E8E9320', icon: FileTextIcon },
@@ -150,6 +161,42 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
   const openInvoiceDetails = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
     setModalVisible(true);
+  };
+
+  const handleCreateInvoice = () => {
+    if (!newInvoiceForm.customer.trim() || !newInvoiceForm.customerEmail.trim()) {
+      Alert.alert('Erreur', 'Le client et l\'email sont obligatoires');
+      return;
+    }
+
+    const newInvoice: Invoice = {
+      id: Date.now().toString(),
+      number: newInvoiceForm.number,
+      customer: newInvoiceForm.customer,
+      customerEmail: newInvoiceForm.customerEmail,
+      date: newInvoiceForm.date,
+      dueDate: newInvoiceForm.dueDate,
+      status: newInvoiceForm.status,
+      items: [],
+      notes: newInvoiceForm.notes,
+    };
+
+    setInvoices([...invoices, newInvoice]);
+    handleResetInvoiceForm();
+    setNewInvoiceModalVisible(false);
+    Alert.alert('Succès', `Facture ${newInvoice.number} créée avec succès`);
+  };
+
+  const handleResetInvoiceForm = () => {
+    setNewInvoiceForm({
+      number: `INV-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
+      customer: '',
+      customerEmail: '',
+      date: new Date().toISOString().split('T')[0],
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      status: 'draft',
+      notes: '',
+    });
   };
 
   const markAsPaid = (invoiceId: string) => {
@@ -288,7 +335,7 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
         </View>
         <TouchableOpacity
           style={styles.addButton}
-          onPress={() => Alert.alert('À venir', 'Création de facture en développement')}
+          onPress={() => setNewInvoiceModalVisible(true)}
         >
           <Text style={styles.addButtonText}>+ Nouvelle</Text>
         </TouchableOpacity>
@@ -493,6 +540,141 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
                 </View>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Création Facture */}
+      <Modal visible={newInvoiceModalVisible} transparent animationType="slide" onRequestClose={() => setNewInvoiceModalVisible(false)}>
+        <View style={styles.newModalContainer}>
+          <View style={styles.newModalContent}>
+            <View style={styles.newModalHeader}>
+              <Text style={styles.newModalTitle}>Nouvelle Facture</Text>
+              <TouchableOpacity onPress={() => setNewInvoiceModalVisible(false)}>
+                <Text style={styles.closeButtonNew}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.newModalBody}>
+              {/* Numéro de facture (auto-généré) */}
+              <View style={styles.formGroupInvoice}>
+                <Text style={styles.formLabelInvoice}>Numéro de facture</Text>
+                <View style={[styles.inputInvoice, { justifyContent: 'center' }]}>
+                  <Text style={{ fontSize: 16, color: '#000000' }}>{newInvoiceForm.number}</Text>
+                </View>
+              </View>
+
+              {/* Client */}
+              <View style={styles.formGroupInvoice}>
+                <Text style={styles.formLabelInvoice}>Client *</Text>
+                <TextInput
+                  style={styles.inputInvoice}
+                  placeholder="Nom du client"
+                  value={newInvoiceForm.customer}
+                  onChangeText={(text) => setNewInvoiceForm({ ...newInvoiceForm, customer: text })}
+                  placeholderTextColor="#8E8E93"
+                />
+              </View>
+
+              {/* Email Client */}
+              <View style={styles.formGroupInvoice}>
+                <Text style={styles.formLabelInvoice}>Email du client *</Text>
+                <TextInput
+                  style={styles.inputInvoice}
+                  placeholder="email@example.com"
+                  value={newInvoiceForm.customerEmail}
+                  onChangeText={(text) => setNewInvoiceForm({ ...newInvoiceForm, customerEmail: text })}
+                  keyboardType="email-address"
+                  placeholderTextColor="#8E8E93"
+                />
+              </View>
+
+              {/* Date de facture */}
+              <View style={styles.formGroupInvoice}>
+                <Text style={styles.formLabelInvoice}>Date de facture</Text>
+                <TextInput
+                  style={styles.inputInvoice}
+                  placeholder="YYYY-MM-DD"
+                  value={newInvoiceForm.date}
+                  onChangeText={(text) => setNewInvoiceForm({ ...newInvoiceForm, date: text })}
+                  placeholderTextColor="#8E8E93"
+                />
+              </View>
+
+              {/* Date d'échéance */}
+              <View style={styles.formGroupInvoice}>
+                <Text style={styles.formLabelInvoice}>Date d'échéance</Text>
+                <TextInput
+                  style={styles.inputInvoice}
+                  placeholder="YYYY-MM-DD"
+                  value={newInvoiceForm.dueDate}
+                  onChangeText={(text) => setNewInvoiceForm({ ...newInvoiceForm, dueDate: text })}
+                  placeholderTextColor="#8E8E93"
+                />
+              </View>
+
+              {/* Statut */}
+              <View style={styles.formGroupInvoice}>
+                <Text style={styles.formLabelInvoice}>Statut</Text>
+                <View style={styles.statusSelectInvoice}>
+                  {(['draft', 'sent', 'paid', 'overdue', 'cancelled'] as const).map((s) => (
+                    <TouchableOpacity
+                      key={s}
+                      style={[
+                        styles.statusButtonInvoice,
+                        newInvoiceForm.status === s && styles.statusButtonActiveInvoice,
+                        {
+                          borderColor: newInvoiceForm.status === s ? statusConfig[s].color : '#E5E5EA',
+                          backgroundColor: newInvoiceForm.status === s ? statusConfig[s].bgColor : '#FFFFFF',
+                        },
+                      ]}
+                      onPress={() => setNewInvoiceForm({ ...newInvoiceForm, status: s })}
+                    >
+                      <Text
+                        style={[
+                          styles.statusButtonTextInvoice,
+                          { color: newInvoiceForm.status === s ? statusConfig[s].color : '#8E8E93' },
+                        ]}
+                      >
+                        {statusConfig[s].label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Notes */}
+              <View style={styles.formGroupInvoice}>
+                <Text style={styles.formLabelInvoice}>Notes</Text>
+                <TextInput
+                  style={[styles.inputInvoice, styles.textAreaInvoice]}
+                  placeholder="Conditions de paiement, remarques..."
+                  value={newInvoiceForm.notes}
+                  onChangeText={(text) => setNewInvoiceForm({ ...newInvoiceForm, notes: text })}
+                  placeholderTextColor="#8E8E93"
+                  multiline
+                  numberOfLines={4}
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.newModalFooter}>
+              <TouchableOpacity
+                style={[styles.buttonInvoice, styles.buttonSecondaryInvoice]}
+                onPress={() => {
+                  handleResetInvoiceForm();
+                  setNewInvoiceModalVisible(false);
+                }}
+              >
+                <Text style={styles.buttonSecondaryTextInvoice}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.buttonInvoice, styles.buttonPrimaryInvoice]}
+                onPress={handleCreateInvoice}
+              >
+                <Text style={styles.buttonPrimaryTextInvoice}>Créer</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -864,6 +1046,121 @@ const styles = StyleSheet.create({
   actionButtonSecondaryText: {
     color: '#007AFF',
     fontSize: 17,
+    fontWeight: '600',
+  },
+  newModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  newModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+    paddingBottom: 20,
+  },
+  newModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  newModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  closeButtonNew: {
+    fontSize: 32,
+    color: '#8E8E93',
+    fontWeight: '300',
+  },
+  newModalBody: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  formGroupInvoice: {
+    marginBottom: 16,
+  },
+  formLabelInvoice: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#000000',
+    marginBottom: 8,
+  },
+  inputInvoice: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#000000',
+  },
+  textAreaInvoice: {
+    textAlignVertical: 'top',
+    paddingTop: 10,
+    height: 100,
+  },
+  statusSelectInvoice: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statusButtonInvoice: {
+    flex: 1,
+    minWidth: '45%',
+    borderWidth: 1.5,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  statusButtonActiveInvoice: {
+    borderWidth: 2,
+  },
+  statusButtonTextInvoice: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  newModalFooter: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F2F2F7',
+  },
+  buttonInvoice: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonPrimaryInvoice: {
+    backgroundColor: '#007AFF',
+  },
+  buttonPrimaryTextInvoice: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  buttonSecondaryInvoice: {
+    backgroundColor: '#F2F2F7',
+  },
+  buttonSecondaryTextInvoice: {
+    color: '#007AFF',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

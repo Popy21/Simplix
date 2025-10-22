@@ -10,6 +10,7 @@ import {
   Alert,
   RefreshControl,
   Platform,
+  FlatList,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
@@ -58,6 +59,17 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'lead' | 'prospect' | 'client' | 'inactive'>('all');
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [newContactModalVisible, setNewContactModalVisible] = useState(false);
+  const [newContactForm, setNewContactForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    company: '',
+    position: '',
+    status: 'lead' as 'lead' | 'prospect' | 'client' | 'inactive',
+    lastContact: new Date().toISOString(),
+    notes: '',
+  });
   const [interactions, setInteractions] = useState<Interaction[]>([
     {
       id: '1',
@@ -127,6 +139,44 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const handleCreateContact = () => {
+    if (!newContactForm.name.trim() || !newContactForm.email.trim()) {
+      Alert.alert('Erreur', 'Le nom et l\'email sont obligatoires');
+      return;
+    }
+
+    const newContact: Contact = {
+      id: Date.now(),
+      name: newContactForm.name,
+      email: newContactForm.email,
+      phone: newContactForm.phone,
+      company: newContactForm.company,
+      position: newContactForm.position,
+      status: newContactForm.status,
+      lastContact: new Date().toISOString(),
+      totalRevenue: 0,
+      notes: newContactForm.notes,
+    };
+
+    setContacts([...contacts, newContact]);
+    handleResetContactForm();
+    setNewContactModalVisible(false);
+    Alert.alert('Succès', `Contact ${newContact.name} créé avec succès`);
+  };
+
+  const handleResetContactForm = () => {
+    setNewContactForm({
+      name: '',
+      email: '',
+      phone: '',
+      company: '',
+      position: '',
+      status: 'lead',
+      lastContact: new Date().toISOString(),
+      notes: '',
+    });
   };
 
   const determineStatus = (customer: any): 'lead' | 'prospect' | 'client' | 'inactive' => {
@@ -242,7 +292,7 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
         </View>
         <TouchableOpacity
           style={styles.addButton}
-          onPress={() => Alert.alert('À venir', 'Ajout de contact en développement')}
+          onPress={() => setNewContactModalVisible(true)}
         >
           <Text style={styles.addButtonText}>+ Nouveau</Text>
         </TouchableOpacity>
@@ -447,6 +497,146 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
                 </View>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Création Contact */}
+      <Modal visible={newContactModalVisible} transparent animationType="slide" onRequestClose={() => setNewContactModalVisible(false)}>
+        <View style={styles.newModalContainer}>
+          <View style={styles.newModalContent}>
+            <View style={styles.newModalHeader}>
+              <Text style={styles.newModalTitle}>Nouveau Contact</Text>
+              <TouchableOpacity onPress={() => setNewContactModalVisible(false)}>
+                <Text style={styles.closeButtonNew}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.newModalBody}>
+              {/* Nom */}
+              <View style={styles.formGroupContact}>
+                <Text style={styles.formLabelContact}>Nom *</Text>
+                <TextInput
+                  style={styles.inputContact}
+                  placeholder="Nom du contact"
+                  value={newContactForm.name}
+                  onChangeText={(text) => setNewContactForm({ ...newContactForm, name: text })}
+                  placeholderTextColor="#8E8E93"
+                />
+              </View>
+
+              {/* Email */}
+              <View style={styles.formGroupContact}>
+                <Text style={styles.formLabelContact}>Email *</Text>
+                <TextInput
+                  style={styles.inputContact}
+                  placeholder="email@example.com"
+                  value={newContactForm.email}
+                  onChangeText={(text) => setNewContactForm({ ...newContactForm, email: text })}
+                  keyboardType="email-address"
+                  placeholderTextColor="#8E8E93"
+                />
+              </View>
+
+              {/* Téléphone */}
+              <View style={styles.formGroupContact}>
+                <Text style={styles.formLabelContact}>Téléphone</Text>
+                <TextInput
+                  style={styles.inputContact}
+                  placeholder="+33 6 XX XX XX XX"
+                  value={newContactForm.phone}
+                  onChangeText={(text) => setNewContactForm({ ...newContactForm, phone: text })}
+                  keyboardType="phone-pad"
+                  placeholderTextColor="#8E8E93"
+                />
+              </View>
+
+              {/* Entreprise */}
+              <View style={styles.formGroupContact}>
+                <Text style={styles.formLabelContact}>Entreprise</Text>
+                <TextInput
+                  style={styles.inputContact}
+                  placeholder="Nom de l'entreprise"
+                  value={newContactForm.company}
+                  onChangeText={(text) => setNewContactForm({ ...newContactForm, company: text })}
+                  placeholderTextColor="#8E8E93"
+                />
+              </View>
+
+              {/* Poste */}
+              <View style={styles.formGroupContact}>
+                <Text style={styles.formLabelContact}>Poste</Text>
+                <TextInput
+                  style={styles.inputContact}
+                  placeholder="Titre du poste"
+                  value={newContactForm.position}
+                  onChangeText={(text) => setNewContactForm({ ...newContactForm, position: text })}
+                  placeholderTextColor="#8E8E93"
+                />
+              </View>
+
+              {/* Statut */}
+              <View style={styles.formGroupContact}>
+                <Text style={styles.formLabelContact}>Statut</Text>
+                <View style={styles.statusSelectContact}>
+                  {(['lead', 'prospect', 'client', 'inactive'] as const).map((s) => (
+                    <TouchableOpacity
+                      key={s}
+                      style={[
+                        styles.statusButtonContact,
+                        newContactForm.status === s && styles.statusButtonActiveContact,
+                        {
+                          borderColor: newContactForm.status === s ? statusConfig[s].color : '#E5E5EA',
+                          backgroundColor: newContactForm.status === s ? statusConfig[s].bgColor : '#FFFFFF',
+                        },
+                      ]}
+                      onPress={() => setNewContactForm({ ...newContactForm, status: s })}
+                    >
+                      <Text
+                        style={[
+                          styles.statusButtonTextContact,
+                          { color: newContactForm.status === s ? statusConfig[s].color : '#8E8E93' },
+                        ]}
+                      >
+                        {statusConfig[s].label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Notes */}
+              <View style={styles.formGroupContact}>
+                <Text style={styles.formLabelContact}>Notes</Text>
+                <TextInput
+                  style={[styles.inputContact, styles.textAreaContact]}
+                  placeholder="Remarques supplémentaires..."
+                  value={newContactForm.notes}
+                  onChangeText={(text) => setNewContactForm({ ...newContactForm, notes: text })}
+                  placeholderTextColor="#8E8E93"
+                  multiline
+                  numberOfLines={4}
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.newModalFooter}>
+              <TouchableOpacity
+                style={[styles.buttonContact, styles.buttonSecondaryContact]}
+                onPress={() => {
+                  handleResetContactForm();
+                  setNewContactModalVisible(false);
+                }}
+              >
+                <Text style={styles.buttonSecondaryTextContact}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.buttonContact, styles.buttonPrimaryContact]}
+                onPress={handleCreateContact}
+              >
+                <Text style={styles.buttonPrimaryTextContact}>Créer</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -806,6 +996,121 @@ const styles = StyleSheet.create({
   actionButtonText: {
     color: '#FFFFFF',
     fontSize: 17,
+    fontWeight: '600',
+  },
+  newModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  newModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+    paddingBottom: 20,
+  },
+  newModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  newModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  closeButtonNew: {
+    fontSize: 32,
+    color: '#8E8E93',
+    fontWeight: '300',
+  },
+  newModalBody: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  formGroupContact: {
+    marginBottom: 16,
+  },
+  formLabelContact: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#000000',
+    marginBottom: 8,
+  },
+  inputContact: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#000000',
+  },
+  textAreaContact: {
+    textAlignVertical: 'top',
+    paddingTop: 10,
+    height: 100,
+  },
+  statusSelectContact: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statusButtonContact: {
+    flex: 1,
+    minWidth: '48%',
+    borderWidth: 1.5,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  statusButtonActiveContact: {
+    borderWidth: 2,
+  },
+  statusButtonTextContact: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  newModalFooter: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F2F2F7',
+  },
+  buttonContact: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonPrimaryContact: {
+    backgroundColor: '#007AFF',
+  },
+  buttonPrimaryTextContact: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  buttonSecondaryContact: {
+    backgroundColor: '#F2F2F7',
+  },
+  buttonSecondaryTextContact: {
+    color: '#007AFF',
+    fontSize: 16,
     fontWeight: '600',
   },
 });
