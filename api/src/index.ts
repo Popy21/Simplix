@@ -15,6 +15,8 @@ import notificationsRouter from './routes/notifications';
 import tasksRouter from './routes/tasks';
 import pipelineRouter from './routes/pipeline';
 import campaignsRouter from './routes/campaigns';
+import invoicesRouter from './routes/invoices';
+import paymentsRouter from './routes/payments';
 
 dotenv.config();
 
@@ -45,7 +47,9 @@ app.get('/', (req: Request, res: Response) => {
       notifications: '/api/notifications',
       tasks: '/api/tasks',
       pipeline: '/api/pipeline',
-      campaigns: '/api/campaigns'
+      campaigns: '/api/campaigns',
+      invoices: '/api/invoices',
+      payments: '/api/payments'
     }
   });
 });
@@ -64,6 +68,8 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/pipeline', pipelineRouter);
 app.use('/api/campaigns', campaignsRouter);
+app.use('/api/invoices', invoicesRouter);
+app.use('/api/payments', paymentsRouter);
 
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: Function) => {

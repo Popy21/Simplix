@@ -57,8 +57,10 @@ router.post('/register', async (req: Request, res: Response) => {
   }
 
   try {
-    // Check if user already exists
-    const existingUser = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    // Check if user already exists within the default organization
+    const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID || '00000000-0000-0000-0000-000000000001';
+
+    const existingUser = await db.query('SELECT * FROM users WHERE email = $1 AND organization_id = $2', [email, DEFAULT_ORG_ID]);
 
     if (existingUser.rows.length > 0) {
       res.status(400).json({ error: 'User already exists' });
@@ -68,16 +70,38 @@ router.post('/register', async (req: Request, res: Response) => {
     // Hash password with stronger algorithm
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user
-    const result = await db.query(
-      'INSERT INTO users (email, password, name, role) VALUES ($1, $2, $3, $4) RETURNING *',
-      [email, hashedPassword, name, role || 'user']
+    // Split name into first/last
+    const nameParts = (name || '').trim().split(/\s+/);
+    const firstName = nameParts.shift() || '';
+    const lastName = nameParts.join(' ') || '';
+
+    // Create user using current DB schema (organization_id, email, password_hash, first_name, last_name)
+    const insertResult = await db.query(
+      `INSERT INTO users (organization_id, email, password_hash, first_name, last_name, status, email_verified)
+       VALUES ($1, $2, $3, $4, $5, 'active', true) RETURNING id, email, first_name, last_name`,
+      [DEFAULT_ORG_ID, email, hashedPassword, firstName, lastName]
     );
 
-    const user = result.rows[0];
+    const user = insertResult.rows[0];
+
+    // Try to assign a role: find a role matching the requested type or default to 'user'
+    const desiredRoleType = role || 'user';
+  const roleRes = await db.query('SELECT id, name, type FROM roles WHERE organization_id = $1 AND (type = $2 OR name ILIKE $3) LIMIT 1', [DEFAULT_ORG_ID, desiredRoleType, desiredRoleType]);
+  let assignedRoleType = 'user';
+    if (roleRes.rows.length > 0) {
+      const roleRow = roleRes.rows[0];
+      assignedRoleType = roleRow.type || roleRow.name || 'user';
+      // Insert mapping in user_roles
+      try {
+        await db.query('INSERT INTO user_roles (user_id, role_id, assigned_by) VALUES ($1, $2, $3) ON CONFLICT (user_id, role_id) DO NOTHING', [user.id, roleRow.id, user.id]);
+      } catch (e) {
+        // Non-fatal; continue
+        console.error('Failed to assign role to user:', e);
+      }
+    }
 
     const token = jwt.sign(
-      { id: user.id, email, role: role || 'user' },
+      { id: user.id, email, role: assignedRoleType },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -85,14 +109,23 @@ router.post('/register', async (req: Request, res: Response) => {
     res.status(201).json({
       user: {
         id: user.id,
-        email,
-        name,
-        role: role || 'user',
+        email: user.email,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+        role: assignedRoleType,
       },
       token,
     });
   } catch (error) {
-    res.status(500).json({ error: 'Registration failed' });
+    // Log full error for debugging
+    console.error('Registration error:', error);
+
+    // In development return error details to help debugging, otherwise return generic message
+    if (process.env.NODE_ENV === 'development') {
+      // @ts-ignore
+      res.status(500).json({ error: 'Registration failed', details: error?.message || error });
+    } else {
+      res.status(500).json({ error: 'Registration failed' });
+    }
   }
 });
 
@@ -106,15 +139,15 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 
   try {
-    const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+  const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
 
     if (result.rows.length === 0) {
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
 
-    const row = result.rows[0];
-    const validPassword = await bcrypt.compare(password, row.password);
+  const row = result.rows[0];
+  const validPassword = await bcrypt.compare(password, row.password_hash);
 
     if (!validPassword) {
       res.status(401).json({ error: 'Invalid credentials' });
@@ -131,7 +164,7 @@ router.post('/login', async (req: Request, res: Response) => {
       user: {
         id: row.id,
         email: row.email,
-        name: row.name,
+        name: `${row.first_name || ''} ${row.last_name || ''}`.trim(),
         role: row.role,
         team_id: row.team_id,
       },
@@ -151,7 +184,16 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
 
   try {
     const result = await db.query(
-      'SELECT id, email, name, role, team_id, created_at, updated_at FROM users WHERE id = $1',
+      `SELECT u.id, u.email, 
+              u.first_name, u.last_name,
+              u.organization_id,
+              COALESCE(r.type::text, r.name, 'user') as role,
+              u.created_at, u.updated_at
+       FROM users u
+       LEFT JOIN user_roles ur ON u.id = ur.user_id
+       LEFT JOIN roles r ON ur.role_id = r.id
+       WHERE u.id = $1 AND u.deleted_at IS NULL
+       LIMIT 1`,
       [req.user.id]
     );
 
@@ -160,8 +202,18 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
       return;
     }
 
-    res.json(result.rows[0]);
+    const user = result.rows[0];
+    res.json({
+      id: user.id,
+      email: user.email,
+      name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+      role: user.role || 'user',
+      organization_id: user.organization_id,
+      created_at: user.created_at,
+      updated_at: user.updated_at,
+    });
   } catch (err: any) {
+    console.error('Error in /auth/me:', err);
     res.status(500).json({ error: err.message });
   }
 });

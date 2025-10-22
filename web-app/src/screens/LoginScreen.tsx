@@ -32,7 +32,7 @@ export default function LoginScreen({ navigation }: Props) {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
       return;
     }
 
@@ -41,7 +41,7 @@ export default function LoginScreen({ navigation }: Props) {
       await login(email, password);
       // Navigation will be handled automatically by App.tsx
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message || 'Invalid credentials');
+      Alert.alert('Échec de la connexion', error.message || 'Identifiants invalides');
     } finally {
       setIsLoading(false);
     }
@@ -73,8 +73,8 @@ export default function LoginScreen({ navigation }: Props) {
               {/* Glass Card */}
               <BlurView intensity={20} tint="light" style={styles.glassCard}>
                 <View style={styles.cardContent}>
-                  <Text style={styles.title}>Welcome Back</Text>
-                  <Text style={styles.description}>Sign in to continue</Text>
+                  <Text style={styles.title}>Bon retour</Text>
+                  <Text style={styles.description}>Connectez-vous pour continuer</Text>
 
                   {/* Email Input */}
                   <View style={styles.inputContainer}>
@@ -82,7 +82,7 @@ export default function LoginScreen({ navigation }: Props) {
                     <View style={styles.inputWrapper}>
                       <TextInput
                         style={styles.input}
-                        placeholder="your.email@example.com"
+                        placeholder="votre.email@exemple.com"
                         placeholderTextColor="rgba(255,255,255,0.5)"
                         value={email}
                         onChangeText={setEmail}
@@ -95,7 +95,7 @@ export default function LoginScreen({ navigation }: Props) {
 
                   {/* Password Input */}
                   <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Password</Text>
+                    <Text style={styles.label}>Mot de passe</Text>
                     <View style={styles.inputWrapper}>
                       <TextInput
                         style={styles.input}
@@ -130,19 +130,19 @@ export default function LoginScreen({ navigation }: Props) {
                       {isLoading ? (
                         <ActivityIndicator color="#fff" />
                       ) : (
-                        <Text style={styles.buttonText}>Sign In</Text>
+                        <Text style={styles.buttonText}>Se connecter</Text>
                       )}
                     </LinearGradient>
                   </TouchableOpacity>
 
                   {/* Register Link */}
                   <View style={styles.footer}>
-                    <Text style={styles.footerText}>Don't have an account? </Text>
+                    <Text style={styles.footerText}>Vous n'avez pas de compte ? </Text>
                     <TouchableOpacity
                       onPress={() => navigation.navigate('Register')}
                       disabled={isLoading}
                     >
-                      <Text style={styles.link}>Sign Up</Text>
+                      <Text style={styles.link}>S'inscrire</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

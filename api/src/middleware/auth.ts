@@ -7,7 +7,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 // Extend Express Request type to include user
 export interface AuthRequest extends Request {
   user?: {
-    id: number;
+    id: string;
     email: string;
     role: string;
   };
@@ -29,14 +29,20 @@ export const authenticateToken = async (
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as {
-      id: number;
+      id: string;
       email: string;
       role: string;
     };
 
-    // Verify user still exists in database
+    // Verify user still exists in database and get their role
     const result = await db.query(
-      'SELECT id, email, role FROM users WHERE id = $1',
+      `SELECT u.id, u.email, u.first_name, u.last_name, 
+              COALESCE(r.type::text, r.name, 'user') as role
+       FROM users u
+       LEFT JOIN user_roles ur ON u.id = ur.user_id
+       LEFT JOIN roles r ON ur.role_id = r.id
+       WHERE u.id = $1 AND u.deleted_at IS NULL
+       LIMIT 1`,
       [decoded.id]
     );
 
@@ -49,11 +55,12 @@ export const authenticateToken = async (
     req.user = {
       id: row.id,
       email: row.email,
-      role: row.role,
+      role: row.role || 'user',
     };
 
     next();
   } catch (error) {
+    console.error('Token verification error:', error);
     res.status(403).json({ error: 'Invalid or expired token' });
   }
 };
