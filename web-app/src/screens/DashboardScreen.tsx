@@ -23,11 +23,11 @@ import {
   TrendingUpIcon,
   AlertTriangleIcon,
   ActivityIcon,
-  MenuIcon,
-  CalendarIcon,
   CheckCircleIcon,
   XCircleIcon,
   ClockIcon,
+  TrendingDownIcon,
+  CalendarIcon,
 } from '../components/Icons';
 
 type DashboardScreenProps = {
@@ -59,7 +59,7 @@ interface QuickStats {
   invoicesPendingValue: number;
 }
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 export default function DashboardScreen({ navigation }: DashboardScreenProps) {
   const { user } = useAuth();
@@ -77,6 +77,8 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
     invoicesPendingValue: 0,
   });
   const [error, setError] = useState<string | null>(null);
+  const [leadScores, setLeadScores] = useState<any[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -118,7 +120,23 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
         quotesConversion: quotesConversionResponse.data || [],
       });
 
-      // Calculer les statistiques rapides (données simulées pour le moment)
+      // Mock Lead Scores
+      setLeadScores([
+        { id: 1, name: 'Acme Corp', score: 85, trend: 'up', contacts: 3 },
+        { id: 2, name: 'Tech Industries', score: 78, trend: 'up', contacts: 2 },
+        { id: 3, name: 'Global Solutions', score: 72, trend: 'flat', contacts: 1 },
+        { id: 4, name: 'Enterprise Ltd', score: 65, trend: 'down', contacts: 2 },
+        { id: 5, name: 'Startup XYZ', score: 58, trend: 'up', contacts: 1 },
+      ]);
+
+      // Mock Pipeline Stages
+      setPipelineStages([
+        { id: 1, name: 'Prospection', count: 8, value: 45000 },
+        { id: 2, name: 'Qualification', count: 5, value: 32000 },
+        { id: 3, name: 'Proposition', count: 4, value: 38000 },
+        { id: 4, name: 'Négociation', count: 6, value: 30000 },
+      ]);
+
       setQuickStats({
         pipelineValue: 145000,
         pipelineCount: 23,
@@ -196,415 +214,329 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
   const quotesStats = calculateQuotesStats();
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#007AFF" />
-      }
-    >
-      {/* En-tête */}
+    <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View>
-            <Text style={styles.greeting}>Bonjour, {user?.name} 👋</Text>
-            <Text style={styles.subtitle}>Voici votre vue d'ensemble</Text>
-          </View>
-        </View>
+        <Text style={styles.greeting}>Bonjour, {user?.name} 👋</Text>
+        <Text style={styles.subtitle}>Vue d'ensemble complète</Text>
       </View>
 
-      {/* Métriques Principales */}
-      <View style={styles.metricsSection}>
-        <Text style={styles.sectionLabel}>VUE D'ENSEMBLE</Text>
-        <View style={styles.metricsGrid}>
-          <TouchableOpacity
-            style={[styles.metricCard, styles.largeCard]}
-            onPress={() => navigation.navigate('Sales')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.metricHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: '#34C759' }]}>
-                <DollarIcon size={24} color="#FFFFFF" />
-              </View>
-              <Text style={styles.metricLabel}>Chiffre d'Affaires</Text>
-            </View>
-            <Text style={styles.metricValue}>{formatCurrency(dashboardData.totalRevenue)}</Text>
-            <View style={styles.metricFooter}>
-              <TrendingUpIcon size={14} color="#34C759" />
-              <Text style={styles.metricTrend}>Ce mois</Text>
-            </View>
-          </TouchableOpacity>
+      <ScrollView
+        style={styles.mainScroll}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#007AFF" />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Layout 2 Colonnes */}
+        <View style={styles.twoColumnContainer}>
+          {/* COLONNE GAUCHE */}
+          <View style={styles.leftColumn}>
+            {/* Métriques Principales 2x2 */}
+            <View style={styles.metricsGrid}>
+              <TouchableOpacity
+                style={styles.metricCard}
+                onPress={() => navigation.navigate('Sales')}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.metricIcon, { backgroundColor: '#34C75920' }]}>
+                  <DollarIcon size={20} color="#34C759" />
+                </View>
+                <Text style={styles.metricLabel}>Revenus</Text>
+                <Text style={styles.metricValue}>{formatCurrency(dashboardData.totalRevenue)}</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.metricCard}
-            onPress={() => navigation.navigate('Sales')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.metricHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: '#007AFF' }]}>
-                <ChartIcon size={20} color="#FFFFFF" />
-              </View>
-              <Text style={styles.metricLabel}>Ventes</Text>
-            </View>
-            <Text style={styles.metricValue}>{formatNumber(dashboardData.totalSales)}</Text>
-            <Text style={styles.metricSubtext}>transactions</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.metricCard}
+                onPress={() => navigation.navigate('Sales')}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.metricIcon, { backgroundColor: '#007AFF20' }]}>
+                  <ChartIcon size={20} color="#007AFF" />
+                </View>
+                <Text style={styles.metricLabel}>Ventes</Text>
+                <Text style={styles.metricValue}>{formatNumber(dashboardData.totalSales)}</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.metricCard}
-            onPress={() => navigation.navigate('Customers')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.metricHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: '#FF9500' }]}>
-                <UsersIcon size={20} color="#FFFFFF" />
-              </View>
-              <Text style={styles.metricLabel}>Clients</Text>
-            </View>
-            <Text style={styles.metricValue}>{formatNumber(dashboardData.totalCustomers)}</Text>
-            <Text style={styles.metricSubtext}>contacts</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.metricCard}
+                onPress={() => navigation.navigate('Customers')}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.metricIcon, { backgroundColor: '#FF950020' }]}>
+                  <UsersIcon size={20} color="#FF9500" />
+                </View>
+                <Text style={styles.metricLabel}>Clients</Text>
+                <Text style={styles.metricValue}>{formatNumber(dashboardData.totalCustomers)}</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.metricCard}
-            onPress={() => navigation.navigate('Products')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.metricHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: '#AF52DE' }]}>
-                <PackageIcon size={20} color="#FFFFFF" />
-              </View>
-              <Text style={styles.metricLabel}>Produits</Text>
+              <TouchableOpacity
+                style={styles.metricCard}
+                onPress={() => navigation.navigate('Products')}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.metricIcon, { backgroundColor: '#AF52DE20' }]}>
+                  <PackageIcon size={20} color="#AF52DE" />
+                </View>
+                <Text style={styles.metricLabel}>Produits</Text>
+                <Text style={styles.metricValue}>{formatNumber(dashboardData.totalProducts)}</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.metricValue}>{formatNumber(dashboardData.totalProducts)}</Text>
-            <Text style={styles.metricSubtext}>en catalogue</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
 
-      {/* Statistiques Rapides - Nouvelles Fonctionnalités */}
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>ACTIVITÉ CRM</Text>
-        <View style={styles.quickStatsGrid}>
-          {/* Pipeline */}
-          <TouchableOpacity
-            style={styles.quickStatCard}
-            onPress={() => navigation.navigate('Pipeline')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.quickStatHeader}>
-              <View style={[styles.quickStatIcon, { backgroundColor: '#FF9500' }]}>
-                <TrendingUpIcon size={18} color="#FFFFFF" />
-              </View>
-              <Text style={styles.quickStatTitle}>Pipeline</Text>
-            </View>
-            <Text style={styles.quickStatValue}>{formatCurrency(quickStats.pipelineValue)}</Text>
-            <Text style={styles.quickStatLabel}>{quickStats.pipelineCount} opportunités</Text>
-          </TouchableOpacity>
+            {/* Statistiques Rapides */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>ACTIVITÉ CRM</Text>
+              <View style={styles.statsGrid}>
+                <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate('Pipeline')}>
+                  <View style={[styles.statIcon, { backgroundColor: '#FF950020' }]}>
+                    <TrendingUpIcon size={16} color="#FF9500" />
+                  </View>
+                  <Text style={styles.statLabel}>Pipeline</Text>
+                  <Text style={styles.statValue}>{formatCurrency(quickStats.pipelineValue)}</Text>
+                  <Text style={styles.statSmall}>{quickStats.pipelineCount} deals</Text>
+                </TouchableOpacity>
 
-          {/* Tâches */}
-          <TouchableOpacity
-            style={styles.quickStatCard}
-            onPress={() => navigation.navigate('Tasks')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.quickStatHeader}>
-              <View style={[styles.quickStatIcon, { backgroundColor: '#007AFF' }]}>
-                <CheckCircleIcon size={18} color="#FFFFFF" />
-              </View>
-              <Text style={styles.quickStatTitle}>Tâches</Text>
-            </View>
-            <View style={styles.quickStatRow}>
-              <View style={styles.quickStatItem}>
-                <Text style={[styles.quickStatNumber, { color: '#FF3B30' }]}>{quickStats.tasksOverdue}</Text>
-                <Text style={styles.quickStatSmallLabel}>en retard</Text>
-              </View>
-              <View style={styles.quickStatDivider} />
-              <View style={styles.quickStatItem}>
-                <Text style={[styles.quickStatNumber, { color: '#FF9500' }]}>{quickStats.tasksPending}</Text>
-                <Text style={styles.quickStatSmallLabel}>à faire</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
+                <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate('Tasks')}>
+                  <View style={[styles.statIcon, { backgroundColor: '#007AFF20' }]}>
+                    <CheckCircleIcon size={16} color="#007AFF" />
+                  </View>
+                  <Text style={styles.statLabel}>Tâches</Text>
+                  <Text style={[styles.statValue, { color: '#FF3B30' }]}>{quickStats.tasksOverdue}</Text>
+                  <Text style={styles.statSmall}>en retard</Text>
+                </TouchableOpacity>
 
-          {/* Contacts */}
-          <TouchableOpacity
-            style={styles.quickStatCard}
-            onPress={() => navigation.navigate('Contacts')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.quickStatHeader}>
-              <View style={[styles.quickStatIcon, { backgroundColor: '#5856D6' }]}>
-                <UsersIcon size={18} color="#FFFFFF" />
-              </View>
-              <Text style={styles.quickStatTitle}>Contacts</Text>
-            </View>
-            <Text style={styles.quickStatValue}>{quickStats.contactsThisMonth}</Text>
-            <Text style={styles.quickStatLabel}>nouveaux ce mois</Text>
-          </TouchableOpacity>
+                <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate('Invoices')}>
+                  <View style={[styles.statIcon, { backgroundColor: '#34C75920' }]}>
+                    <FileTextIcon size={16} color="#34C759" />
+                  </View>
+                  <Text style={styles.statLabel}>Facturation</Text>
+                  <Text style={styles.statValue}>{formatCurrency(quickStats.invoicesPendingValue)}</Text>
+                  <Text style={styles.statSmall}>{quickStats.invoicesPending} en attente</Text>
+                </TouchableOpacity>
 
-          {/* Factures */}
-          <TouchableOpacity
-            style={styles.quickStatCard}
-            onPress={() => navigation.navigate('Invoices')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.quickStatHeader}>
-              <View style={[styles.quickStatIcon, { backgroundColor: '#34C759' }]}>
-                <FileTextIcon size={18} color="#FFFFFF" />
+                <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate('Contacts')}>
+                  <View style={[styles.statIcon, { backgroundColor: '#5856D620' }]}>
+                    <UsersIcon size={16} color="#5856D6" />
+                  </View>
+                  <Text style={styles.statLabel}>Contacts</Text>
+                  <Text style={styles.statValue}>{quickStats.contactsThisMonth}</Text>
+                  <Text style={styles.statSmall}>ce mois</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.quickStatTitle}>Facturation</Text>
             </View>
-            <Text style={styles.quickStatValue}>{formatCurrency(quickStats.invoicesPendingValue)}</Text>
-            <View style={styles.quickStatRow}>
-              <Text style={styles.quickStatSmallLabel}>
-                {quickStats.invoicesPending} en attente
-              </Text>
-              {quickStats.invoicesOverdue > 0 && (
-                <>
-                  <Text style={styles.quickStatDot}>•</Text>
-                  <Text style={[styles.quickStatSmallLabel, { color: '#FF3B30' }]}>
-                    {quickStats.invoicesOverdue} en retard
-                  </Text>
-                </>
-              )}
-            </View>
-          </TouchableOpacity>
-        </View>
-      </View>
 
-      {/* Devis */}
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>DEVIS</Text>
-        <View style={styles.card}>
-          <View style={styles.quotesHeader}>
-            <FileTextIcon size={20} color="#007AFF" />
-            <Text style={styles.cardTitle}>Performance des Devis</Text>
-          </View>
-          
-          <View style={styles.quotesStatsRow}>
-            <View style={styles.quoteStat}>
-              <Text style={styles.quoteStatValue}>{quotesStats.total}</Text>
-              <Text style={styles.quoteStatLabel}>Total</Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.quoteStat}>
-              <View style={styles.quoteStatIconRow}>
-                <CheckCircleIcon size={16} color="#34C759" />
-                <Text style={[styles.quoteStatValue, { color: '#34C759' }]}>
-                  {quotesStats.won}
-                </Text>
+            {/* Meilleurs Clients */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>TOP CLIENTS</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Customers')}>
+                  <Text style={styles.seeAll}>Voir tout</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.quoteStatLabel}>Acceptés</Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.quoteStat}>
-              <View style={styles.quoteStatIconRow}>
-                <ClockIcon size={16} color="#FF9500" />
-                <Text style={[styles.quoteStatValue, { color: '#FF9500' }]}>
-                  {quotesStats.pending}
-                </Text>
+              <View style={styles.card}>
+                {dashboardData.topCustomers.filter((c: any) => c.total_revenue).length > 0 ? (
+                  dashboardData.topCustomers
+                    .filter((c: any) => c.total_revenue)
+                    .slice(0, 3)
+                    .map((customer: any, index: number) => (
+                      <View key={customer.id || index} style={styles.listItem}>
+                        <View style={styles.listRank}>
+                          <Text style={styles.rankNumber}>{index + 1}</Text>
+                        </View>
+                        <View style={styles.listContent}>
+                          <Text style={styles.listName} numberOfLines={1}>{customer.name}</Text>
+                          <Text style={styles.listMeta}>{customer.total_sales} ventes</Text>
+                        </View>
+                        <Text style={styles.listAmount}>{formatCurrency(parseFloat(customer.total_revenue) || 0)}</Text>
+                      </View>
+                    ))
+                ) : (
+                  <Text style={styles.emptyText}>Aucun client</Text>
+                )}
               </View>
-              <Text style={styles.quoteStatLabel}>En attente</Text>
             </View>
-            <View style={styles.divider} />
-            <View style={styles.quoteStat}>
-              <View style={styles.quoteStatIconRow}>
-                <XCircleIcon size={16} color="#FF3B30" />
-                <Text style={[styles.quoteStatValue, { color: '#FF3B30' }]}>
-                  {quotesStats.lost}
-                </Text>
+
+            {/* Alertes Stock */}
+            {dashboardData.lowStock.length > 0 && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: '#FF9500' }]}>⚠ STOCK FAIBLE</Text>
+                <View style={[styles.card, styles.alertCard]}>
+                  {dashboardData.lowStock.slice(0, 3).map((product: any, index: number) => (
+                    <View key={product.id || index} style={styles.alertItem}>
+                      <View style={styles.alertContent}>
+                        <Text style={styles.alertName} numberOfLines={1}>{product.name}</Text>
+                        <Text style={styles.alertStock}>Stock: {product.stock}</Text>
+                      </View>
+                      <Text style={styles.alertPrice}>{formatCurrency(parseFloat(product.price))}</Text>
+                    </View>
+                  ))}
+                </View>
               </View>
-              <Text style={styles.quoteStatLabel}>Refusés</Text>
-            </View>
+            )}
           </View>
 
-          <View style={styles.conversionContainer}>
-            <View style={styles.conversionHeader}>
-              <Text style={styles.conversionLabel}>Taux de Conversion</Text>
-              <Text style={styles.conversionValue}>{quotesStats.rate.toFixed(1)}%</Text>
-            </View>
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${quotesStats.rate}%` }]} />
-            </View>
-          </View>
-
-          <View style={styles.pendingBox}>
-            <View style={styles.pendingRow}>
-              <Text style={styles.pendingLabel}>Valeur des devis en attente</Text>
-              <Text style={styles.pendingValue}>{formatCurrency(dashboardData.pendingQuotesValue)}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Meilleurs Clients */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionLabel}>MEILLEURS CLIENTS</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Customers')}>
-            <Text style={styles.seeAllLink}>Voir tout</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.card}>
-          {dashboardData.topCustomers.filter((c: any) => c.total_revenue).length > 0 ? (
-            dashboardData.topCustomers
-              .filter((c: any) => c.total_revenue)
-              .slice(0, 5)
-              .map((customer: any, index: number) => (
-                <View key={customer.id || index} style={styles.listItem}>
-                  <View style={styles.listItemLeft}>
-                    <View style={[styles.rankBadge, index === 0 && styles.goldRank]}>
-                      <Text style={[styles.rankText, index === 0 && styles.goldText]}>
-                        {index + 1}
+          {/* COLONNE DROITE */}
+          <View style={styles.rightColumn}>
+            {/* Lead Scoring */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>🎯 LEADS CHAUDS</Text>
+              <View style={styles.card}>
+                {leadScores.map((lead, index) => (
+                  <View key={lead.id} style={styles.leadItem}>
+                    <View style={styles.leadScore}>
+                      <Text style={[styles.leadScoreValue, 
+                        lead.score >= 75 ? { color: '#34C759' } : 
+                        lead.score >= 60 ? { color: '#FF9500' } : 
+                        { color: '#FF3B30' }
+                      ]}>
+                        {lead.score}
                       </Text>
                     </View>
-                    <View style={styles.listItemContent}>
-                      <Text style={styles.listItemTitle} numberOfLines={1}>
-                        {customer.name}
-                      </Text>
-                      <Text style={styles.listItemSubtitle} numberOfLines={1}>
-                        {customer.total_sales} ventes · {customer.company || customer.email}
-                      </Text>
+                    <View style={styles.leadInfo}>
+                      <Text style={styles.leadName} numberOfLines={1}>{lead.name}</Text>
+                      <View style={styles.leadMeta}>
+                        <Text style={styles.leadContacts}>{lead.contacts} contacts</Text>
+                        <View style={styles.trendIcon}>
+                          {lead.trend === 'up' && <TrendingUpIcon size={12} color="#34C759" />}
+                          {lead.trend === 'down' && <TrendingDownIcon size={12} color="#FF3B30" />}
+                        </View>
+                      </View>
                     </View>
                   </View>
-                  <Text style={styles.listItemAmount}>
-                    {formatCurrency(parseFloat(customer.total_revenue) || 0)}
-                  </Text>
-                </View>
-              ))
-          ) : (
-            <View style={styles.emptyState}>
-              <UsersIcon size={40} color="#D1D1D6" />
-              <Text style={styles.emptyText}>Aucun client pour le moment</Text>
+                ))}
+              </View>
             </View>
-          )}
-        </View>
-      </View>
 
-      {/* Meilleurs Produits */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionLabel}>PRODUITS POPULAIRES</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Products')}>
-            <Text style={styles.seeAllLink}>Voir tout</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.card}>
-          {dashboardData.topProducts.filter((p: any) => p.total_revenue).length > 0 ? (
-            dashboardData.topProducts
-              .filter((p: any) => p.total_revenue)
-              .slice(0, 5)
-              .map((product: any, index: number) => (
-                <View key={product.id || index} style={styles.listItem}>
-                  <View style={styles.listItemLeft}>
-                    <View style={[styles.rankBadge, index === 0 && styles.goldRank]}>
-                      <Text style={[styles.rankText, index === 0 && styles.goldText]}>
-                        {index + 1}
-                      </Text>
+            {/* Pipeline par Stage */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>📊 PIPELINE</Text>
+              <View style={styles.card}>
+                {pipelineStages.map((stage, index) => (
+                  <View key={stage.id} style={styles.stageItem}>
+                    <View style={styles.stageHeader}>
+                      <Text style={styles.stageName}>{stage.name}</Text>
+                      <View style={styles.stageBadge}>
+                        <Text style={styles.stageBadgeText}>{stage.count}</Text>
+                      </View>
                     </View>
-                    <View style={styles.listItemContent}>
-                      <Text style={styles.listItemTitle} numberOfLines={1}>
-                        {product.name}
-                      </Text>
-                      <Text style={styles.listItemSubtitle}>
-                        {product.total_quantity || product.total_sold || 0} vendus · Stock: {product.stock}
-                      </Text>
+                    <View style={styles.stageBar}>
+                      <View style={[styles.stageBarFill, { 
+                        width: `${(stage.count / 10) * 100}%`,
+                        backgroundColor: ['#34C759', '#007AFF', '#FF9500', '#AF52DE'][index % 4]
+                      }]} />
                     </View>
+                    <Text style={styles.stageValue}>{formatCurrency(stage.value)}</Text>
                   </View>
-                  <Text style={styles.listItemAmount}>
-                    {formatCurrency(parseFloat(product.total_revenue) || 0)}
-                  </Text>
-                </View>
-              ))
-          ) : (
-            <View style={styles.emptyState}>
-              <PackageIcon size={40} color="#D1D1D6" />
-              <Text style={styles.emptyText}>Aucune vente de produit</Text>
+                ))}
+              </View>
             </View>
-          )}
-        </View>
-      </View>
 
-      {/* Alertes Stock */}
-      {dashboardData.lowStock.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.alertHeader}>
-            <AlertTriangleIcon size={18} color="#FF9500" />
-            <Text style={[styles.sectionLabel, { color: '#FF9500', marginLeft: 8 }]}>
-              ALERTES STOCK
-            </Text>
-          </View>
-          <View style={[styles.card, styles.alertCard]}>
-            {dashboardData.lowStock.slice(0, 5).map((product: any, index: number) => (
-              <View key={product.id || index} style={styles.alertItem}>
-                <View style={styles.alertItemContent}>
-                  <Text style={styles.alertItemName} numberOfLines={1}>
-                    {product.name}
-                  </Text>
-                  <Text style={styles.alertItemPrice}>
-                    {formatCurrency(parseFloat(product.price))}
-                  </Text>
+            {/* Devis Performance */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>📄 DEVIS</Text>
+              <View style={styles.card}>
+                <View style={styles.quotesOverview}>
+                  <View style={styles.quoteStatMini}>
+                    <Text style={styles.quoteStatNumber}>{quotesStats.total}</Text>
+                    <Text style={styles.quoteStatLabel}>Total</Text>
+                  </View>
+                  <View style={styles.quoteStatMini}>
+                    <Text style={[styles.quoteStatNumber, { color: '#34C759' }]}>{quotesStats.won}</Text>
+                    <Text style={styles.quoteStatLabel}>Acceptés</Text>
+                  </View>
+                  <View style={styles.quoteStatMini}>
+                    <Text style={[styles.quoteStatNumber, { color: '#FF9500' }]}>{quotesStats.pending}</Text>
+                    <Text style={styles.quoteStatLabel}>En attente</Text>
+                  </View>
+                  <View style={styles.quoteStatMini}>
+                    <Text style={[styles.quoteStatNumber, { color: '#FF3B30' }]}>{quotesStats.lost}</Text>
+                    <Text style={styles.quoteStatLabel}>Refusés</Text>
+                  </View>
                 </View>
-                <View style={styles.stockBadge}>
-                  <Text style={styles.stockValue}>{product.stock}</Text>
-                  <Text style={styles.stockLabel}>restant</Text>
+                <View style={styles.conversionBar}>
+                  <Text style={styles.conversionLabel}>Taux conversion</Text>
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: `${quotesStats.rate}%` }]} />
+                  </View>
+                  <Text style={styles.conversionValue}>{quotesStats.rate.toFixed(1)}%</Text>
                 </View>
               </View>
-            ))}
-          </View>
-        </View>
-      )}
+            </View>
 
-      {/* Activité Récente */}
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>ACTIVITÉ RÉCENTE</Text>
-        <View style={styles.card}>
-          {dashboardData.recentSales.length > 0 ? (
-            dashboardData.recentSales.slice(0, 8).map((activity: any, index: number) => (
-              <View key={activity.id || index} style={styles.activityItem}>
-                <View style={[
-                  styles.activityIcon,
-                  activity.type === 'sale' && { backgroundColor: '#34C75920' },
-                  activity.type === 'quote' && { backgroundColor: '#007AFF20' },
-                  activity.type === 'customer' && { backgroundColor: '#FF950020' },
-                ]}>
-                  {activity.type === 'sale' && <ChartIcon size={16} color="#34C759" />}
-                  {activity.type === 'quote' && <FileTextIcon size={16} color="#007AFF" />}
-                  {activity.type === 'customer' && <UsersIcon size={16} color="#FF9500" />}
-                </View>
-                <View style={styles.activityContent}>
-                  <Text style={styles.activityTitle}>
-                    {activity.type === 'sale' && 'Nouvelle vente'}
-                    {activity.type === 'quote' && 'Devis créé'}
-                    {activity.type === 'customer' && `Nouveau client: ${activity.name}`}
-                  </Text>
-                  <View style={styles.activityTimeRow}>
-                    <CalendarIcon size={11} color="#8E8E93" />
-                    <Text style={styles.activityTime}>
-                      {activity.created_at
-                        ? new Date(activity.created_at).toLocaleDateString('fr-FR', {
-                            day: 'numeric',
+            {/* Produits Populaires */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>🔥 PRODUITS</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Products')}>
+                  <Text style={styles.seeAll}>Voir tout</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.card}>
+                {dashboardData.topProducts.filter((p: any) => p.total_revenue).length > 0 ? (
+                  dashboardData.topProducts
+                    .filter((p: any) => p.total_revenue)
+                    .slice(0, 3)
+                    .map((product: any, index: number) => (
+                      <View key={product.id || index} style={styles.listItem}>
+                        <View style={styles.listRank}>
+                          <Text style={styles.rankNumber}>{index + 1}</Text>
+                        </View>
+                        <View style={styles.listContent}>
+                          <Text style={styles.listName} numberOfLines={1}>{product.name}</Text>
+                          <Text style={styles.listMeta}>{product.total_quantity || 0} vendus</Text>
+                        </View>
+                        <Text style={styles.listAmount}>{formatCurrency(parseFloat(product.total_revenue) || 0)}</Text>
+                      </View>
+                    ))
+                ) : (
+                  <Text style={styles.emptyText}>Aucune vente</Text>
+                )}
+              </View>
+            </View>
+
+            {/* Activité Récente */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>⏱ RÉCENT</Text>
+              <View style={styles.card}>
+                {dashboardData.recentSales.length > 0 ? (
+                  dashboardData.recentSales.slice(0, 4).map((activity: any, index: number) => (
+                    <View key={activity.id || index} style={styles.activityMini}>
+                      <View style={[
+                        styles.activityMiniIcon,
+                        activity.type === 'sale' && { backgroundColor: '#34C75920' },
+                        activity.type === 'quote' && { backgroundColor: '#007AFF20' },
+                        activity.type === 'customer' && { backgroundColor: '#FF950020' },
+                      ]}>
+                        {activity.type === 'sale' && <ChartIcon size={14} color="#34C759" />}
+                        {activity.type === 'quote' && <FileTextIcon size={14} color="#007AFF" />}
+                        {activity.type === 'customer' && <UsersIcon size={14} color="#FF9500" />}
+                      </View>
+                      <View style={styles.activityMiniContent}>
+                        <Text style={styles.activityMiniTitle} numberOfLines={1}>
+                          {activity.type === 'sale' && 'Nouvelle vente'}
+                          {activity.type === 'quote' && 'Devis créé'}
+                          {activity.type === 'customer' && `Client: ${activity.name}`}
+                        </Text>
+                        <Text style={styles.activityMiniTime}>
+                          {activity.created_at ? new Date(activity.created_at).toLocaleDateString('fr-FR', {
                             month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : 'Récemment'}
-                    </Text>
-                  </View>
-                </View>
+                            day: 'numeric',
+                          }) : 'Récemment'}
+                        </Text>
+                      </View>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.emptyText}>Aucune activité</Text>
+                )}
               </View>
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <ActivityIcon size={40} color="#D1D1D6" />
-              <Text style={styles.emptyText}>Aucune activité récente</Text>
             </View>
-          )}
+          </View>
         </View>
-      </View>
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
   );
 }
 
@@ -612,6 +544,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F2F2F7',
+  },
+  header: {
+    backgroundColor: '#FFFFFF',
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  greeting: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#000000',
+    marginBottom: 4,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#8E8E93',
+    fontWeight: '400',
+    letterSpacing: -0.2,
+  },
+  mainScroll: {
+    flex: 1,
   },
   centerContainer: {
     flex: 1,
@@ -625,7 +581,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: '#8E8E93',
     fontWeight: '500',
-    letterSpacing: -0.4,
   },
   errorText: {
     fontSize: 17,
@@ -633,487 +588,372 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
     marginBottom: 24,
-    fontWeight: '500',
-    letterSpacing: -0.4,
   },
   retryButton: {
     backgroundColor: '#007AFF',
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 12,
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
   },
   retryButtonText: {
     color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '600',
-    letterSpacing: -0.4,
   },
-  header: {
-    backgroundColor: '#FFFFFF',
-    paddingTop: Platform.OS === 'ios' ? 60 : 20,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  headerContent: {
+  twoColumnContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  greeting: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#000000',
-    marginBottom: 4,
-    letterSpacing: -0.6,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: '#8E8E93',
-    fontWeight: '400',
-    letterSpacing: -0.2,
-  },
-  menuButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F2F2F7',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  metricsSection: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-  },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#8E8E93',
-    letterSpacing: -0.1,
-    marginBottom: 12,
-  },
-  metricsGrid: {
+    paddingHorizontal: 12,
+    paddingTop: 16,
     gap: 12,
   },
-  metricCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 2,
+  leftColumn: {
+    flex: 1,
   },
-  largeCard: {
-    padding: 20,
+  rightColumn: {
+    flex: 1,
   },
-  metricHeader: {
+  metricsGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 16,
   },
-  iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  metricCard: {
+    width: (width / 2) - 22,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  metricIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginBottom: 8,
   },
   metricLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#000000',
-    letterSpacing: -0.2,
+    fontSize: 11,
+    color: '#8E8E93',
+    fontWeight: '500',
+    marginBottom: 4,
   },
   metricValue: {
-    fontSize: 28,
+    fontSize: 14,
     fontWeight: '700',
     color: '#000000',
-    marginBottom: 4,
-    letterSpacing: -0.5,
-  },
-  metricFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  metricTrend: {
-    fontSize: 13,
-    color: '#34C759',
-    fontWeight: '500',
-    letterSpacing: -0.1,
-  },
-  metricSubtext: {
-    fontSize: 13,
-    color: '#8E8E93',
-    fontWeight: '400',
-    letterSpacing: -0.1,
+    textAlign: 'center',
   },
   section: {
-    paddingHorizontal: 20,
-    marginTop: 24,
+    marginBottom: 16,
   },
-  sectionHeaderRow: {
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  seeAllLink: {
-    fontSize: 15,
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#8E8E93',
+    letterSpacing: 0.5,
+  },
+  seeAll: {
+    fontSize: 12,
     color: '#007AFF',
-    fontWeight: '500',
-    letterSpacing: -0.2,
+    fontWeight: '600',
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 12,
+    padding: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   alertCard: {
     borderLeftWidth: 3,
     borderLeftColor: '#FF9500',
   },
-  quotesHeader: {
+  statsGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: 10,
   },
-  cardTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#000000',
-    letterSpacing: -0.4,
+  statCard: {
+    width: (width / 2) - 22,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  quotesStatsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
-    marginBottom: 16,
-  },
-  quoteStat: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  divider: {
-    width: 1,
-    height: 32,
-    backgroundColor: '#E5E5EA',
-  },
-  quoteStatIconRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  quoteStatValue: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#000000',
-    letterSpacing: -0.4,
-  },
-  quoteStatLabel: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginTop: 4,
-    fontWeight: '400',
-    letterSpacing: -0.1,
-  },
-  conversionContainer: {
-    marginBottom: 16,
-  },
-  conversionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  statIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
   },
-  conversionLabel: {
-    fontSize: 15,
-    color: '#000000',
-    fontWeight: '500',
-    letterSpacing: -0.2,
-  },
-  conversionValue: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#34C759',
-    letterSpacing: -0.4,
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: '#F2F2F7',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#34C759',
-    borderRadius: 3,
-  },
-  pendingBox: {
-    backgroundColor: '#FFF9E6',
-    borderRadius: 12,
-    padding: 12,
-  },
-  pendingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  pendingLabel: {
-    fontSize: 14,
+  statLabel: {
+    fontSize: 11,
     color: '#8E8E93',
     fontWeight: '500',
-    letterSpacing: -0.2,
+    marginBottom: 4,
   },
-  pendingValue: {
-    fontSize: 17,
+  statValue: {
+    fontSize: 14,
     fontWeight: '700',
-    color: '#FF9500',
-    letterSpacing: -0.4,
+    color: '#000000',
+    marginBottom: 2,
+  },
+  statSmall: {
+    fontSize: 10,
+    color: '#8E8E93',
+    fontWeight: '400',
   },
   listItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#F2F2F7',
   },
-  listItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 12,
-  },
-  rankBadge: {
+  listRank: {
     width: 28,
     height: 28,
     borderRadius: 14,
     backgroundColor: '#F2F2F7',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
-  goldRank: {
-    backgroundColor: '#FFD700',
-  },
-  rankText: {
-    fontSize: 13,
+  rankNumber: {
+    fontSize: 12,
     fontWeight: '700',
     color: '#000000',
-    letterSpacing: -0.1,
   },
-  goldText: {
-    color: '#FFFFFF',
-  },
-  listItemContent: {
+  listContent: {
     flex: 1,
   },
-  listItemTitle: {
-    fontSize: 15,
+  listName: {
+    fontSize: 13,
     fontWeight: '600',
     color: '#000000',
     marginBottom: 2,
-    letterSpacing: -0.2,
   },
-  listItemSubtitle: {
-    fontSize: 13,
+  listMeta: {
+    fontSize: 11,
     color: '#8E8E93',
-    letterSpacing: -0.1,
   },
-  listItemAmount: {
-    fontSize: 15,
+  listAmount: {
+    fontSize: 13,
     fontWeight: '700',
     color: '#34C759',
-    letterSpacing: -0.2,
-  },
-  alertHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
   },
   alertItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#FFF9E6',
   },
-  alertItemContent: {
+  alertContent: {
     flex: 1,
-    marginRight: 12,
+    marginRight: 10,
   },
-  alertItemName: {
-    fontSize: 15,
+  alertName: {
+    fontSize: 13,
     fontWeight: '600',
     color: '#000000',
     marginBottom: 2,
-    letterSpacing: -0.2,
   },
-  alertItemPrice: {
-    fontSize: 13,
-    color: '#8E8E93',
-    letterSpacing: -0.1,
+  alertStock: {
+    fontSize: 11,
+    color: '#FF9500',
+    fontWeight: '500',
   },
-  stockBadge: {
-    backgroundColor: '#FFEBEB',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  stockValue: {
-    fontSize: 17,
+  alertPrice: {
+    fontSize: 12,
     fontWeight: '700',
     color: '#FF3B30',
-    letterSpacing: -0.4,
   },
-  stockLabel: {
-    fontSize: 11,
-    color: '#FF3B30',
-    fontWeight: '500',
-    letterSpacing: -0.1,
-  },
-  activityItem: {
+  leadItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F2F2F7',
   },
-  activityIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  leadScore: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
     backgroundColor: '#F2F2F7',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  activityContent: {
+  leadScoreValue: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  leadInfo: {
     flex: 1,
   },
-  activityTitle: {
-    fontSize: 15,
+  leadName: {
+    fontSize: 13,
     fontWeight: '600',
     color: '#000000',
     marginBottom: 4,
-    letterSpacing: -0.2,
   },
-  activityTimeRow: {
+  leadMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  activityTime: {
+  leadContacts: {
+    fontSize: 11,
+    color: '#8E8E93',
+  },
+  trendIcon: {
+    marginLeft: 4,
+  },
+  stageItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  stageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  stageName: {
     fontSize: 13,
-    color: '#8E8E93',
-    letterSpacing: -0.1,
+    fontWeight: '600',
+    color: '#000000',
   },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
+  stageBadge: {
+    backgroundColor: '#F2F2F7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
-  emptyText: {
-    marginTop: 12,
-    fontSize: 15,
-    color: '#8E8E93',
-    fontWeight: '400',
-    letterSpacing: -0.2,
+  stageBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#000000',
   },
-  // Quick Stats Styles
-  quickStatsGrid: {
+  stageBar: {
+    height: 4,
+    backgroundColor: '#F2F2F7',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  stageBarFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  stageValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#34C759',
+  },
+  quotesOverview: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  quickStatCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    width: (width - 48) / 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  quickStatHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
   },
-  quickStatIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  quoteStatMini: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  quoteStatNumber: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  quoteStatLabel: {
+    fontSize: 10,
+    color: '#8E8E93',
+    marginTop: 2,
+  },
+  conversionBar: {
+    gap: 6,
+  },
+  conversionLabel: {
+    fontSize: 12,
+    color: '#000000',
+    fontWeight: '600',
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: '#F2F2F7',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#34C759',
+    borderRadius: 2,
+  },
+  conversionValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#34C759',
+  },
+  activityMini: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  activityMiniIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: 10,
   },
-  quickStatTitle: {
-    fontSize: 14,
+  activityMiniContent: {
+    flex: 1,
+  },
+  activityMiniTitle: {
+    fontSize: 12,
     fontWeight: '600',
     color: '#000000',
-    letterSpacing: -0.2,
+    marginBottom: 2,
   },
-  quickStatValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000000',
-    marginBottom: 4,
-    letterSpacing: -0.5,
+  activityMiniTime: {
+    fontSize: 11,
+    color: '#8E8E93',
   },
-  quickStatLabel: {
+  emptyText: {
     fontSize: 13,
     color: '#8E8E93',
-    fontWeight: '400',
-    letterSpacing: -0.1,
-  },
-  quickStatRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  quickStatItem: {
-    alignItems: 'center',
-  },
-  quickStatNumber: {
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
-  quickStatSmallLabel: {
-    fontSize: 12,
-    color: '#8E8E93',
-    fontWeight: '400',
-    letterSpacing: -0.1,
-  },
-  quickStatDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: '#E5E5EA',
-    marginHorizontal: 8,
-  },
-  quickStatDot: {
-    fontSize: 12,
-    color: '#8E8E93',
+    textAlign: 'center',
+    paddingVertical: 12,
   },
 });

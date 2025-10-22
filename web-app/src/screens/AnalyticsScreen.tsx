@@ -4,398 +4,356 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  RefreshControl,
   TouchableOpacity,
-  ActivityIndicator,
   Dimensions,
   Platform,
+  FlatList,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { ChartIcon, TrendingUpIcon, DollarIcon, UsersIcon, FileTextIcon } from '../components/Icons';
+import { TrendingUpIcon, TrendingDownIcon, UsersIcon } from '../components/Icons';
 
 type AnalyticsScreenProps = {
-  navigation: NativeStackNavigationProp<RootStackParamList, 'Analytics'>;
+  navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
 };
 
+interface ChartData {
+  label: string;
+  value: number;
+  percentage: number;
+  trend?: number;
+}
+
+interface KPICard {
+  title: string;
+  value: string | number;
+  unit?: string;
+  trend?: number;
+  trendLabel?: string;
+  backgroundColor: string;
+}
+
 const { width } = Dimensions.get('window');
-const chartWidth = width - 48;
 
 export default function AnalyticsScreen({ navigation }: AnalyticsScreenProps) {
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
+  const [period, setPeriod] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
+  const [revenueData, setRevenueData] = useState<ChartData[]>([]);
+  const [conversionData, setConversionData] = useState<ChartData[]>([]);
+  const [kpis, setKpis] = useState<KPICard[]>([]);
 
-  // Données simulées pour les graphiques
-  const revenueData = [
-    { label: 'Jan', value: 45000 },
-    { label: 'Fév', value: 52000 },
-    { label: 'Mar', value: 48000 },
-    { label: 'Avr', value: 61000 },
-    { label: 'Mai', value: 55000 },
-    { label: 'Jun', value: 67000 },
-  ];
+  useEffect(() => {
+    loadAnalyticsData();
+  }, [period]);
 
-  const salesData = [
-    { label: 'Lun', value: 12 },
-    { label: 'Mar', value: 19 },
-    { label: 'Mer', value: 15 },
-    { label: 'Jeu', value: 22 },
-    { label: 'Ven', value: 18 },
-    { label: 'Sam', value: 8 },
-    { label: 'Dim', value: 5 },
-  ];
+  const loadAnalyticsData = () => {
+    // Revenue by Product
+    const revenue: ChartData[] = [
+      { label: 'CRM Premium', value: 125000, percentage: 45 },
+      { label: 'Integration', value: 75000, percentage: 27 },
+      { label: 'Support', value: 45000, percentage: 16 },
+      { label: 'Training', value: 22000, percentage: 8 },
+    ];
 
-  const pipelineData = [
-    { label: 'Prospect', value: 15000, count: 8, color: '#8E8E93' },
-    { label: 'Qualifié', value: 25000, count: 12, color: '#5856D6' },
-    { label: 'Proposition', value: 45000, count: 9, color: '#007AFF' },
-    { label: 'Négociation', value: 35000, count: 6, color: '#FF9500' },
-    { label: 'Gagné', value: 67000, count: 14, color: '#34C759' },
-    { label: 'Perdu', value: 22000, count: 11, color: '#FF3B30' },
-  ];
+    // Sales Pipeline Conversion
+    const conversion: ChartData[] = [
+      { label: 'Prospection', value: 150, percentage: 100 },
+      { label: 'Qualification', value: 95, percentage: 63 },
+      { label: 'Proposition', value: 58, percentage: 39 },
+      { label: 'Négociation', value: 32, percentage: 21 },
+      { label: 'Signée', value: 12, percentage: 8 },
+    ];
 
-  const conversionData = [
-    { label: 'Leads', value: 150, color: '#8E8E93' },
-    { label: 'Prospects', value: 87, color: '#5856D6' },
-    { label: 'Opportunités', value: 45, color: '#007AFF' },
-    { label: 'Clients', value: 28, color: '#34C759' },
-  ];
+    // KPIs
+    const kpiCards: KPICard[] = [
+      {
+        title: 'Revenu Total',
+        value: '267K€',
+        trend: 12,
+        trendLabel: 'vs mois précédent',
+        backgroundColor: '#34C75920',
+      },
+      {
+        title: 'Deals Gagnés',
+        value: 12,
+        unit: 'deals',
+        trend: 8,
+        trendLabel: 'vs mois précédent',
+        backgroundColor: '#007AFF20',
+      },
+      {
+        title: 'Taux de Conversion',
+        value: '21%',
+        trend: -2,
+        trendLabel: 'vs mois précédent',
+        backgroundColor: '#FF950020',
+      },
+      {
+        title: 'Valeur Moyenne Deal',
+        value: '22.2K€',
+        trend: 5,
+        trendLabel: 'vs mois précédent',
+        backgroundColor: '#5856D620',
+      },
+    ];
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    setRevenueData(revenue);
+    setConversionData(conversion);
+    setKpis(kpiCards);
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
+  const getTotalRevenue = () => {
+    return revenueData.reduce((sum, item) => sum + item.value, 0);
   };
 
-  const getMaxValue = (data: any[]) => {
-    return Math.max(...data.map(d => d.value));
-  };
+  const renderBarChart = (data: ChartData[], title: string, color: string) => {
+    const maxValue = Math.max(...data.map(d => d.value));
 
-  const renderBarChart = (data: any[], maxValue: number, showCurrency: boolean = false) => {
     return (
       <View style={styles.chartContainer}>
-        <View style={styles.barsContainer}>
-          {data.map((item, index) => {
-            const height = (item.value / maxValue) * 150;
-            return (
-              <View key={index} style={styles.barWrapper}>
-                <View style={styles.barColumn}>
-                  <Text style={styles.barValue}>
-                    {showCurrency ? formatCurrency(item.value) : item.value}
-                  </Text>
-                  <View style={styles.barContainer}>
-                    <View
-                      style={[
-                        styles.bar,
-                        {
-                          height: height,
-                          backgroundColor: item.color || '#007AFF',
-                        },
-                      ]}
-                    />
-                  </View>
-                </View>
-                <Text style={styles.barLabel}>{item.label}</Text>
+        <Text style={styles.chartTitle}>{title}</Text>
+        <View style={styles.barChartContent}>
+          {data.map((item, index) => (
+            <View key={index} style={styles.barRow}>
+              <Text style={styles.barLabel}>{item.label}</Text>
+              <View style={styles.barWrapper}>
+                <View
+                  style={[
+                    styles.bar,
+                    {
+                      width: `${(item.value / maxValue) * 100}%`,
+                      backgroundColor: color,
+                    },
+                  ]}
+                />
               </View>
-            );
-          })}
+              <View style={styles.barValue}>
+                <Text style={styles.barValueText}>
+                  {item.percentage}%
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* Legend */}
+        <View style={styles.chartLegend}>
+          {data.map((item, index) => (
+            <View key={index} style={styles.legendItem}>
+              <View
+                style={[
+                  styles.legendDot,
+                  { backgroundColor: `${color}${Math.round((100 - index * 15)).toString(16).padStart(2, '0')}` },
+                ]}
+              />
+              <Text style={styles.legendLabel}>
+                {item.label}: {(item.value / 1000).toFixed(0)}k
+              </Text>
+            </View>
+          ))}
         </View>
       </View>
     );
   };
 
-  const renderFunnelChart = (data: any[]) => {
-    const maxValue = data[0].value;
+  const renderFunnelChart = (data: ChartData[]) => {
     return (
-      <View style={styles.funnelContainer}>
-        {data.map((item, index) => {
-          const widthPercentage = (item.value / maxValue) * 100;
-          const conversionRate = index > 0 ? ((item.value / data[index - 1].value) * 100).toFixed(1) : '100.0';
-          
-          return (
-            <View key={index} style={styles.funnelItem}>
-              <View style={styles.funnelHeader}>
-                <Text style={styles.funnelLabel}>{item.label}</Text>
-                <View style={styles.funnelStats}>
-                  <Text style={styles.funnelValue}>{item.value}</Text>
-                  {index > 0 && (
-                    <Text style={styles.funnelRate}>({conversionRate}%)</Text>
-                  )}
-                </View>
+      <View style={styles.chartContainer}>
+        <Text style={styles.chartTitle}>Pipeline Conversion Funnel</Text>
+        <View style={styles.funnelContent}>
+          {data.map((item, index) => (
+            <View key={index} style={styles.funnelStage}>
+              <View
+                style={[
+                  styles.funnelBar,
+                  {
+                    width: `${item.percentage}%`,
+                    backgroundColor: `rgba(0, 122, 255, ${1 - index * 0.15})`,
+                  },
+                ]}
+              >
+                <Text style={styles.funnelLabel}>
+                  {item.label}
+                </Text>
               </View>
-              <View style={styles.funnelBarContainer}>
-                <View
-                  style={[
-                    styles.funnelBar,
-                    {
-                      width: `${widthPercentage}%`,
-                      backgroundColor: item.color,
-                    },
-                  ]}
-                />
-              </View>
+              <Text style={styles.funnelValue}>
+                {item.value} deals ({item.percentage}%)
+              </Text>
             </View>
-          );
-        })}
+          ))}
+        </View>
       </View>
     );
   };
 
+  const renderKPICard = (kpi: KPICard, index: number) => (
+    <TouchableOpacity key={index} style={[styles.kpiCard, { backgroundColor: kpi.backgroundColor }]}>
+      <Text style={styles.kpiTitle}>{kpi.title}</Text>
+      <View style={styles.kpiContent}>
+        <Text style={styles.kpiValue}>{kpi.value}</Text>
+        {kpi.unit && <Text style={styles.kpiUnit}>{kpi.unit}</Text>}
+      </View>
+      {kpi.trend && (
+        <View style={styles.kpiTrend}>
+          {kpi.trend > 0 ? (
+            <TrendingUpIcon size={14} color="#34C759" />
+          ) : (
+            <TrendingDownIcon size={14} color="#FF3B30" />
+          )}
+          <Text style={[styles.kpiTrendValue, { color: kpi.trend > 0 ? '#34C759' : '#FF3B30' }]}>
+            {Math.abs(kpi.trend)}%
+          </Text>
+          <Text style={styles.kpiTrendLabel}>{kpi.trendLabel}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#007AFF" />
-      }
-    >
-      {/* En-tête */}
+    <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Analytics & Rapports</Text>
-        <Text style={styles.subtitle}>Analyse détaillée de vos performances</Text>
+        <Text style={styles.headerTitle}>📊 Analytics</Text>
+        <Text style={styles.headerSubtitle}>Tableau de bord des performances</Text>
       </View>
 
-      {/* Sélecteur de Période */}
+      {/* Period Selector */}
       <View style={styles.periodSelector}>
-        {(['week', 'month', 'quarter', 'year'] as const).map((period) => (
+        {['week', 'month', 'quarter', 'year'].map(p => (
           <TouchableOpacity
-            key={period}
+            key={p}
             style={[
               styles.periodButton,
-              selectedPeriod === period && styles.periodButtonActive,
+              period === p && styles.periodButtonActive,
             ]}
-            onPress={() => setSelectedPeriod(period)}
-            activeOpacity={0.7}
+            onPress={() => setPeriod(p as typeof period)}
           >
             <Text
               style={[
                 styles.periodButtonText,
-                selectedPeriod === period && styles.periodButtonTextActive,
+                period === p && styles.periodButtonTextActive,
               ]}
             >
-              {period === 'week' && 'Semaine'}
-              {period === 'month' && 'Mois'}
-              {period === 'quarter' && 'Trimestre'}
-              {period === 'year' && 'Année'}
+              {p === 'week' ? 'Semaine' : p === 'month' ? 'Mois' : p === 'quarter' ? 'Trimestre' : 'Année'}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Chiffre d'Affaires */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitleRow}>
-            <DollarIcon size={20} color="#34C759" />
-            <Text style={styles.sectionTitle}>Chiffre d'Affaires</Text>
-          </View>
-          <TouchableOpacity>
-            <Text style={styles.seeAllText}>Détails</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.card}>
-          <View style={styles.chartHeader}>
-            <Text style={styles.chartTitle}>Évolution mensuelle</Text>
-            <View style={styles.chartLegend}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#34C759' }]} />
-                <Text style={styles.legendText}>Revenue</Text>
-              </View>
-            </View>
-          </View>
-          {renderBarChart(revenueData, getMaxValue(revenueData), true)}
-          <View style={styles.chartFooter}>
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Total</Text>
-              <Text style={styles.statValue}>
-                {formatCurrency(revenueData.reduce((sum, item) => sum + item.value, 0))}
-              </Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Moyenne</Text>
-              <Text style={styles.statValue}>
-                {formatCurrency(
-                  revenueData.reduce((sum, item) => sum + item.value, 0) / revenueData.length
-                )}
-              </Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Meilleur</Text>
-              <Text style={[styles.statValue, { color: '#34C759' }]}>
-                {formatCurrency(Math.max(...revenueData.map(d => d.value)))}
-              </Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Ventes */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitleRow}>
-            <ChartIcon size={20} color="#007AFF" />
-            <Text style={styles.sectionTitle}>Ventes</Text>
-          </View>
-          <TouchableOpacity>
-            <Text style={styles.seeAllText}>Détails</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.card}>
-          <View style={styles.chartHeader}>
-            <Text style={styles.chartTitle}>Cette semaine</Text>
-            <View style={styles.chartLegend}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#007AFF' }]} />
-                <Text style={styles.legendText}>Transactions</Text>
-              </View>
-            </View>
-          </View>
-          {renderBarChart(salesData, getMaxValue(salesData), false)}
-          <View style={styles.chartFooter}>
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Total</Text>
-              <Text style={styles.statValue}>
-                {salesData.reduce((sum, item) => sum + item.value, 0)}
-              </Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Moy/jour</Text>
-              <Text style={styles.statValue}>
-                {(salesData.reduce((sum, item) => sum + item.value, 0) / salesData.length).toFixed(1)}
-              </Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Record</Text>
-              <Text style={[styles.statValue, { color: '#007AFF' }]}>
-                {Math.max(...salesData.map(d => d.value))}
-              </Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Pipeline */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitleRow}>
-            <TrendingUpIcon size={20} color="#FF9500" />
-            <Text style={styles.sectionTitle}>Pipeline de Ventes</Text>
-          </View>
-          <TouchableOpacity onPress={() => navigation.navigate('Pipeline')}>
-            <Text style={styles.seeAllText}>Voir tout</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.card}>
-          <View style={styles.chartHeader}>
-            <Text style={styles.chartTitle}>Répartition par étape</Text>
-            <Text style={styles.chartSubtitle}>
-              Total: {formatCurrency(pipelineData.reduce((sum, item) => sum + item.value, 0))}
-            </Text>
-          </View>
-          {renderBarChart(pipelineData, getMaxValue(pipelineData), true)}
-          <View style={styles.pipelineSummary}>
-            <View style={styles.pipelineStatRow}>
-              <Text style={styles.pipelineStatLabel}>Opportunités actives:</Text>
-              <Text style={styles.pipelineStatValue}>
-                {pipelineData.slice(0, 4).reduce((sum, item) => sum + item.count, 0)}
-              </Text>
-            </View>
-            <View style={styles.pipelineStatRow}>
-              <Text style={styles.pipelineStatLabel}>Taux de conversion:</Text>
-              <Text style={[styles.pipelineStatValue, { color: '#34C759' }]}>
-                {((pipelineData[4].count / (pipelineData[4].count + pipelineData[5].count)) * 100).toFixed(1)}%
-              </Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Tunnel de Conversion */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitleRow}>
-            <UsersIcon size={20} color="#5856D6" />
-            <Text style={styles.sectionTitle}>Tunnel de Conversion</Text>
-          </View>
-        </View>
-        <View style={styles.card}>
-          <View style={styles.chartHeader}>
-            <Text style={styles.chartTitle}>Du lead au client</Text>
-            <Text style={styles.chartSubtitle}>
-              Taux global: {((conversionData[3].value / conversionData[0].value) * 100).toFixed(1)}%
-            </Text>
-          </View>
-          {renderFunnelChart(conversionData)}
-        </View>
-      </View>
-
-      {/* KPIs */}
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>INDICATEURS CLÉS</Text>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* KPI Cards */}
         <View style={styles.kpiGrid}>
-          <View style={styles.kpiCard}>
-            <View style={[styles.kpiIcon, { backgroundColor: '#E8F5E9' }]}>
-              <DollarIcon size={24} color="#34C759" />
+          {kpis.map((kpi, index) => renderKPICard(kpi, index))}
+        </View>
+
+        {/* Revenue Chart */}
+        {renderBarChart(revenueData, 'Revenu par Produit', '#34C759')}
+
+        {/* Conversion Funnel */}
+        {renderFunnelChart(conversionData)}
+
+        {/* Performance Metrics */}
+        <View style={styles.metricsContainer}>
+          <Text style={styles.chartTitle}>Métriques de Performance</Text>
+
+          <View style={styles.metricRow}>
+            <View style={styles.metricBox}>
+              <Text style={styles.metricLabel}>Temps Cycle Moyen</Text>
+              <Text style={styles.metricValue}>42 jours</Text>
             </View>
-            <Text style={styles.kpiValue}>24.5k €</Text>
-            <Text style={styles.kpiLabel}>Panier moyen</Text>
-            <View style={styles.kpiTrend}>
-              <TrendingUpIcon size={12} color="#34C759" />
-              <Text style={[styles.kpiTrendText, { color: '#34C759' }]}>+12%</Text>
+            <View style={styles.metricBox}>
+              <Text style={styles.metricLabel}>Taille Deal Moyenne</Text>
+              <Text style={styles.metricValue}>22.2K€</Text>
             </View>
           </View>
 
-          <View style={styles.kpiCard}>
-            <View style={[styles.kpiIcon, { backgroundColor: '#E3F2FD' }]}>
-              <ChartIcon size={24} color="#007AFF" />
+          <View style={styles.metricRow}>
+            <View style={styles.metricBox}>
+              <Text style={styles.metricLabel}>Win Rate</Text>
+              <Text style={styles.metricValue}>32%</Text>
             </View>
-            <Text style={styles.kpiValue}>67%</Text>
-            <Text style={styles.kpiLabel}>Taux de clôture</Text>
-            <View style={styles.kpiTrend}>
-              <TrendingUpIcon size={12} color="#007AFF" />
-              <Text style={[styles.kpiTrendText, { color: '#007AFF' }]}>+5%</Text>
-            </View>
-          </View>
-
-          <View style={styles.kpiCard}>
-            <View style={[styles.kpiIcon, { backgroundColor: '#FFF3E0' }]}>
-              <FileTextIcon size={24} color="#FF9500" />
-            </View>
-            <Text style={styles.kpiValue}>18 jours</Text>
-            <Text style={styles.kpiLabel}>Cycle de vente</Text>
-            <View style={styles.kpiTrend}>
-              <Text style={[styles.kpiTrendText, { color: '#34C759' }]}>↓ -3j</Text>
-            </View>
-          </View>
-
-          <View style={styles.kpiCard}>
-            <View style={[styles.kpiIcon, { backgroundColor: '#F3E5F5' }]}>
-              <UsersIcon size={24} color="#5856D6" />
-            </View>
-            <Text style={styles.kpiValue}>42%</Text>
-            <Text style={styles.kpiLabel}>Rétention client</Text>
-            <View style={styles.kpiTrend}>
-              <TrendingUpIcon size={12} color="#5856D6" />
-              <Text style={[styles.kpiTrendText, { color: '#5856D6' }]}>+8%</Text>
+            <View style={styles.metricBox}>
+              <Text style={styles.metricLabel}>Forecast vs Réel</Text>
+              <Text style={styles.metricValue}>+12%</Text>
             </View>
           </View>
         </View>
-      </View>
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        {/* Top Performers */}
+        <View style={styles.chartContainer}>
+          <Text style={styles.chartTitle}>Top Commerciaux</Text>
+          <View style={styles.performersList}>
+            {[
+              { name: 'Sophie Durand', deals: 8, revenue: 156000 },
+              { name: 'Laurent Michel', deals: 6, revenue: 89000 },
+              { name: 'Pierre Leroy', deals: 4, revenue: 58000 },
+              { name: 'Marie Martin', deals: 3, revenue: 32000 },
+            ].map((performer, index) => (
+              <View key={index} style={styles.performerCard}>
+                <View style={styles.performerRank}>
+                  <Text style={styles.performerRankText}>{index + 1}</Text>
+                </View>
+                <View style={styles.performerInfo}>
+                  <Text style={styles.performerName}>{performer.name}</Text>
+                  <Text style={styles.performerStats}>
+                    {performer.deals} deals • {(performer.revenue / 1000).toFixed(0)}k€
+                  </Text>
+                </View>
+                <View>
+                  <Text style={styles.medalIcon}>
+                    {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '⭐'}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Lead Scoring Distribution */}
+        <View style={styles.chartContainer}>
+          <Text style={styles.chartTitle}>Distribution Scoring Leads</Text>
+          <View style={styles.scoringDistribution}>
+            {[
+              { label: 'Hot (80-100)', count: 12, color: '#FF3B30' },
+              { label: 'Warm (50-79)', count: 28, color: '#FF9500' },
+              { label: 'Cold (0-49)', count: 45, color: '#8E8E93' },
+            ].map((item, index) => (
+              <View key={index} style={styles.scoringItem}>
+                <View style={styles.scoringHeader}>
+                  <View
+                    style={[styles.scoringDot, { backgroundColor: item.color }]}
+                  />
+                  <Text style={styles.scoringLabel}>{item.label}</Text>
+                </View>
+                <View style={styles.scoringBar}>
+                  <View
+                    style={[
+                      styles.scoringBarFill,
+                      {
+                        width: `${(item.count / 85) * 100}%`,
+                        backgroundColor: item.color,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.scoringCount}>{item.count}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Export Section */}
+        <View style={styles.exportSection}>
+          <TouchableOpacity style={styles.exportButton}>
+            <Text style={styles.exportIcon}>📥</Text>
+            <Text style={styles.exportText}>Exporter PDF</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.exportButton}>
+            <Text style={styles.exportIcon}>📧</Text>
+            <Text style={styles.exportText}>Envoyer Par Email</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -405,117 +363,152 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F7',
   },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 20,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
     backgroundColor: '#FFFFFF',
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
   },
-  title: {
-    fontSize: 34,
+  headerTitle: {
+    fontSize: 28,
     fontWeight: '700',
     color: '#000000',
-    letterSpacing: -1,
     marginBottom: 4,
   },
-  subtitle: {
-    fontSize: 17,
+  headerSubtitle: {
+    fontSize: 14,
     color: '#8E8E93',
-    fontWeight: '400',
-    letterSpacing: -0.4,
   },
   periodSelector: {
     flexDirection: 'row',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     gap: 8,
   },
   periodButton: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    backgroundColor: '#F2F2F7',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
   },
   periodButtonActive: {
     backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
   },
   periodButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#000000',
-    letterSpacing: -0.2,
+    color: '#8E8E93',
   },
   periodButtonTextActive: {
     color: '#FFFFFF',
   },
-  section: {
-    paddingHorizontal: 24,
-    marginBottom: 24,
+  content: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  sectionLabel: {
-    fontSize: 13,
+  kpiGrid: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  kpiCard: {
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    marginBottom: 8,
+  },
+  kpiTitle: {
+    fontSize: 12,
     fontWeight: '600',
     color: '#8E8E93',
-    letterSpacing: -0.1,
-    marginBottom: 12,
+    marginBottom: 6,
   },
-  sectionHeader: {
+  kpiContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 8,
+  },
+  kpiValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  kpiUnit: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginLeft: 4,
+  },
+  kpiTrend: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+  },
+  kpiTrendValue: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  kpiTrendLabel: {
+    fontSize: 10,
+    color: '#8E8E93',
+  },
+  chartContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 12,
   },
-  sectionTitleRow: {
+  chartTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#000000',
+    marginBottom: 12,
+  },
+  barChartContent: {
+    gap: 12,
+  },
+  barRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000000',
-    letterSpacing: -0.5,
-  },
-  seeAllText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#007AFF',
-    letterSpacing: -0.2,
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 2,
-  },
-  chartHeader: {
-    marginBottom: 20,
-  },
-  chartTitle: {
-    fontSize: 17,
+  barLabel: {
+    fontSize: 11,
     fontWeight: '600',
     color: '#000000',
-    marginBottom: 4,
-    letterSpacing: -0.4,
+    width: 100,
   },
-  chartSubtitle: {
-    fontSize: 14,
-    color: '#8E8E93',
-    fontWeight: '400',
-    letterSpacing: -0.2,
+  barWrapper: {
+    flex: 1,
+    height: 24,
+    backgroundColor: '#F2F2F7',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  bar: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  barValue: {
+    width: 40,
+    alignItems: 'flex-end',
+  },
+  barValueText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#000000',
   },
   chartLegend: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F2F2F7',
     flexDirection: 'row',
-    gap: 16,
-    marginTop: 8,
+    flexWrap: 'wrap',
+    gap: 12,
   },
   legendItem: {
     flexDirection: 'row',
@@ -527,197 +520,161 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  legendText: {
-    fontSize: 13,
-    color: '#8E8E93',
-    fontWeight: '400',
-  },
-  chartContainer: {
-    marginVertical: 12,
-  },
-  barsContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 4,
-  },
-  barWrapper: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  barColumn: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  barValue: {
+  legendLabel: {
     fontSize: 11,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 6,
-    letterSpacing: -0.1,
+    color: '#8E8E93',
   },
-  barContainer: {
-    width: '100%',
-    height: 150,
-    justifyContent: 'flex-end',
+  funnelContent: {
+    gap: 12,
+  },
+  funnelStage: {
     alignItems: 'center',
   },
-  bar: {
-    width: '80%',
-    borderTopLeftRadius: 4,
-    borderTopRightRadius: 4,
-    minHeight: 4,
-  },
-  barLabel: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginTop: 8,
-    fontWeight: '500',
-    letterSpacing: -0.1,
-  },
-  chartFooter: {
-    flexDirection: 'row',
-    marginTop: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F2F2F7',
-  },
-  statBox: {
-    flex: 1,
+  funnelBar: {
+    minHeight: 40,
+    borderRadius: 8,
+    justifyContent: 'center',
     alignItems: 'center',
-  },
-  statDivider: {
-    width: 1,
-    height: '100%',
-    backgroundColor: '#E5E5EA',
-  },
-  statLabel: {
-    fontSize: 13,
-    color: '#8E8E93',
-    fontWeight: '400',
     marginBottom: 4,
-    letterSpacing: -0.1,
   },
-  statValue: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#000000',
-    letterSpacing: -0.4,
+  funnelLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
-  pipelineSummary: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F2F2F7',
+  funnelValue: {
+    fontSize: 11,
+    color: '#8E8E93',
+  },
+  metricsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  metricRow: {
+    flexDirection: 'row',
     gap: 8,
   },
-  pipelineStatRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  metricBox: {
+    flex: 1,
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    marginBottom: 8,
   },
-  pipelineStatLabel: {
-    fontSize: 14,
+  metricLabel: {
+    fontSize: 11,
     color: '#8E8E93',
-    fontWeight: '400',
-    letterSpacing: -0.2,
+    marginBottom: 4,
   },
-  pipelineStatValue: {
+  metricValue: {
     fontSize: 16,
     fontWeight: '700',
     color: '#000000',
-    letterSpacing: -0.3,
   },
-  funnelContainer: {
-    gap: 16,
-  },
-  funnelItem: {
+  performersList: {
     gap: 8,
   },
-  funnelHeader: {
+  performerCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+    gap: 8,
   },
-  funnelLabel: {
-    fontSize: 15,
-    fontWeight: '600',
+  performerRank: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#007AFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  performerRankText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  performerInfo: {
+    flex: 1,
+  },
+  performerName: {
+    fontSize: 12,
+    fontWeight: '700',
     color: '#000000',
-    letterSpacing: -0.2,
+    marginBottom: 2,
   },
-  funnelStats: {
+  performerStats: {
+    fontSize: 11,
+    color: '#8E8E93',
+  },
+  performerMedal: {
+    fontSize: 16,
+  },
+  medalIcon: {
+    fontSize: 16,
+  },
+  scoringDistribution: {
+    gap: 12,
+  },
+  scoringItem: {
+    marginBottom: 8,
+  },
+  scoringHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    marginBottom: 6,
   },
-  funnelValue: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#000000',
-    letterSpacing: -0.4,
+  scoringDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  funnelRate: {
-    fontSize: 14,
-    color: '#34C759',
+  scoringLabel: {
+    fontSize: 12,
     fontWeight: '600',
-    letterSpacing: -0.2,
+    color: '#000000',
   },
-  funnelBarContainer: {
-    height: 32,
+  scoringBar: {
+    height: 16,
     backgroundColor: '#F2F2F7',
-    borderRadius: 8,
+    borderRadius: 4,
     overflow: 'hidden',
-  },
-  funnelBar: {
-    height: '100%',
-    borderRadius: 8,
-  },
-  kpiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  kpiCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    width: (width - 60) / 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  kpiIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  kpiValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#000000',
     marginBottom: 4,
-    letterSpacing: -0.6,
   },
-  kpiLabel: {
-    fontSize: 13,
+  scoringBarFill: {
+    height: '100%',
+  },
+  scoringCount: {
+    fontSize: 11,
     color: '#8E8E93',
-    fontWeight: '400',
-    marginBottom: 8,
-    letterSpacing: -0.1,
   },
-  kpiTrend: {
+  exportSection: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 20,
+  },
+  exportButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    paddingVertical: 12,
+    gap: 6,
   },
-  kpiTrendText: {
-    fontSize: 14,
+  exportIcon: {
+    fontSize: 16,
+  },
+  exportText: {
+    fontSize: 12,
     fontWeight: '600',
-    letterSpacing: -0.2,
+    color: '#FFFFFF',
   },
 });

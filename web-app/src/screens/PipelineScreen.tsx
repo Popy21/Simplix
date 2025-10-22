@@ -11,6 +11,7 @@ import {
   RefreshControl,
   Dimensions,
   Platform,
+  FlatList,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
@@ -88,6 +89,17 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
+  const [newOppModalVisible, setNewOppModalVisible] = useState(false);
+  const [newOppForm, setNewOppForm] = useState({
+    title: '',
+    company: '',
+    value: '',
+    probability: '20',
+    expectedCloseDate: '',
+    contact: '',
+    notes: '',
+    status: 'prospect' as OpportunityStatus,
+  });
 
   const statusConfig: Record<OpportunityStatus, { label: string; color: string; icon: any }> = {
     prospect: { label: 'Prospect', color: '#8E8E93', icon: FileTextIcon },
@@ -122,6 +134,53 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
     return opportunities
       .filter((opp) => opp.status === status)
       .reduce((sum, opp) => sum + (opp.value * opp.probability) / 100, 0);
+  };
+
+  const handleCreateOpportunity = () => {
+    if (!newOppForm.title.trim() || !newOppForm.company.trim()) {
+      Alert.alert('Erreur', 'Veuillez remplir le titre et l\'entreprise');
+      return;
+    }
+
+    const newOpp: Opportunity = {
+      id: `opp_${Date.now()}`,
+      title: newOppForm.title,
+      company: newOppForm.company,
+      value: parseInt(newOppForm.value) || 0,
+      status: newOppForm.status,
+      probability: parseInt(newOppForm.probability) || 20,
+      expectedCloseDate: newOppForm.expectedCloseDate,
+      contact: newOppForm.contact,
+      notes: newOppForm.notes,
+    };
+
+    setOpportunities([...opportunities, newOpp]);
+    setNewOppForm({
+      title: '',
+      company: '',
+      value: '',
+      probability: '20',
+      expectedCloseDate: '',
+      contact: '',
+      notes: '',
+      status: 'prospect',
+    });
+    setNewOppModalVisible(false);
+    Alert.alert('Succès', `Opportunité "${newOpp.title}" créée!`);
+  };
+
+  const handleResetOppForm = () => {
+    setNewOppForm({
+      title: '',
+      company: '',
+      value: '',
+      probability: '20',
+      expectedCloseDate: '',
+      contact: '',
+      notes: '',
+      status: 'prospect',
+    });
+    setNewOppModalVisible(false);
   };
 
   const moveOpportunity = (opportunityId: string, newStatus: OpportunityStatus) => {
@@ -232,7 +291,7 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
         </View>
         <TouchableOpacity
           style={styles.addButton}
-          onPress={() => Alert.alert('À venir', 'Fonctionnalité en développement')}
+          onPress={() => setNewOppModalVisible(true)}
         >
           <Text style={styles.addButtonText}>+ Nouveau</Text>
         </TouchableOpacity>
@@ -356,6 +415,148 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
                 </View>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Create Opportunity Modal */}
+      <Modal
+        visible={newOppModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={handleResetOppForm}
+      >
+        <View style={styles.newModalContainer}>
+          <View style={styles.newModalContent}>
+            <View style={styles.newModalHeader}>
+              <Text style={styles.newModalTitle}>Nouvelle Opportunité</Text>
+              <TouchableOpacity onPress={handleResetOppForm}>
+                <Text style={styles.closeButtonNew}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.newModalBody} showsVerticalScrollIndicator={false}>
+              <View style={styles.formGroupOpp}>
+                <Text style={styles.formLabelOpp}>Titre *</Text>
+                <TextInput
+                  style={styles.inputOpp}
+                  placeholder="Ex: Migration Cloud"
+                  value={newOppForm.title}
+                  onChangeText={(text) => setNewOppForm({ ...newOppForm, title: text })}
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              <View style={styles.formGroupOpp}>
+                <Text style={styles.formLabelOpp}>Entreprise *</Text>
+                <TextInput
+                  style={styles.inputOpp}
+                  placeholder="Ex: TechCorp"
+                  value={newOppForm.company}
+                  onChangeText={(text) => setNewOppForm({ ...newOppForm, company: text })}
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              <View style={styles.formGroupOpp}>
+                <Text style={styles.formLabelOpp}>Contact</Text>
+                <TextInput
+                  style={styles.inputOpp}
+                  placeholder="Ex: Marie Dubois"
+                  value={newOppForm.contact}
+                  onChangeText={(text) => setNewOppForm({ ...newOppForm, contact: text })}
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              <View style={styles.formGroupOpp}>
+                <Text style={styles.formLabelOpp}>Valeur (€) *</Text>
+                <TextInput
+                  style={styles.inputOpp}
+                  placeholder="50000"
+                  value={newOppForm.value}
+                  onChangeText={(text) => setNewOppForm({ ...newOppForm, value: text })}
+                  keyboardType="numeric"
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              <View style={styles.formGroupOpp}>
+                <Text style={styles.formLabelOpp}>Probabilité (%)</Text>
+                <TextInput
+                  style={styles.inputOpp}
+                  placeholder="20"
+                  value={newOppForm.probability}
+                  onChangeText={(text) => setNewOppForm({ ...newOppForm, probability: text })}
+                  keyboardType="numeric"
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              <View style={styles.formGroupOpp}>
+                <Text style={styles.formLabelOpp}>Statut</Text>
+                <View style={styles.statusSelectOpp}>
+                  {(['prospect', 'qualified', 'proposal', 'negotiation'] as OpportunityStatus[]).map(status => (
+                    <TouchableOpacity
+                      key={status}
+                      style={[
+                        styles.statusButtonOpp,
+                        newOppForm.status === status && styles.statusButtonActiveOpp,
+                        { borderColor: statusConfig[status].color }
+                      ]}
+                      onPress={() => setNewOppForm({ ...newOppForm, status })}
+                    >
+                      <Text style={{
+                        color: newOppForm.status === status ? statusConfig[status].color : '#8E8E93',
+                        fontWeight: '600',
+                        fontSize: 11
+                      }}>
+                        {statusConfig[status].label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.formGroupOpp}>
+                <Text style={styles.formLabelOpp}>Date Clôture</Text>
+                <TextInput
+                  style={styles.inputOpp}
+                  placeholder="2025-12-31"
+                  value={newOppForm.expectedCloseDate}
+                  onChangeText={(text) => setNewOppForm({ ...newOppForm, expectedCloseDate: text })}
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              <View style={styles.formGroupOpp}>
+                <Text style={styles.formLabelOpp}>Notes</Text>
+                <TextInput
+                  style={[styles.inputOpp, styles.textAreaOpp]}
+                  placeholder="Ajoutez des notes..."
+                  value={newOppForm.notes}
+                  onChangeText={(text) => setNewOppForm({ ...newOppForm, notes: text })}
+                  multiline
+                  numberOfLines={3}
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.newModalFooter}>
+              <TouchableOpacity
+                style={[styles.buttonOpp, styles.buttonSecondaryOpp]}
+                onPress={handleResetOppForm}
+              >
+                <Text style={styles.buttonSecondaryTextOpp}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.buttonOpp, styles.buttonPrimaryOpp]}
+                onPress={handleCreateOpportunity}
+              >
+                <Text style={styles.buttonPrimaryTextOpp}>Créer</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -663,5 +864,103 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: -0.2,
+  },
+  newModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  newModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    maxHeight: '90%',
+  },
+  newModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  newModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  closeButtonNew: {
+    fontSize: 24,
+    color: '#8E8E93',
+  },
+  newModalBody: {
+    maxHeight: 400,
+    marginBottom: 16,
+  },
+  formGroupOpp: {
+    marginBottom: 16,
+  },
+  formLabelOpp: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+    marginBottom: 8,
+  },
+  inputOpp: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#000000',
+  },
+  textAreaOpp: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  statusSelectOpp: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statusButtonOpp: {
+    flex: 1,
+    minWidth: '45%',
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  statusButtonActiveOpp: {
+    borderWidth: 2,
+  },
+  newModalFooter: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingTop: 16,
+    paddingBottom: 20,
+  },
+  buttonOpp: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  buttonPrimaryOpp: {
+    backgroundColor: '#007AFF',
+  },
+  buttonPrimaryTextOpp: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  buttonSecondaryOpp: {
+    backgroundColor: '#F2F2F7',
+  },
+  buttonSecondaryTextOpp: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#8E8E93',
   },
 });

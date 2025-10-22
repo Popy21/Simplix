@@ -73,22 +73,22 @@ export default function RegisterScreen({ navigation }: Props) {
 
   const handleRegister = async () => {
     if (!name || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      Alert.alert('Erreur', 'Les mots de passe ne correspondent pas');
       return;
     }
 
     if (passwordValidation && !passwordValidation.isValid) {
-      Alert.alert('Weak Password', 'Please choose a stronger password that meets all criteria');
+      Alert.alert('Mot de passe faible', 'Veuillez choisir un mot de passe plus fort qui répond à tous les critères');
       return;
     }
 
     if (passwordValidation?.isCommonPassword) {
-      Alert.alert('Common Password', 'This password is too common. Please choose a more unique password.');
+      Alert.alert('Mot de passe courant', 'Ce mot de passe est trop courant. Veuillez en choisir un plus unique.');
       return;
     }
 
@@ -97,7 +97,7 @@ export default function RegisterScreen({ navigation }: Props) {
       await register(email, password, name);
       // Navigation will be handled automatically by App.tsx
     } catch (error: any) {
-      Alert.alert('Registration Failed', error.message || 'Failed to create account');
+      Alert.alert('Échec de l\'inscription', error.message || 'Impossible de créer le compte');
     } finally {
       setIsLoading(false);
     }
@@ -121,13 +121,13 @@ export default function RegisterScreen({ navigation }: Props) {
   const getStrengthLabel = (strength: string) => {
     switch (strength) {
       case 'weak':
-        return 'Weak';
+        return 'Faible';
       case 'medium':
-        return 'Medium';
+        return 'Moyen';
       case 'strong':
-        return 'Strong';
+        return 'Fort';
       case 'very-strong':
-        return 'Very Strong';
+        return 'Très Fort';
       default:
         return '';
     }
@@ -137,17 +137,17 @@ export default function RegisterScreen({ navigation }: Props) {
     if (!password || !passwordValidation) return null;
 
     const criteria = [
-      { key: 'minLength', label: 'At least 8 characters', met: passwordValidation.criteria.minLength },
-      { key: 'hasUppercase', label: 'One uppercase letter', met: passwordValidation.criteria.hasUppercase },
-      { key: 'hasLowercase', label: 'One lowercase letter', met: passwordValidation.criteria.hasLowercase },
-      { key: 'hasNumber', label: 'One number', met: passwordValidation.criteria.hasNumber },
-      { key: 'hasSpecialChar', label: 'One special character', met: passwordValidation.criteria.hasSpecialChar },
+      { key: 'minLength', label: 'Au moins 8 caractères', met: passwordValidation.criteria.minLength },
+      { key: 'hasUppercase', label: 'Une lettre majuscule', met: passwordValidation.criteria.hasUppercase },
+      { key: 'hasLowercase', label: 'Une lettre minuscule', met: passwordValidation.criteria.hasLowercase },
+      { key: 'hasNumber', label: 'Un chiffre', met: passwordValidation.criteria.hasNumber },
+      { key: 'hasSpecialChar', label: 'Un caractère spécial', met: passwordValidation.criteria.hasSpecialChar },
     ];
 
     return (
       <BlurView intensity={15} tint="light" style={styles.criteriaCard}>
         <View style={styles.strengthHeader}>
-          <Text style={styles.strengthLabel}>Password Strength:</Text>
+          <Text style={styles.strengthLabel}>Force du mot de passe :</Text>
           <View style={[styles.strengthBadge, { backgroundColor: getStrengthColor(passwordValidation.strength) }]}>
             <Text style={styles.strengthText}>{getStrengthLabel(passwordValidation.strength)}</Text>
           </View>
@@ -211,16 +211,16 @@ export default function RegisterScreen({ navigation }: Props) {
               {/* Glass Card */}
               <BlurView intensity={20} tint="light" style={styles.glassCard}>
                 <View style={styles.cardContent}>
-                  <Text style={styles.title}>Create Account</Text>
-                  <Text style={styles.description}>Join Simplix CRM today</Text>
+                  <Text style={styles.title}>Créer un compte</Text>
+                  <Text style={styles.description}>Rejoignez Simplix CRM dès aujourd'hui</Text>
 
                   {/* Name Input */}
                   <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Full Name</Text>
+                    <Text style={styles.label}>Nom complet</Text>
                     <View style={styles.inputWrapper}>
                       <TextInput
                         style={styles.input}
-                        placeholder="John Doe"
+                        placeholder="Jean Dupont"
                         placeholderTextColor="rgba(255,255,255,0.5)"
                         value={name}
                         onChangeText={setName}
@@ -236,7 +236,7 @@ export default function RegisterScreen({ navigation }: Props) {
                     <View style={styles.inputWrapper}>
                       <TextInput
                         style={styles.input}
-                        placeholder="your.email@example.com"
+                        placeholder="votre.email@exemple.com"
                         placeholderTextColor="rgba(255,255,255,0.5)"
                         value={email}
                         onChangeText={setEmail}
@@ -249,7 +249,7 @@ export default function RegisterScreen({ navigation }: Props) {
 
                   {/* Password Input */}
                   <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Password</Text>
+                    <Text style={styles.label}>Mot de passe</Text>
                     <View style={styles.inputWrapper}>
                       <TextInput
                         style={styles.input}
@@ -274,7 +274,7 @@ export default function RegisterScreen({ navigation }: Props) {
 
                   {/* Confirm Password Input */}
                   <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Confirm Password</Text>
+                    <Text style={styles.label}>Confirmer le mot de passe</Text>
                     <View style={styles.inputWrapper}>
                       <TextInput
                         style={styles.input}
@@ -293,7 +293,7 @@ export default function RegisterScreen({ navigation }: Props) {
                       </TouchableOpacity>
                     </View>
                     {confirmPassword && password !== confirmPassword && (
-                      <Text style={styles.errorText}>Passwords do not match</Text>
+                      <Text style={styles.errorText}>Les mots de passe ne correspondent pas</Text>
                     )}
                   </View>
 
@@ -312,19 +312,19 @@ export default function RegisterScreen({ navigation }: Props) {
                       {isLoading ? (
                         <ActivityIndicator color="#fff" />
                       ) : (
-                        <Text style={styles.buttonText}>Create Account</Text>
+                        <Text style={styles.buttonText}>Créer un compte</Text>
                       )}
                     </LinearGradient>
                   </TouchableOpacity>
 
                   {/* Login Link */}
                   <View style={styles.footer}>
-                    <Text style={styles.footerText}>Already have an account? </Text>
+                    <Text style={styles.footerText}>Vous avez déjà un compte ? </Text>
                     <TouchableOpacity
                       onPress={() => navigation.navigate('Login')}
                       disabled={isLoading}
                     >
-                      <Text style={styles.link}>Sign In</Text>
+                      <Text style={styles.link}>Se connecter</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

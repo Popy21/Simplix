@@ -5,6 +5,12 @@ import { pool as db } from '../database/db';
 import { User } from '../models/types';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { validatePassword, isCommonPassword } from '../utils/passwordValidator';
+import {
+  generateTokenPair,
+  verifyRefreshToken,
+  generateAccessToken,
+  TokenPayload,
+} from '../utils/tokenManager';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -139,39 +145,65 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 
   try {
-  const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    const result = await db.query(
+      `SELECT u.id, u.email, u.password_hash, u.first_name, u.last_name, 
+              u.organization_id, COALESCE(r.type::text, r.name, 'user') as role
+       FROM users u
+       LEFT JOIN user_roles ur ON u.id = ur.user_id
+       LEFT JOIN roles r ON ur.role_id = r.id
+       WHERE u.email = $1 AND u.deleted_at IS NULL
+       LIMIT 1`,
+      [email]
+    );
 
     if (result.rows.length === 0) {
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
 
-  const row = result.rows[0];
-  const validPassword = await bcrypt.compare(password, row.password_hash);
+    const user = result.rows[0];
+    const validPassword = await bcrypt.compare(password, user.password_hash);
 
     if (!validPassword) {
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
 
-    const token = jwt.sign(
-      { id: row.id, email: row.email, role: row.role },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    // Generate token pair with proper payload
+    const tokenPayload: TokenPayload = {
+      id: user.id,
+      email: user.email,
+      role: user.role || 'user',
+      organization_id: user.organization_id,
+    };
+
+    const { accessToken, refreshToken } = generateTokenPair(tokenPayload);
+
+    // Store refresh token in database for revocation later if needed
+    await db.query(
+      `INSERT INTO refresh_tokens (user_id, token, expires_at) 
+       VALUES ($1, $2, NOW() + INTERVAL '7 days')
+       ON CONFLICT DO NOTHING`,
+      [user.id, refreshToken]
+    ).catch(() => {
+      // Table might not exist yet, ignore
+    });
 
     res.json({
       user: {
-        id: row.id,
-        email: row.email,
-        name: `${row.first_name || ''} ${row.last_name || ''}`.trim(),
-        role: row.role,
-        team_id: row.team_id,
+        id: user.id,
+        email: user.email,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+        role: user.role || 'user',
+        organization_id: user.organization_id,
       },
-      token,
+      accessToken,
+      refreshToken,
+      expiresIn: 900, // 15 minutes in seconds
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Login failed' });
   }
 });
 
@@ -293,6 +325,93 @@ router.post('/change-password', authenticateToken, async (req: AuthRequest, res:
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+// Refresh token endpoint
+router.post('/refresh', async (req: Request, res: Response) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    res.status(400).json({ error: 'Refresh token is required' });
+    return;
+  }
+
+  try {
+    // Verify refresh token
+    const decoded = verifyRefreshToken(refreshToken);
+
+    if (!decoded) {
+      res.status(401).json({ error: 'Invalid or expired refresh token' });
+      return;
+    }
+
+    // Get user from database to ensure they still exist and are active
+    const userResult = await db.query(
+      `SELECT u.id, u.email, u.first_name, u.last_name, u.organization_id,
+              COALESCE(r.type::text, r.name, 'user') as role
+       FROM users u
+       LEFT JOIN user_roles ur ON u.id = ur.user_id
+       LEFT JOIN roles r ON ur.role_id = r.id
+       WHERE u.id = $1 AND u.deleted_at IS NULL
+       LIMIT 1`,
+      [decoded.id]
+    );
+
+    if (userResult.rows.length === 0) {
+      res.status(401).json({ error: 'User no longer exists' });
+      return;
+    }
+
+    const user = userResult.rows[0];
+
+    // Generate new token pair
+    const tokenPayload: TokenPayload = {
+      id: user.id,
+      email: user.email,
+      role: user.role || 'user',
+      organization_id: user.organization_id,
+    };
+
+    const { accessToken, refreshToken: newRefreshToken } = generateTokenPair(tokenPayload);
+
+    res.json({
+      accessToken,
+      refreshToken: newRefreshToken,
+      expiresIn: 900, // 15 minutes
+      user: {
+        id: user.id,
+        email: user.email,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+        role: user.role || 'user',
+      },
+    });
+  } catch (err: any) {
+    console.error('Refresh token error:', err);
+    res.status(500).json({ error: 'Failed to refresh token' });
+  }
+});
+
+// Logout endpoint (optional - mainly for frontend cleanup)
+router.post('/logout', authenticateToken, async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    res.status(401).json({ error: 'User not authenticated' });
+    return;
+  }
+
+  try {
+    // Optionally invalidate refresh token in database
+    await db.query(
+      `DELETE FROM refresh_tokens WHERE user_id = $1`,
+      [req.user.id]
+    ).catch(() => {
+      // Table might not exist, ignore
+    });
+
+    res.json({ message: 'Logged out successfully' });
+  } catch (err: any) {
+    console.error('Logout error:', err);
+    res.status(500).json({ error: 'Logout failed' });
   }
 });
 

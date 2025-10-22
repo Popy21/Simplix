@@ -17,6 +17,14 @@ import pipelineRouter from './routes/pipeline';
 import campaignsRouter from './routes/campaigns';
 import invoicesRouter from './routes/invoices';
 import paymentsRouter from './routes/payments';
+import dealsRouter from './routes/deals';
+import leadsRouter from './routes/leads';
+import activitiesRouter from './routes/activities';
+import documentsRouter from './routes/documents';
+import permissionsRouter from './routes/permissions';
+import deduplicationRouter from './routes/deduplication';
+import workflowsRouter from './routes/workflows';
+import emailsRouter from './routes/emails';
 
 dotenv.config();
 
@@ -70,6 +78,14 @@ app.use('/api/pipeline', pipelineRouter);
 app.use('/api/campaigns', campaignsRouter);
 app.use('/api/invoices', invoicesRouter);
 app.use('/api/payments', paymentsRouter);
+app.use('/api/deals', dealsRouter);
+app.use('/api/leads', leadsRouter);
+app.use('/api/activities', activitiesRouter);
+app.use('/api/documents', documentsRouter);
+app.use('/api/permissions', permissionsRouter);
+app.use('/api/contacts/deduplicate', deduplicationRouter);
+app.use('/api/workflows', workflowsRouter);
+app.use('/api/emails', emailsRouter);
 
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: Function) => {

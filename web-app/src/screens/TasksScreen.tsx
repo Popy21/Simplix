@@ -93,6 +93,14 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
   const [selectedFilter, setSelectedFilter] = useState<TaskStatus | 'all'>('all');
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [newTaskModalVisible, setNewTaskModalVisible] = useState(false);
+  const [newTaskForm, setNewTaskForm] = useState({
+    title: '',
+    description: '',
+    priority: 'medium' as Priority,
+    dueDate: '',
+    assignedTo: '',
+  });
 
   const priorityConfig = {
     high: { label: 'Urgent', color: '#FF3B30', bgColor: '#FF3B3020' },
@@ -121,6 +129,33 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
         return task;
       })
     );
+  };
+
+  const handleCreateTask = () => {
+    if (!newTaskForm.title.trim()) {
+      Alert.alert('Erreur', 'Veuillez entrer un titre pour la tâche');
+      return;
+    }
+
+    const newTask: Task = {
+      id: `task_${Date.now()}`,
+      title: newTaskForm.title,
+      description: newTaskForm.description,
+      priority: newTaskForm.priority,
+      status: 'todo',
+      dueDate: newTaskForm.dueDate || new Date().toISOString().split('T')[0],
+      assignedTo: newTaskForm.assignedTo || 'Non assignée',
+    };
+
+    setTasks([...tasks, newTask]);
+    setNewTaskForm({ title: '', description: '', priority: 'medium', dueDate: '', assignedTo: '' });
+    setNewTaskModalVisible(false);
+    Alert.alert('Succès', `Tâche "${newTask.title}" créée avec succès!`);
+  };
+
+  const handleResetTaskForm = () => {
+    setNewTaskForm({ title: '', description: '', priority: 'medium', dueDate: '', assignedTo: '' });
+    setNewTaskModalVisible(false);
   };
 
   const deleteTask = (taskId: string) => {
@@ -263,7 +298,7 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
         </View>
         <TouchableOpacity
           style={styles.addButton}
-          onPress={() => Alert.alert('À venir', 'Fonctionnalité en développement')}
+          onPress={() => setNewTaskModalVisible(true)}
         >
           <Text style={styles.addButtonText}>+ Nouvelle</Text>
         </TouchableOpacity>
@@ -471,6 +506,114 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
                 </View>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Create Task Modal */}
+      <Modal
+        visible={newTaskModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={handleResetTaskForm}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContentNew}>
+            <View style={styles.modalHeaderNew}>
+              <Text style={styles.modalTitleNew}>Nouvelle Tâche</Text>
+              <TouchableOpacity onPress={handleResetTaskForm}>
+                <Text style={styles.closeButtonNew}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBodyNew} showsVerticalScrollIndicator={false}>
+              <View style={styles.formGroupNew}>
+                <Text style={styles.formLabelNew}>Titre *</Text>
+                <TextInput
+                  style={styles.inputNew}
+                  placeholder="Entrez le titre de la tâche"
+                  value={newTaskForm.title}
+                  onChangeText={(text) => setNewTaskForm({ ...newTaskForm, title: text })}
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              <View style={styles.formGroupNew}>
+                <Text style={styles.formLabelNew}>Description</Text>
+                <TextInput
+                  style={[styles.inputNew, styles.textAreaNew]}
+                  placeholder="Entrez une description"
+                  value={newTaskForm.description}
+                  onChangeText={(text) => setNewTaskForm({ ...newTaskForm, description: text })}
+                  multiline
+                  numberOfLines={3}
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              <View style={styles.formGroupNew}>
+                <Text style={styles.formLabelNew}>Priorité</Text>
+                <View style={styles.prioritySelectNew}>
+                  {['low', 'medium', 'high'].map(priority => (
+                    <TouchableOpacity
+                      key={priority}
+                      style={[
+                        styles.priorityButtonNew,
+                        newTaskForm.priority === priority && styles.priorityButtonActiveNew,
+                        {
+                          borderColor: priorityConfig[priority as Priority].color,
+                          backgroundColor: newTaskForm.priority === priority 
+                            ? priorityConfig[priority as Priority].bgColor
+                            : '#FFFFFF'
+                        }
+                      ]}
+                      onPress={() => setNewTaskForm({ ...newTaskForm, priority: priority as Priority })}
+                    >
+                      <Text style={{ color: priorityConfig[priority as Priority].color, fontWeight: '600' }}>
+                        {priorityConfig[priority as Priority].label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.formGroupNew}>
+                <Text style={styles.formLabelNew}>Date d'échéance</Text>
+                <TextInput
+                  style={styles.inputNew}
+                  placeholder="2025-12-31"
+                  value={newTaskForm.dueDate}
+                  onChangeText={(text) => setNewTaskForm({ ...newTaskForm, dueDate: text })}
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              <View style={styles.formGroupNew}>
+                <Text style={styles.formLabelNew}>Assigné à</Text>
+                <TextInput
+                  style={styles.inputNew}
+                  placeholder="Nom de la personne"
+                  value={newTaskForm.assignedTo}
+                  onChangeText={(text) => setNewTaskForm({ ...newTaskForm, assignedTo: text })}
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooterNew}>
+              <TouchableOpacity
+                style={[styles.buttonNew, styles.buttonSecondaryNew]}
+                onPress={handleResetTaskForm}
+              >
+                <Text style={styles.buttonSecondaryTextNew}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.buttonNew, styles.buttonPrimaryNew]}
+                onPress={handleCreateTask}
+              >
+                <Text style={styles.buttonPrimaryTextNew}>Créer Tâche</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -812,5 +955,101 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     letterSpacing: -0.4,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContentNew: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    maxHeight: '90%',
+  },
+  modalHeaderNew: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitleNew: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  closeButtonNew: {
+    fontSize: 24,
+    color: '#8E8E93',
+  },
+  modalBodyNew: {
+    maxHeight: 400,
+    marginBottom: 16,
+  },
+  formGroupNew: {
+    marginBottom: 16,
+  },
+  formLabelNew: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+    marginBottom: 8,
+  },
+  inputNew: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#000000',
+  },
+  textAreaNew: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  prioritySelectNew: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  priorityButtonNew: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  priorityButtonActiveNew: {
+    borderWidth: 2,
+  },
+  modalFooterNew: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingTop: 16,
+    paddingBottom: 20,
+  },
+  buttonNew: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  buttonPrimaryNew: {
+    backgroundColor: '#007AFF',
+  },
+  buttonPrimaryTextNew: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  buttonSecondaryNew: {
+    backgroundColor: '#F2F2F7',
+  },
+  buttonSecondaryTextNew: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#8E8E93',
   },
 });

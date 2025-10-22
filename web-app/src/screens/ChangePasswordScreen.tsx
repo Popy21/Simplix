@@ -69,38 +69,38 @@ export default function ChangePasswordScreen({ navigation }: Props) {
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmNewPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
       return;
     }
 
     if (newPassword !== confirmNewPassword) {
-      Alert.alert('Error', 'New passwords do not match');
+      Alert.alert('Erreur', 'Les nouveaux mots de passe ne correspondent pas');
       return;
     }
 
     if (currentPassword === newPassword) {
-      Alert.alert('Error', 'New password must be different from current password');
+      Alert.alert('Erreur', 'Le nouveau mot de passe doit être différent de l\'actuel');
       return;
     }
 
     if (passwordValidation && !passwordValidation.isValid) {
-      Alert.alert('Weak Password', 'Please choose a stronger password that meets all criteria');
+      Alert.alert('Mot de passe faible', 'Veuillez choisir un mot de passe plus fort qui répond à tous les critères');
       return;
     }
 
     if (passwordValidation?.isCommonPassword) {
-      Alert.alert('Common Password', 'This password is too common. Please choose a more unique password.');
+      Alert.alert('Mot de passe courant', 'Ce mot de passe est trop courant. Veuillez choisir un mot de passe plus unique.');
       return;
     }
 
     setIsLoading(true);
     try {
       await changePassword(currentPassword, newPassword);
-      Alert.alert('Success', 'Password changed successfully', [
+      Alert.alert('Succès', 'Mot de passe changé avec succès', [
         { text: 'OK', onPress: () => navigation.goBack() }
       ]);
     } catch (error: any) {
-      Alert.alert('Failed', error.message || 'Failed to change password');
+      Alert.alert('Échec', error.message || 'Impossible de changer le mot de passe');
     } finally {
       setIsLoading(false);
     }
@@ -124,13 +124,13 @@ export default function ChangePasswordScreen({ navigation }: Props) {
   const getStrengthLabel = (strength: string) => {
     switch (strength) {
       case 'weak':
-        return 'Weak';
+        return 'Faible';
       case 'medium':
-        return 'Medium';
+        return 'Moyen';
       case 'strong':
-        return 'Strong';
+        return 'Fort';
       case 'very-strong':
-        return 'Very Strong';
+        return 'Très Fort';
       default:
         return '';
     }
@@ -140,17 +140,17 @@ export default function ChangePasswordScreen({ navigation }: Props) {
     if (!newPassword || !passwordValidation) return null;
 
     const criteria = [
-      { key: 'minLength', label: 'At least 8 characters', met: passwordValidation.criteria.minLength },
-      { key: 'hasUppercase', label: 'One uppercase letter', met: passwordValidation.criteria.hasUppercase },
-      { key: 'hasLowercase', label: 'One lowercase letter', met: passwordValidation.criteria.hasLowercase },
-      { key: 'hasNumber', label: 'One number', met: passwordValidation.criteria.hasNumber },
-      { key: 'hasSpecialChar', label: 'One special character', met: passwordValidation.criteria.hasSpecialChar },
+      { key: 'minLength', label: 'Au moins 8 caractères', met: passwordValidation.criteria.minLength },
+      { key: 'hasUppercase', label: 'Une lettre majuscule', met: passwordValidation.criteria.hasUppercase },
+      { key: 'hasLowercase', label: 'Une lettre minuscule', met: passwordValidation.criteria.hasLowercase },
+      { key: 'hasNumber', label: 'Un chiffre', met: passwordValidation.criteria.hasNumber },
+      { key: 'hasSpecialChar', label: 'Un caractère spécial', met: passwordValidation.criteria.hasSpecialChar },
     ];
 
     return (
       <BlurView intensity={15} tint="light" style={styles.criteriaCard}>
         <View style={styles.strengthHeader}>
-          <Text style={styles.strengthLabel}>Password Strength:</Text>
+          <Text style={styles.strengthLabel}>Force du mot de passe :</Text>
           <View style={[styles.strengthBadge, { backgroundColor: getStrengthColor(passwordValidation.strength) }]}>
             <Text style={styles.strengthText}>{getStrengthLabel(passwordValidation.strength)}</Text>
           </View>
@@ -220,16 +220,16 @@ export default function ChangePasswordScreen({ navigation }: Props) {
                       style={styles.backButton}
                       disabled={isLoading}
                     >
-                      <Text style={styles.backButtonText}>← Back</Text>
+                      <Text style={styles.backButtonText}>← Retour</Text>
                     </TouchableOpacity>
                   </View>
 
-                  <Text style={styles.title}>Change Password</Text>
-                  <Text style={styles.description}>Update your account security</Text>
+                  <Text style={styles.title}>Changer le mot de passe</Text>
+                  <Text style={styles.description}>Mettez à jour la sécurité de votre compte</Text>
 
                   {/* Current Password Input */}
                   <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Current Password</Text>
+                    <Text style={styles.label}>Mot de passe actuel</Text>
                     <View style={styles.inputWrapper}>
                       <TextInput
                         style={styles.input}
@@ -251,7 +251,7 @@ export default function ChangePasswordScreen({ navigation }: Props) {
 
                   {/* New Password Input */}
                   <View style={styles.inputContainer}>
-                    <Text style={styles.label}>New Password</Text>
+                    <Text style={styles.label}>Nouveau mot de passe</Text>
                     <View style={styles.inputWrapper}>
                       <TextInput
                         style={styles.input}
@@ -276,7 +276,7 @@ export default function ChangePasswordScreen({ navigation }: Props) {
 
                   {/* Confirm New Password Input */}
                   <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Confirm New Password</Text>
+                    <Text style={styles.label}>Confirmer le nouveau mot de passe</Text>
                     <View style={styles.inputWrapper}>
                       <TextInput
                         style={styles.input}
@@ -295,7 +295,7 @@ export default function ChangePasswordScreen({ navigation }: Props) {
                       </TouchableOpacity>
                     </View>
                     {confirmNewPassword && newPassword !== confirmNewPassword && (
-                      <Text style={styles.errorText}>Passwords do not match</Text>
+                      <Text style={styles.errorText}>Les mots de passe ne correspondent pas</Text>
                     )}
                   </View>
 
@@ -319,12 +319,32 @@ export default function ChangePasswordScreen({ navigation }: Props) {
                     </LinearGradient>
                   </TouchableOpacity>
 
+                  {/* Update Button */}
+                  <TouchableOpacity
+                    style={[styles.button, isLoading && styles.buttonDisabled]}
+                    onPress={handleChangePassword}
+                    disabled={isLoading}
+                  >
+                    <LinearGradient
+                      colors={['#667eea', '#764ba2']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.buttonGradient}
+                    >
+                      {isLoading ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.buttonText}>Mettre à jour le mot de passe</Text>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+
                   {/* Security Tips */}
                   <BlurView intensity={10} tint="light" style={styles.tipsCard}>
-                    <Text style={styles.tipsTitle}>🔒 Security Tips</Text>
-                    <Text style={styles.tipsText}>• Use a unique password for each account</Text>
-                    <Text style={styles.tipsText}>• Consider using a password manager</Text>
-                    <Text style={styles.tipsText}>• Change passwords regularly</Text>
+                    <Text style={styles.tipsTitle}>🔒 Conseils de sécurité</Text>
+                    <Text style={styles.tipsText}>• Utilisez un mot de passe unique pour chaque compte</Text>
+                    <Text style={styles.tipsText}>• Envisagez d'utiliser un gestionnaire de mots de passe</Text>
+                    <Text style={styles.tipsText}>• Changez vos mots de passe régulièrement</Text>
                   </BlurView>
                 </View>
               </BlurView>

@@ -1,5 +1,8 @@
 import express, { Request, Response } from 'express';
 import { pool } from '../database/db';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { requireOrganization } from '../middleware/multiTenancy';
+import { getOrgIdFromRequest, validateOrgAccess } from '../utils/multiTenancyHelper';
 
 const router = express.Router();
 
@@ -8,10 +11,10 @@ const router = express.Router();
 // Voir /api/contacts et /api/companies
 
 // Get all customers (legacy - mapped to contacts)
-router.get('/', async (req: Request, res: Response) => {
+// ✅ MULTI-TENANCY IMPLEMENTED
+router.get('/', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {
-    // Pour la démo, on utilise l'org par défaut
-    const orgId = '00000000-0000-0000-0000-000000000001';
+    const orgId = getOrgIdFromRequest(req);
 
     const result = await pool.query(
       `SELECT
@@ -36,10 +39,11 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // Get customer by ID
-router.get('/:id', async (req: Request, res: Response) => {
+// ✅ MULTI-TENANCY IMPLEMENTED
+router.get('/:id', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const orgId = '00000000-0000-0000-0000-000000000001';
+    const orgId = getOrgIdFromRequest(req);
 
     const result = await pool.query(
       `SELECT
@@ -68,10 +72,13 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // Create customer (legacy - creates a contact)
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', 
+  authenticateToken, 
+  requireOrganization, 
+  async (req: AuthRequest, res: Response) => {
   try {
     const { name, email, phone, company, address } = req.body;
-    const orgId = '00000000-0000-0000-0000-000000000001';
+    const orgId = getOrgIdFromRequest(req);
 
     if (!name) {
       res.status(400).json({ error: 'Name is required' });
@@ -130,11 +137,14 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // Update customer
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', 
+  authenticateToken, 
+  requireOrganization, 
+  async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { name, email, phone, company, address } = req.body;
-    const orgId = '00000000-0000-0000-0000-000000000001';
+    const orgId = getOrgIdFromRequest(req);
 
     // Split name into first_name and last_name
     const nameParts = name?.split(' ') || [];
@@ -184,10 +194,13 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // Delete customer (soft delete)
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', 
+  authenticateToken, 
+  requireOrganization, 
+  async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const orgId = '00000000-0000-0000-0000-000000000001';
+    const orgId = getOrgIdFromRequest(req);
 
     const result = await pool.query(
       `UPDATE contacts
