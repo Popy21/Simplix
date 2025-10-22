@@ -44,6 +44,12 @@ export const authService = {
   login: (data: { email: string; password: string }) => api.post('/auth/login', data),
   me: (token: string) =>
     api.get('/auth/me', { headers: { Authorization: `Bearer ${token}` } }),
+  validatePassword: (password: string) =>
+    api.post('/auth/validate-password', { password }),
+  changePassword: (token: string, data: { currentPassword: string; newPassword: string }) =>
+    api.post('/auth/change-password', data, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
 };
 
 // Team API
