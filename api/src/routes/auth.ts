@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import db from '../database/db';
+import { pool as db } from '../database/db';
 import { User } from '../models/types';
 
 const router = express.Router();
