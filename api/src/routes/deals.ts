@@ -1,6 +1,8 @@
-import express, { Request, Response } from 'express';
+import express, { Response } from 'express';
 import { pool as db } from '../database/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { requireOrganization } from '../middleware/multiTenancy';
+import { getOrgIdFromRequest } from '../utils/multiTenancyHelper';
 
 const router = express.Router();
 
@@ -10,10 +12,13 @@ const router = express.Router();
  * GET /api/deals
  * Récupérer toutes les opportunités avec filtres
  */
-router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/', 
+  authenticateToken, 
+  requireOrganization, 
+  async (req: AuthRequest, res: Response) => {
   try {
     const { pipeline_id, stage_id, status, owner_id, min_value, max_value, search } = req.query;
-    const orgId = '00000000-0000-0000-0000-000000000001'; // TODO: Get from user context
+    const orgId = getOrgIdFromRequest(req);
 
     let query = `
       SELECT 
@@ -92,10 +97,13 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
  * GET /api/deals/:id
  * Récupérer une opportunité complète avec détails
  */
-router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/:id', 
+  authenticateToken, 
+  requireOrganization, 
+  async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const orgId = '00000000-0000-0000-0000-000000000001';
+    const orgId = getOrgIdFromRequest(req);
 
     const result = await db.query(
       `SELECT 
@@ -132,10 +140,13 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
  * GET /api/deals/by-stage/:stageId
  * Récupérer toutes les opportunités par étape de pipeline
  */
-router.get('/by-stage/:stageId', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/by-stage/:stageId', 
+  authenticateToken, 
+  requireOrganization, 
+  async (req: AuthRequest, res: Response) => {
   try {
     const { stageId } = req.params;
-    const orgId = '00000000-0000-0000-0000-000000000001';
+    const orgId = getOrgIdFromRequest(req);
 
     const result = await db.query(
       `SELECT 
@@ -165,7 +176,10 @@ router.get('/by-stage/:stageId', authenticateToken, async (req: AuthRequest, res
  * POST /api/deals
  * Créer une nouvelle opportunité
  */
-router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/', 
+  authenticateToken, 
+  requireOrganization, 
+  async (req: AuthRequest, res: Response) => {
   try {
     const {
       title,
@@ -181,7 +195,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       status = 'open',
     } = req.body;
 
-    const orgId = '00000000-0000-0000-0000-000000000001';
+    const orgId = getOrgIdFromRequest(req);
     const userId = req.user?.id;
 
     if (!title || !pipeline_id || !stage_id) {
@@ -253,7 +267,10 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
  * PUT /api/deals/:id
  * Mettre à jour une opportunité
  */
-router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.put('/:id', 
+  authenticateToken, 
+  requireOrganization, 
+  async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const {
@@ -269,7 +286,7 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
       status,
     } = req.body;
 
-    const orgId = '00000000-0000-0000-0000-000000000001';
+    const orgId = getOrgIdFromRequest(req);
     const userId = req.user?.id;
 
     // Get current deal for audit
@@ -379,10 +396,13 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
  * DELETE /api/deals/:id
  * Supprimer une opportunité (soft delete)
  */
-router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', 
+  authenticateToken, 
+  requireOrganization, 
+  async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const orgId = '00000000-0000-0000-0000-000000000001';
+    const orgId = getOrgIdFromRequest(req);
     const userId = req.user?.id;
 
     const result = await db.query(
@@ -413,11 +433,14 @@ router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response)
  * POST /api/deals/:id/move
  * Déplacer une opportunité dans une autre étape du pipeline
  */
-router.post('/:id/move', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/:id/move', 
+  authenticateToken, 
+  requireOrganization, 
+  async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { stage_id } = req.body;
-    const orgId = '00000000-0000-0000-0000-000000000001';
+    const orgId = getOrgIdFromRequest(req);
     const userId = req.user?.id;
 
     if (!stage_id) {
@@ -489,10 +512,13 @@ router.post('/:id/move', authenticateToken, async (req: AuthRequest, res: Respon
  * GET /api/deals/:id/history
  * Récupérer l'historique d'une opportunité
  */
-router.get('/:id/history', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/:id/history', 
+  authenticateToken, 
+  requireOrganization, 
+  async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const orgId = '00000000-0000-0000-0000-000000000001';
+    const orgId = getOrgIdFromRequest(req);
 
     const result = await db.query(
       `SELECT 
