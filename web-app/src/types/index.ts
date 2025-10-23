@@ -32,3 +32,42 @@ export interface Sale {
   product_name?: string;
   product_price?: number;
 }
+
+export interface Supplier {
+  id?: string;
+  name: string;
+  legal_name?: string;
+  category?: 'vendor' | 'service' | 'freelancer' | 'other';
+  contact_name?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  payment_terms?: number;
+  default_currency?: string;
+  tags?: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Expense {
+  id?: string;
+  supplier_id?: string;
+  supplier_name?: string;
+  category_id?: string;
+  category_name?: string;
+  expense_date: string;
+  due_date?: string;
+  description?: string;
+  reference?: string;
+  amount: number;
+  tax_amount?: number;
+  currency?: string;
+  status?: 'draft' | 'submitted' | 'approved' | 'rejected' | 'paid';
+  payment_status?: 'unpaid' | 'partial' | 'paid';
+  expense_type?: string;
+  payment_method?: string;
+  notes?: string;
+  attachments?: any[];
+  created_at?: string;
+  updated_at?: string;
+}

@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const TOKEN_KEY = '@simplix_auth_token';
+const REFRESH_TOKEN_KEY = '@simplix_refresh_token';
 const USER_KEY = '@simplix_user';
 
 export const storage = {
-  // Token management
+  // Access Token management
   async saveToken(token: string): Promise<void> {
     try {
       await AsyncStorage.setItem(TOKEN_KEY, token);
@@ -28,6 +29,34 @@ export const storage = {
       await AsyncStorage.removeItem(TOKEN_KEY);
     } catch (error) {
       console.error('Error removing token:', error);
+      throw error;
+    }
+  },
+
+  // Refresh Token management (NEW)
+  async saveRefreshToken(refreshToken: string): Promise<void> {
+    try {
+      await AsyncStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    } catch (error) {
+      console.error('Error saving refresh token:', error);
+      throw error;
+    }
+  },
+
+  async getRefreshToken(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
+    } catch (error) {
+      console.error('Error getting refresh token:', error);
+      return null;
+    }
+  },
+
+  async removeRefreshToken(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(REFRESH_TOKEN_KEY);
+    } catch (error) {
+      console.error('Error removing refresh token:', error);
       throw error;
     }
   },
@@ -66,6 +95,7 @@ export const storage = {
     try {
       await Promise.all([
         AsyncStorage.removeItem(TOKEN_KEY),
+        AsyncStorage.removeItem(REFRESH_TOKEN_KEY),
         AsyncStorage.removeItem(USER_KEY),
       ]);
     } catch (error) {

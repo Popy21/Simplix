@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Customer, Product, Sale } from '../types';
+import { Customer, Product, Sale, Supplier, Expense } from '../types';
 import { storage } from '../utils/storage';
 
 const API_BASE_URL = 'http://localhost:3000/api';
@@ -27,20 +27,54 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor to handle 401 errors
+// Response interceptor to handle 401 errors with token refresh
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
+    const originalRequest = error.config;
+
+    // Only attempt refresh once to avoid infinite loops
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
       try {
-        // Clear stored auth data
-        await storage.clearAuth();
-        // Optionally redirect to login or emit an event
-        console.log('Token expired or invalid, user logged out');
-      } catch (err) {
-        console.error('Error clearing auth:', err);
+        // Attempt to refresh the token
+        const refreshToken = await storage.getRefreshToken();
+        
+        if (!refreshToken) {
+          // No refresh token available, clear auth and reject
+          await storage.clearAuth();
+          console.log('No refresh token available, user logged out');
+          return Promise.reject(error);
+        }
+
+        // Call refresh endpoint
+        const response = await authService.refresh(refreshToken);
+        const { token, accessToken, refreshToken: newRefreshToken } = response.data;
+
+        // Update stored tokens
+        await storage.saveToken(accessToken || token);
+        if (newRefreshToken) {
+          await storage.saveRefreshToken(newRefreshToken);
+        }
+
+        // Update the authorization header with new token
+        originalRequest.headers.Authorization = `Bearer ${accessToken || token}`;
+
+        // Retry the original request
+        return api(originalRequest);
+      } catch (refreshError) {
+        // Refresh failed, clear auth and redirect to login
+        try {
+          await storage.clearAuth();
+          console.log('Token refresh failed, user logged out');
+        } catch (clearErr) {
+          console.error('Error clearing auth:', clearErr);
+        }
+        return Promise.reject(refreshError);
       }
     }
+
     return Promise.reject(error);
   }
 );
@@ -63,6 +97,20 @@ export const productService = {
   delete: (id: number) => api.delete(`/products/${id}`),
 };
 
+// Supplier API
+export const supplierService = {
+  getAll: (params?: { search?: string; category?: string; page?: number; limit?: number }) =>
+    api.get<{ data: Supplier[]; pagination: { page: number; limit: number; total: number; pages: number } }>(
+      '/suppliers',
+      { params }
+    ),
+  getById: (id: string) => api.get<Supplier>(`/suppliers/${id}`),
+  create: (supplier: Partial<Supplier>) => api.post<Supplier>('/suppliers', supplier),
+  update: (id: string, supplier: Partial<Supplier>) => api.put<Supplier>(`/suppliers/${id}`, supplier),
+  delete: (id: string) => api.delete(`/suppliers/${id}`),
+  getSummary: () => api.get('/suppliers/stats/summary'),
+};
+
 // Sale API
 export const saleService = {
   getAll: () => api.get<Sale[]>('/sales'),
@@ -70,6 +118,30 @@ export const saleService = {
   create: (sale: Sale) => api.post<Sale>('/sales', sale),
   update: (id: number, sale: Sale) => api.put<Sale>(`/sales/${id}`, sale),
   delete: (id: number) => api.delete(`/sales/${id}`),
+};
+
+// Expenses API
+export const expenseService = {
+  getAll: (params?: {
+    status?: string;
+    supplierId?: string;
+    paymentStatus?: string;
+    from?: string;
+    to?: string;
+    page?: number;
+    limit?: number;
+  }) =>
+    api.get<{ data: Expense[]; meta: { page: number; limit: number; total: number; pages: number; amount: number } }>(
+      '/expenses',
+      { params }
+    ),
+  getById: (id: string) => api.get<Expense>(`/expenses/${id}`),
+  create: (expense: Partial<Expense>) => api.post<Expense>('/expenses', expense),
+  update: (id: string, expense: Partial<Expense>) => api.put<Expense>(`/expenses/${id}`, expense),
+  updateStatus: (id: string, data: { status?: string; payment_status?: string; payment_date?: string }) =>
+    api.patch<Expense>(`/expenses/${id}/status`, data),
+  delete: (id: string) => api.delete(`/expenses/${id}`),
+  getSummary: () => api.get('/expenses/stats/summary'),
 };
 
 // Auth API
@@ -83,6 +155,10 @@ export const authService = {
     api.post('/auth/validate-password', { password }),
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.post('/auth/change-password', data),
+  refresh: (refreshToken: string) =>
+    api.post('/auth/refresh', { refreshToken }),
+  logout: () =>
+    api.post('/auth/logout'),
 };
 
 // Team API
@@ -242,4 +318,3 @@ export const campaignsService = {
     api.post(`/campaigns/${id}/track/${action}`, { customer_id }),
   getStats: (id: number) => api.get(`/campaigns/${id}/stats`),
 };
-

@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { storage } from '../utils/storage';
 import { authService } from '../services/api';
+import { isTokenExpiringSoon, getTokenRemainingTime } from '../utils/tokenManager';
 
 interface User {
   id: number;
@@ -45,6 +46,44 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loadStoredAuth();
   }, []);
 
+  // Proactively refresh token before expiration (every 60 seconds check)
+  useEffect(() => {
+    if (!token) return;
+
+    const tokenRefreshInterval = setInterval(async () => {
+      try {
+        // Check if token is expiring soon (within 5 minutes)
+        if (isTokenExpiringSoon(token, 300)) {
+          const refreshToken = await storage.getRefreshToken();
+          
+          if (!refreshToken) {
+            console.warn('Token expiring soon but no refresh token available');
+            return;
+          }
+
+          // Refresh the token
+          const response = await authService.refresh(refreshToken);
+          const { token: newToken, accessToken: newAccessToken, refreshToken: newRefreshToken } = response.data;
+          const tokenToUse = newAccessToken || newToken;
+
+          // Update stored tokens
+          await storage.saveToken(tokenToUse);
+          if (newRefreshToken) {
+            await storage.saveRefreshToken(newRefreshToken);
+          }
+
+          // Update state
+          setToken(tokenToUse);
+          console.log('Token proactively refreshed');
+        }
+      } catch (error) {
+        console.error('Error proactively refreshing token:', error);
+      }
+    }, 60000); // Check every minute
+
+    return () => clearInterval(tokenRefreshInterval);
+  }, [token]);
+
   const loadStoredAuth = async () => {
     try {
       const [storedToken, storedUser] = await Promise.all([
@@ -77,10 +116,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (email: string, password: string) => {
     try {
       const response = await authService.login({ email, password });
-      const { token: newToken, user: newUser } = response.data;
+      const { token: newToken, refreshToken: newRefreshToken, user: newUser } = response.data;
 
       await Promise.all([
         storage.saveToken(newToken),
+        storage.saveRefreshToken(newRefreshToken),
         storage.saveUser(newUser),
       ]);
 
@@ -94,10 +134,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const register = async (email: string, password: string, name: string) => {
     try {
       const response = await authService.register({ email, password, name });
-      const { token: newToken, user: newUser } = response.data;
+      const { token: newToken, refreshToken: newRefreshToken, user: newUser } = response.data;
 
       await Promise.all([
         storage.saveToken(newToken),
+        storage.saveRefreshToken(newRefreshToken),
         storage.saveUser(newUser),
       ]);
 
@@ -110,6 +151,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async () => {
     try {
+      // Call API to revoke refresh tokens on server
+      try {
+        await authService.logout();
+      } catch (error) {
+        // If logout fails, still clear local auth
+        console.warn('Logout API call failed, clearing local auth anyway:', error);
+      }
+
+      // Clear local auth data
       await storage.clearAuth();
       setToken(null);
       setUser(null);

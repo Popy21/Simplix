@@ -20,6 +20,8 @@ import InvoicesScreen from './src/screens/InvoicesScreen';
 import CustomersScreen from './src/screens/CustomersScreen';
 import ProductsScreen from './src/screens/ProductsScreen';
 import SalesScreen from './src/screens/SalesScreen';
+import SuppliersScreen from './src/screens/SuppliersScreen';
+import ExpensesScreen from './src/screens/ExpensesScreen';
 import TestAllScreen from './src/screens/TestAllScreen';
 import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
 
@@ -154,6 +156,24 @@ function Navigation() {
               component={SalesScreen}
               options={{ 
                 title: 'Historique des Ventes',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Suppliers"
+              component={SuppliersScreen}
+              options={{ 
+                title: 'Fournisseurs',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Expenses"
+              component={ExpensesScreen}
+              options={{ 
+                title: 'Dépenses',
                 headerShown: true,
                 headerStyle: { backgroundColor: '#F2F2F7' },
               }}

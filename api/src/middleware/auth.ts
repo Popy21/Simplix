@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import db from '../database/db';
+import { verifyAccessToken } from '../utils/tokenManager';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
@@ -35,16 +36,26 @@ export const authenticateToken = async (
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as {
-      id: string;
-      email: string;
-      role: string;
-    };
+    // Prefer the unified verify helper so expiration/options stay in sync
+    const decoded =
+      verifyAccessToken(token) ||
+      (jwt.verify(token, JWT_SECRET) as {
+        id: string;
+        email: string;
+        role: string;
+        organization_id?: string;
+      });
+
+    if (!decoded || !decoded.id) {
+      res.status(401).json({ error: 'Invalid token. Authentication failed.' });
+      return;
+    }
 
     // Verify user still exists in database and get their role
     const result = await db.query(
       `SELECT u.id, u.email, u.first_name, u.last_name, 
-              COALESCE(r.type::text, r.name, 'user') as role
+              COALESCE(r.type::text, r.name, 'user') as role,
+              u.organization_id
        FROM users u
        LEFT JOIN user_roles ur ON u.id = ur.user_id
        LEFT JOIN roles r ON ur.role_id = r.id
@@ -63,6 +74,7 @@ export const authenticateToken = async (
       id: row.id,
       email: row.email,
       role: row.role || 'user',
+      organization_id: decoded?.organization_id || row.organization_id,
     };
 
     next();

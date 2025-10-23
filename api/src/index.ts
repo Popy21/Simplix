@@ -25,6 +25,8 @@ import permissionsRouter from './routes/permissions';
 import deduplicationRouter from './routes/deduplication';
 import workflowsRouter from './routes/workflows';
 import emailsRouter from './routes/emails';
+import suppliersRouter from './routes/suppliers';
+import expensesRouter from './routes/expenses';
 
 dotenv.config();
 
@@ -57,7 +59,9 @@ app.get('/', (req: Request, res: Response) => {
       pipeline: '/api/pipeline',
       campaigns: '/api/campaigns',
       invoices: '/api/invoices',
-      payments: '/api/payments'
+      payments: '/api/payments',
+      suppliers: '/api/suppliers',
+      expenses: '/api/expenses'
     }
   });
 });
@@ -86,6 +90,8 @@ app.use('/api/permissions', permissionsRouter);
 app.use('/api/contacts/deduplicate', deduplicationRouter);
 app.use('/api/workflows', workflowsRouter);
 app.use('/api/emails', emailsRouter);
+app.use('/api/suppliers', suppliersRouter);
+app.use('/api/expenses', expensesRouter);
 
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: Function) => {

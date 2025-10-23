@@ -39,6 +39,8 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     { title: 'Clients', description: 'Base de données clients', icon: UsersIcon, color: '#34C759', screen: 'Customers' as keyof RootStackParamList },
     { title: 'Produits', description: 'Catalogue et inventaire', icon: PackageIcon, color: '#5856D6', screen: 'Products' as keyof RootStackParamList },
     { title: 'Ventes', description: 'Historique des ventes', icon: DollarIcon, color: '#34C759', screen: 'Sales' as keyof RootStackParamList },
+    { title: 'Fournisseurs', description: 'Prestataires & achats', icon: UsersIcon, color: '#0A84FF', screen: 'Suppliers' as keyof RootStackParamList },
+    { title: 'Dépenses', description: 'Notes de frais & achats', icon: DollarIcon, color: '#FF3B30', screen: 'Expenses' as keyof RootStackParamList },
   ];
 
   return (

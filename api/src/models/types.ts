@@ -84,3 +84,50 @@ export interface QuoteItem {
   unit_price: number;
   total_price: number;
 }
+
+export interface Supplier {
+  id?: string;
+  name: string;
+  legal_name?: string;
+  category?: 'vendor' | 'service' | 'freelancer' | 'other';
+  contact_name?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  tax_number?: string;
+  vat_number?: string;
+  iban?: string;
+  payment_terms?: number;
+  billing_address?: Record<string, any>;
+  shipping_address?: Record<string, any>;
+  default_currency?: string;
+  notes?: string;
+  tags?: string[];
+  metadata?: Record<string, any>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Expense {
+  id?: string;
+  supplier_id?: string;
+  supplier_name?: string;
+  category_id?: string;
+  category_name?: string;
+  expense_date: string;
+  due_date?: string;
+  description?: string;
+  reference?: string;
+  amount: number;
+  tax_amount?: number;
+  currency?: string;
+  status?: 'draft' | 'submitted' | 'approved' | 'rejected' | 'paid';
+  payment_status?: 'unpaid' | 'partial' | 'paid';
+  expense_type?: string;
+  payment_method?: string;
+  attachments?: any[];
+  notes?: string;
+  metadata?: Record<string, any>;
+  created_at?: string;
+  updated_at?: string;
+}
