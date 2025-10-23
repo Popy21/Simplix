@@ -106,11 +106,25 @@ router.post('/register', async (req: Request, res: Response) => {
       }
     }
 
-    const token = jwt.sign(
-      { id: user.id, email, role: assignedRoleType },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    // Generate token pair like login does
+    const tokenPayload: TokenPayload = {
+      id: user.id,
+      email: user.email,
+      role: assignedRoleType,
+      organization_id: DEFAULT_ORG_ID,
+    };
+
+    const { accessToken, refreshToken } = generateTokenPair(tokenPayload);
+
+    // Store refresh token in database
+    await db.query(
+      `INSERT INTO refresh_tokens (user_id, token, expires_at) 
+       VALUES ($1, $2, NOW() + INTERVAL '7 days')
+       ON CONFLICT DO NOTHING`,
+      [user.id, refreshToken]
+    ).catch(() => {
+      // Table might not exist yet, ignore
+    });
 
     res.status(201).json({
       user: {
@@ -118,8 +132,12 @@ router.post('/register', async (req: Request, res: Response) => {
         email: user.email,
         name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
         role: assignedRoleType,
+        organization_id: DEFAULT_ORG_ID,
       },
-      token,
+      token: accessToken,
+      accessToken,
+      refreshToken,
+      expiresIn: 900, // 15 minutes in seconds
     });
   } catch (error) {
     // Log full error for debugging
@@ -197,6 +215,7 @@ router.post('/login', async (req: Request, res: Response) => {
         role: user.role || 'user',
         organization_id: user.organization_id,
       },
+      token: accessToken,  // Also return as 'token' for client compatibility
       accessToken,
       refreshToken,
       expiresIn: 900, // 15 minutes in seconds

@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         // Verify token is still valid
         try {
-          const response = await authService.me(storedToken);
+          const response = await authService.me();
           setUser(response.data);
         } catch (error) {
           // Token expired or invalid, clear auth
@@ -125,7 +125,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      await authService.changePassword(token, { currentPassword, newPassword });
+      await authService.changePassword({ currentPassword, newPassword });
     } catch (error: any) {
       throw new Error(error.response?.data?.error || 'Failed to change password');
     }

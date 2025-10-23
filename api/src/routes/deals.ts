@@ -542,11 +542,14 @@ router.get('/:id/history',
  * POST /api/deals/:id/add-activity
  * Ajouter une activité à une opportunité
  */
-router.post('/:id/add-activity', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/:id/add-activity', 
+  authenticateToken, 
+  requireOrganization,
+  async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { type, description } = req.body;
-    const orgId = '00000000-0000-0000-0000-000000000001';
+    const orgId = getOrgIdFromRequest(req);
     const userId = req.user?.id;
 
     if (!type || !description) {
@@ -572,9 +575,12 @@ router.post('/:id/add-activity', authenticateToken, async (req: AuthRequest, res
  * GET /api/deals/stats/summary
  * Récupérer les statistiques des deals
  */
-router.get('/stats/summary', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/stats/summary', 
+  authenticateToken, 
+  requireOrganization,
+  async (req: AuthRequest, res: Response) => {
   try {
-    const orgId = '00000000-0000-0000-0000-000000000001';
+    const orgId = getOrgIdFromRequest(req);
 
     const result = await db.query(
       `SELECT 

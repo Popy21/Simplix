@@ -28,6 +28,12 @@ export const authenticateToken = async (
     return;
   }
 
+  // Validate token format (JWT has 3 parts separated by dots)
+  if (typeof token !== 'string' || token.split('.').length !== 3) {
+    res.status(401).json({ error: 'Invalid token format.' });
+    return;
+  }
+
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as {
       id: string;
@@ -60,9 +66,18 @@ export const authenticateToken = async (
     };
 
     next();
-  } catch (error) {
-    console.error('Token verification error:', error);
-    res.status(403).json({ error: 'Invalid or expired token' });
+  } catch (error: any) {
+    // Better error handling for JWT errors
+    if (error.name === 'JsonWebTokenError') {
+      console.error('JWT verification failed:', error.message);
+      res.status(401).json({ error: 'Invalid token format or signature.' });
+    } else if (error.name === 'TokenExpiredError') {
+      console.error('Token expired:', error.message);
+      res.status(401).json({ error: 'Token has expired.' });
+    } else {
+      console.error('Token verification error:', error);
+      res.status(403).json({ error: 'Invalid or expired token' });
+    }
   }
 };
 

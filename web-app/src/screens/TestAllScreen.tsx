@@ -204,7 +204,7 @@ export default function TestAllScreen() {
       await test(
         'GET /api/auth/me',
         async () => {
-          const response = await authService.me(token);
+          const response = await authService.me();
           return {
             message: `✓ Retrieved user: ${response.data.name}`,
             data: response.data,

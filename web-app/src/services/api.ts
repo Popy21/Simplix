@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { Customer, Product, Sale } from '../types';
+import { storage } from '../utils/storage';
 
 const API_BASE_URL = 'http://localhost:3000/api';
 
@@ -9,6 +10,40 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Request interceptor to add JWT token to all requests
+api.interceptors.request.use(
+  async (config) => {
+    try {
+      const token = await storage.getToken();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (error) {
+      console.error('Error retrieving token:', error);
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor to handle 401 errors
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      try {
+        // Clear stored auth data
+        await storage.clearAuth();
+        // Optionally redirect to login or emit an event
+        console.log('Token expired or invalid, user logged out');
+      } catch (err) {
+        console.error('Error clearing auth:', err);
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Customer API
 export const customerService = {
@@ -42,14 +77,12 @@ export const authService = {
   register: (data: { email: string; password: string; name: string; role?: string }) =>
     api.post('/auth/register', data),
   login: (data: { email: string; password: string }) => api.post('/auth/login', data),
-  me: (token: string) =>
-    api.get('/auth/me', { headers: { Authorization: `Bearer ${token}` } }),
+  me: () =>
+    api.get('/auth/me'),
   validatePassword: (password: string) =>
     api.post('/auth/validate-password', { password }),
-  changePassword: (token: string, data: { currentPassword: string; newPassword: string }) =>
-    api.post('/auth/change-password', data, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    api.post('/auth/change-password', data),
 };
 
 // Team API
