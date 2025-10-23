@@ -26,7 +26,7 @@ Simplix/
 ### API (Backend)
 - TypeScript
 - Node.js + Express
-- SQLite database
+- Postgres database
 - CORS enabled
 
 ### Web/Mobile App
