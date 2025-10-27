@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { customerService } from '../services/api';
 import { Customer } from '../types';
+import Navigation from '../components/Navigation';
 
 export default function CustomersScreen() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -93,6 +94,7 @@ export default function CustomersScreen() {
 
   return (
     <View style={styles.container}>
+      <Navigation />
       {/* En-tête */}
       <View style={styles.header}>
         <View>

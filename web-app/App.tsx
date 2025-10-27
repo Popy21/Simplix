@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View } from 'react-native';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import LogMonitor from './src/components/LogMonitor';
 
 // Auth Screens
 import LoginScreen from './src/screens/LoginScreen';
@@ -22,6 +23,8 @@ import ProductsScreen from './src/screens/ProductsScreen';
 import SalesScreen from './src/screens/SalesScreen';
 import SuppliersScreen from './src/screens/SuppliersScreen';
 import ExpensesScreen from './src/screens/ExpensesScreen';
+import PilotageScreen from './src/screens/PilotageScreen';
+import TemplatesScreen from './src/screens/TemplatesScreen';
 import TestAllScreen from './src/screens/TestAllScreen';
 import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
 
@@ -172,8 +175,26 @@ function Navigation() {
             <Stack.Screen
               name="Expenses"
               component={ExpensesScreen}
-              options={{ 
+              options={{
                 title: 'Dépenses',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Pilotage"
+              component={PilotageScreen}
+              options={{
+                title: 'Pilotage',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Templates"
+              component={TemplatesScreen}
+              options={{
+                title: 'Templates de Factures',
                 headerShown: true,
                 headerStyle: { backgroundColor: '#F2F2F7' },
               }}
@@ -208,6 +229,7 @@ export default function App() {
   return (
     <AuthProvider>
       <Navigation />
+      <LogMonitor />
     </AuthProvider>
   );
 }

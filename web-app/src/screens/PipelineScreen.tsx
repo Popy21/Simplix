@@ -10,109 +10,149 @@ import {
   Alert,
   RefreshControl,
   Dimensions,
+  ActivityIndicator,
+  GestureResponderEvent,
   Platform,
-  FlatList,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { CheckCircleIcon, ClockIcon, XCircleIcon, FileTextIcon, DollarIcon } from '../components/Icons';
+import { XCircleIcon } from '../components/Icons';
+import Navigation from '../components/Navigation';
+import { pipelineService, companyService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import DateTimePickerWrapper from '../components/shared/DateTimePickerWrapper';
+import {
+  MaybeDraxProvider,
+  MaybeDraxDraggable,
+  MaybeDraxDroppable,
+} from '../components/shared/MaybeDrax';
+import logger from '../utils/logger';
+import ConfirmModal from '../components/shared/ConfirmModal';
 
 type PipelineScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Pipeline'>;
 };
 
-type OpportunityStatus = 'prospect' | 'qualified' | 'proposal' | 'negotiation' | 'won' | 'lost';
-
 interface Opportunity {
   id: string;
-  title: string;
-  company: string;
+  name: string;
+  customer_id?: string;
+  customer_name?: string;
+  user_id?: string;
+  owner_name?: string;
+  stage_id: string;
+  stage_name?: string;
+  stage_color?: string;
   value: number;
-  status: OpportunityStatus;
   probability: number;
-  expectedCloseDate: string;
-  contact: string;
-  notes: string;
+  expected_close_date: string;
+  description?: string;
+  deleted_at?: string;
+}
+
+interface PipelineStage {
+  id: string;
+  pipeline_id: string;
+  name: string;
+  color: string;
+  display_order: number;
+  win_probability?: number;
+}
+
+interface Company {
+  id: string;
+  name: string;
+  industry?: string;
+  website?: string;
+  phone?: string;
+  email?: string;
 }
 
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = Math.min(width - 40, 320);
+const DEFAULT_USER_ID = '00000000-0000-0000-0002-000000000001';
+
+const isValidUUID = (value?: string | null) => {
+  if (!value) return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(value);
+};
 
 export default function PipelineScreen({ navigation }: PipelineScreenProps) {
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([
-    {
-      id: '1',
-      title: 'Contrat Annuel SaaS',
-      company: 'TechCorp',
-      value: 50000,
-      status: 'prospect',
-      probability: 20,
-      expectedCloseDate: '2025-12-31',
-      contact: 'Marie Dubois',
-      notes: 'Premier contact établi',
-    },
-    {
-      id: '2',
-      title: 'Migration Cloud',
-      company: 'StartupXYZ',
-      value: 75000,
-      status: 'qualified',
-      probability: 40,
-      expectedCloseDate: '2025-11-15',
-      contact: 'Jean Martin',
-      notes: 'Besoins confirmés',
-    },
-    {
-      id: '3',
-      title: 'Formation Équipe',
-      company: 'BigCorp',
-      value: 25000,
-      status: 'proposal',
-      probability: 60,
-      expectedCloseDate: '2025-11-30',
-      contact: 'Sophie Laurent',
-      notes: 'Proposition envoyée',
-    },
-    {
-      id: '4',
-      title: 'Développement Custom',
-      company: 'InnovTech',
-      value: 120000,
-      status: 'negotiation',
-      probability: 80,
-      expectedCloseDate: '2025-11-10',
-      contact: 'Pierre Leroy',
-      notes: 'Négociation finale en cours',
-    },
-  ]);
-
+  const { user } = useAuth();
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [stages, setStages] = useState<PipelineStage[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [newOppModalVisible, setNewOppModalVisible] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editForm, setEditForm] = useState<Opportunity | null>(null);
+  const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
+  const [newCompanyModalVisible, setNewCompanyModalVisible] = useState(false);
+  const [newCompanyForm, setNewCompanyForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    industry: '',
+    website: '',
+  });
   const [newOppForm, setNewOppForm] = useState({
-    title: '',
-    company: '',
+    name: '',
     value: '',
     probability: '20',
-    expectedCloseDate: '',
-    contact: '',
-    notes: '',
-    status: 'prospect' as OpportunityStatus,
+    expected_close_date: '',
+    description: '',
+    stage_id: '',
+    customer_id: '',
+    contact_id: '',
   });
+  const [recentlyDeleted, setRecentlyDeleted] = useState<Opportunity[]>([]);
+  const [activeTab, setActiveTab] = useState<'pipeline' | 'deleted'>('pipeline');
+  const [draggingOpportunityId, setDraggingOpportunityId] = useState<string | null>(null);
+  const [isDatePickerVisible, setDatePickerVisible] = useState(false);
+  const [datePickerMode, setDatePickerMode] = useState<'new' | 'edit'>('new');
+  const [datePickerInitialDate, setDatePickerInitialDate] = useState<Date>(new Date());
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [opportunityToDelete, setOpportunityToDelete] = useState<string | null>(null);
 
-  const statusConfig: Record<OpportunityStatus, { label: string; color: string; icon: any }> = {
-    prospect: { label: 'Prospect', color: '#8E8E93', icon: FileTextIcon },
-    qualified: { label: 'Qualifié', color: '#007AFF', icon: CheckCircleIcon },
-    proposal: { label: 'Proposition', color: '#FF9500', icon: FileTextIcon },
-    negotiation: { label: 'Négociation', color: '#AF52DE', icon: DollarIcon },
-    won: { label: 'Gagné', color: '#34C759', icon: CheckCircleIcon },
-    lost: { label: 'Perdu', color: '#FF3B30', icon: XCircleIcon },
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [opportunitiesRes, stagesRes, companiesRes, deletedRes] = await Promise.all([
+        pipelineService.getOpportunities(),
+        pipelineService.getStages(),
+        companyService.getAll(),
+        pipelineService.getRecentlyDeletedOpportunities({ limit: 50 }),
+      ]);
+
+      setOpportunities(opportunitiesRes.data);
+      setStages(stagesRes.data);
+      setCompanies(companiesRes.data);
+      setRecentlyDeleted(deletedRes.data);
+
+      // Set default stage_id when stages are loaded
+      if (stagesRes.data.length > 0 && !newOppForm.stage_id) {
+        setNewOppForm(prev => ({ ...prev, stage_id: stagesRes.data[0].id }));
+      }
+    } catch (err: any) {
+      console.error('Erreur lors du chargement des données:', err);
+      Alert.alert('Erreur', 'Impossible de charger les opportunités');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    await fetchData();
+    setRefreshing(false);
   };
 
   const formatCurrency = (amount: number) => {
@@ -124,151 +164,557 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
     }).format(amount);
   };
 
-  const getTotalValue = (status: OpportunityStatus) => {
+  const formatDateDisplay = (dateValue?: string) => {
+    if (!dateValue) {
+      return 'Sélectionner une date';
+    }
+
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) {
+      return 'Sélectionner une date';
+    }
+
+    return date.toLocaleDateString('fr-FR', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  };
+
+  const showDatePicker = (mode: 'new' | 'edit') => {
+    const rawDate = mode === 'new' ? newOppForm.expected_close_date : editForm?.expected_close_date;
+    setDatePickerInitialDate(rawDate ? new Date(rawDate) : new Date());
+    setDatePickerMode(mode);
+    setDatePickerVisible(true);
+  };
+
+  const handleDateConfirm = (selectedDate: Date) => {
+    const formatted = selectedDate.toISOString().split('T')[0];
+
+    if (datePickerMode === 'new') {
+      setNewOppForm(prev => ({ ...prev, expected_close_date: formatted }));
+    } else {
+      const currentEditId = editForm?.id;
+      setEditForm(prev => (prev ? { ...prev, expected_close_date: formatted } : prev));
+      setSelectedOpportunity(prev =>
+        prev && (!currentEditId || prev.id === currentEditId)
+          ? { ...prev, expected_close_date: formatted }
+          : prev
+      );
+    }
+
+    setDatePickerVisible(false);
+  };
+
+  const handleDateCancel = () => {
+    setDatePickerVisible(false);
+  };
+
+  const getTotalValue = (stageId: string) => {
     return opportunities
-      .filter((opp) => opp.status === status)
+      .filter((opp) => opp.stage_id === stageId)
       .reduce((sum, opp) => sum + opp.value, 0);
   };
 
-  const getWeightedValue = (status: OpportunityStatus) => {
+  const getWeightedValue = (stageId: string) => {
     return opportunities
-      .filter((opp) => opp.status === status)
+      .filter((opp) => opp.stage_id === stageId)
       .reduce((sum, opp) => sum + (opp.value * opp.probability) / 100, 0);
   };
 
-  const handleCreateOpportunity = () => {
-    if (!newOppForm.title.trim() || !newOppForm.company.trim()) {
-      Alert.alert('Erreur', 'Veuillez remplir le titre et l\'entreprise');
+  const handleCreateOpportunity = async () => {
+    if (!newOppForm.name.trim()) {
+      Alert.alert('Erreur', 'Veuillez remplir le nom');
       return;
     }
 
-    const newOpp: Opportunity = {
-      id: `opp_${Date.now()}`,
-      title: newOppForm.title,
-      company: newOppForm.company,
-      value: parseInt(newOppForm.value) || 0,
-      status: newOppForm.status,
+    if (!user?.id) {
+      Alert.alert('Erreur', 'Utilisateur non connecté');
+      return;
+    }
+
+    const userIdCandidate = typeof user.id === 'string' ? user.id : String(user.id);
+    const userId = isValidUUID(userIdCandidate) ? userIdCandidate : DEFAULT_USER_ID;
+
+    const customerId = isValidUUID(newOppForm.customer_id)
+      ? newOppForm.customer_id
+      : undefined;
+
+    const data = {
+      name: newOppForm.name,
+      customer_id: customerId,
+      user_id: userId,
+      stage_id: newOppForm.stage_id,
+      value: parseFloat(newOppForm.value) || 0,
       probability: parseInt(newOppForm.probability) || 20,
-      expectedCloseDate: newOppForm.expectedCloseDate,
-      contact: newOppForm.contact,
-      notes: newOppForm.notes,
+      expected_close_date: newOppForm.expected_close_date || new Date().toISOString().split('T')[0],
+      description: newOppForm.description,
     };
 
-    setOpportunities([...opportunities, newOpp]);
-    setNewOppForm({
-      title: '',
-      company: '',
-      value: '',
-      probability: '20',
-      expectedCloseDate: '',
-      contact: '',
-      notes: '',
-      status: 'prospect',
-    });
-    setNewOppModalVisible(false);
-    Alert.alert('Succès', `Opportunité "${newOpp.title}" créée!`);
+    try {
+      const response = await pipelineService.createOpportunity(data);
+      const createdId: string = response.data?.id || `tmp-${Date.now()}`;
+      const stageInfo = stages.find(stage => stage.id === data.stage_id);
+      const companyInfo = customerId ? companies.find(company => company.id === customerId) : undefined;
+
+      const createdOpportunity: Opportunity = {
+        id: createdId,
+        name: data.name,
+        customer_id: customerId ?? undefined,
+        customer_name: companyInfo?.name,
+        user_id: userId,
+        owner_name: user?.full_name || undefined,
+        stage_id: data.stage_id,
+        stage_name: stageInfo?.name,
+        stage_color: stageInfo?.color,
+        value: data.value,
+        probability: data.probability ?? 0,
+        expected_close_date: data.expected_close_date,
+        description: data.description || '',
+      };
+
+      setOpportunities(prev => [...prev, createdOpportunity]);
+
+      setNewOppForm({
+        name: '',
+        value: '',
+        probability: '20',
+        expected_close_date: '',
+        description: '',
+        stage_id: stages.length > 0 ? stages[0].id : '',
+        customer_id: '',
+        contact_id: '',
+      });
+      setNewOppModalVisible(false);
+      Alert.alert('Succès', 'Opportunité créée!');
+    } catch (err: any) {
+      console.error('Erreur création opportunité:', err);
+      console.error('Réponse serveur:', err.response?.data);
+      console.error('Données envoyées:', data);
+      Alert.alert('Erreur', err.response?.data?.error || 'Impossible de créer l\'opportunité');
+    }
   };
 
   const handleResetOppForm = () => {
     setNewOppForm({
-      title: '',
-      company: '',
+      name: '',
       value: '',
       probability: '20',
-      expectedCloseDate: '',
-      contact: '',
-      notes: '',
-      status: 'prospect',
+      expected_close_date: '',
+      description: '',
+      stage_id: stages.length > 0 ? stages[0].id : '',
+      customer_id: '',
+      contact_id: '',
     });
     setNewOppModalVisible(false);
+    setCompanyDropdownOpen(false);
   };
 
-  const moveOpportunity = (opportunityId: string, newStatus: OpportunityStatus) => {
-    setOpportunities((prev) =>
-      prev.map((opp) => (opp.id === opportunityId ? { ...opp, status: newStatus } : opp))
+  const handleCreateCompany = async () => {
+    if (!newCompanyForm.name.trim()) {
+      Alert.alert('Erreur', 'Veuillez remplir le nom de l\'entreprise');
+      return;
+    }
+
+    try {
+      const response = await companyService.create(newCompanyForm);
+      const newCompany = response.data;
+
+      // Refresh company list
+      const companiesRes = await companyService.getAll();
+      setCompanies(companiesRes.data);
+
+      // Auto-select the newly created company
+      setNewOppForm(prev => ({ ...prev, customer_id: newCompany.id }));
+
+      // Reset form and close modal
+      setNewCompanyForm({ name: '', email: '', phone: '', industry: '', website: '' });
+      setNewCompanyModalVisible(false);
+
+      Alert.alert('Succès', 'Entreprise créée avec succès');
+    } catch (err: any) {
+      console.error('Erreur création entreprise:', err);
+      Alert.alert('Erreur', err.response?.data?.error || 'Impossible de créer l\'entreprise');
+    }
+  };
+
+  const applyStageToOpportunityState = (opportunityId: string, stageId: string) => {
+    const stageInfo = stages.find(stage => stage.id === stageId);
+
+    setOpportunities(prev =>
+      prev.map(opp =>
+        opp.id === opportunityId
+          ? {
+              ...opp,
+              stage_id: stageId,
+              stage_name: stageInfo?.name || opp.stage_name,
+              stage_color: stageInfo?.color || opp.stage_color,
+            }
+          : opp
+      )
     );
+
+    setSelectedOpportunity(prev =>
+      prev && prev.id === opportunityId
+        ? {
+            ...prev,
+            stage_id: stageId,
+            stage_name: stageInfo?.name || prev.stage_name,
+            stage_color: stageInfo?.color || prev.stage_color,
+          }
+        : prev
+    );
+
+    setEditForm(prev =>
+      prev && prev.id === opportunityId
+        ? {
+            ...prev,
+            stage_id: stageId,
+            stage_name: stageInfo?.name || prev.stage_name,
+            stage_color: stageInfo?.color || prev.stage_color,
+          }
+        : prev
+    );
+  };
+
+  const moveOpportunity = async (opportunityId: string, newStageId: string) => {
+    const currentOpportunity = opportunities.find(opp => opp.id === opportunityId);
+
+    if (!currentOpportunity || currentOpportunity.stage_id === newStageId) {
+      setDraggingOpportunityId(null);
+      return;
+    }
+
+    const previousStageId = currentOpportunity.stage_id;
+
+    applyStageToOpportunityState(opportunityId, newStageId);
+
+    try {
+      await pipelineService.moveOpportunityToStage(opportunityId, newStageId);
+    } catch (err: any) {
+      console.error('Erreur déplacement opportunité:', err);
+      applyStageToOpportunityState(opportunityId, previousStageId);
+      Alert.alert('Erreur', 'Impossible de déplacer l\'opportunité');
+    } finally {
+      setDraggingOpportunityId(null);
+    }
   };
 
   const openOpportunityDetails = (opportunity: Opportunity) => {
-    setSelectedOpportunity(opportunity);
+    setSelectedOpportunity({ ...opportunity });
+    setEditForm({ ...opportunity });
+    setIsEditMode(false);
     setModalVisible(true);
   };
 
-  const renderOpportunityCard = (opportunity: Opportunity) => {
-    const config = statusConfig[opportunity.status];
-    const Icon = config.icon;
+  const handleUpdateOpportunity = async () => {
+    if (!editForm) return;
 
-    return (
-      <TouchableOpacity
-        key={opportunity.id}
-        style={styles.opportunityCard}
-        onPress={() => openOpportunityDetails(opportunity)}
-        activeOpacity={0.8}
-      >
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle} numberOfLines={2}>
-            {opportunity.title}
-          </Text>
-          <View style={[styles.probabilityBadge, { backgroundColor: `${config.color}20` }]}>
-            <Text style={[styles.probabilityText, { color: config.color }]}>
-              {opportunity.probability}%
+    try {
+      const customerId = isValidUUID(editForm.customer_id)
+        ? editForm.customer_id
+        : null;
+
+      const userIdFromEdit =
+        typeof editForm.user_id === 'string'
+          ? editForm.user_id
+          : editForm.user_id
+          ? String(editForm.user_id)
+          : undefined;
+      const userIdFromContext =
+        typeof user?.id === 'string'
+          ? user.id
+          : user?.id
+          ? String(user.id)
+          : undefined;
+      const userId = isValidUUID(userIdFromEdit)
+        ? userIdFromEdit!
+        : isValidUUID(userIdFromContext)
+        ? userIdFromContext!
+        : DEFAULT_USER_ID;
+
+      const normalizedValue =
+        typeof editForm.value === 'number' && !Number.isNaN(editForm.value)
+          ? editForm.value
+          : parseFloat(String(editForm.value)) || 0;
+
+      const parsedProbability =
+        typeof editForm.probability === 'number'
+          ? editForm.probability
+          : parseInt(String(editForm.probability), 10);
+      const normalizedProbability =
+        Number.isFinite(parsedProbability)
+          ? Math.min(100, Math.max(0, parsedProbability as number))
+          : undefined;
+
+      const normalizedExpectedCloseDate =
+        editForm.expected_close_date && editForm.expected_close_date.trim().length > 0
+          ? editForm.expected_close_date
+          : new Date().toISOString().split('T')[0];
+
+      const data = {
+        name: editForm.name,
+        customer_id: customerId ?? null,
+        user_id: userId,
+        stage_id: editForm.stage_id,
+        value: normalizedValue,
+        probability: normalizedProbability,
+        expected_close_date: normalizedExpectedCloseDate,
+        description: editForm.description || '',
+      };
+
+      await pipelineService.updateOpportunity(editForm.id, data);
+
+      const stageInfo = stages.find(stage => stage.id === data.stage_id);
+      const companyInfo = companies.find(company => company.id === (customerId ?? ''));
+
+      const updatedOpportunity: Opportunity = {
+        ...editForm,
+        ...data,
+        customer_id: customerId ?? undefined,
+        customer_name: companyInfo?.name,
+        stage_name: stageInfo?.name ?? editForm.stage_name,
+        stage_color: stageInfo?.color ?? editForm.stage_color,
+        probability: data.probability ?? editForm.probability,
+      };
+
+      setOpportunities(prev =>
+        prev.map(opp => (opp.id === editForm.id ? { ...opp, ...updatedOpportunity } : opp))
+      );
+      setSelectedOpportunity(prev =>
+        prev && prev.id === editForm.id ? { ...prev, ...updatedOpportunity } : prev
+      );
+      setEditForm(updatedOpportunity);
+
+      setIsEditMode(false);
+      Alert.alert('Succès', 'Opportunité mise à jour');
+    } catch (err: any) {
+      console.error('Erreur mise à jour opportunité:', err);
+      Alert.alert('Erreur', 'Impossible de mettre à jour l\'opportunité');
+    }
+  };
+
+  const handleDeleteOpportunity = (id: string | number) => {
+    setOpportunityToDelete(id.toString());
+    setConfirmModalVisible(true);
+  };
+
+  const confirmDeleteOpportunity = async () => {
+    if (!opportunityToDelete) return;
+
+    const id = opportunityToDelete;
+    const opportunityData = opportunities.find(opp => opp.id === id);
+
+    setConfirmModalVisible(false);
+    setOpportunityToDelete(null);
+
+    try {
+      logger.info('DELETE', 'Deleting opportunity', { opportunityId: id });
+      await pipelineService.deleteOpportunity(id);
+      setOpportunities(prev => prev.filter(opp => opp.id !== id));
+      setModalVisible(false);
+      setIsEditMode(false);
+      setSelectedOpportunity(prev => (prev && prev.id === id ? null : prev));
+      setEditForm(prev => (prev && prev.id === id ? null : prev));
+      setRecentlyDeleted(prev =>
+        opportunityData
+          ? [
+              { ...opportunityData, deleted_at: new Date().toISOString() },
+              ...prev,
+            ].slice(0, 50)
+          : prev
+      );
+      logger.success('DELETE', 'Opportunity deleted successfully', { opportunityId: id });
+    } catch (err: any) {
+      console.error('Erreur suppression opportunité:', err);
+      logger.error('DELETE', 'Failed to delete opportunity', { opportunityId: id, error: err.message });
+
+      if (Platform.OS === 'web') {
+        alert('Erreur: Impossible de supprimer l\'opportunité');
+      } else {
+        Alert.alert('Erreur', 'Impossible de supprimer l\'opportunité');
+      }
+    }
+  };
+
+  const renderOpportunityCard = (opportunity: Opportunity, index: number) => {
+    const stageColor = opportunity.stage_color || stages.find(s => s.id === opportunity.stage_id)?.color || '#007AFF';
+    const isDragging = draggingOpportunityId === opportunity.id;
+
+    const cardContent = (
+      <View style={[styles.opportunityCard, isDragging && styles.opportunityCardDragging]}>
+        <TouchableOpacity
+          style={styles.cardClickableArea}
+          onPress={() => openOpportunityDetails(opportunity)}
+          activeOpacity={0.85}
+        >
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle} numberOfLines={2}>
+              {opportunity.name}
+            </Text>
+            <View style={styles.cardHeaderRight}>
+              <View style={[styles.probabilityBadge, { backgroundColor: `${stageColor}20` }]}>
+                <Text style={[styles.probabilityText, { color: stageColor }]}>
+                  {opportunity.probability}%
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <Text style={styles.cardCompany}>{opportunity.customer_name || 'Client non défini'}</Text>
+
+          <View style={styles.cardFooter}>
+            <Text style={styles.cardValue}>{formatCurrency(opportunity.value)}</Text>
+            <Text style={styles.cardDate}>
+              {new Date(opportunity.expected_close_date).toLocaleDateString('fr-FR', {
+                day: 'numeric',
+                month: 'short',
+              })}
             </Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
-        <Text style={styles.cardCompany}>{opportunity.company}</Text>
-        <Text style={styles.cardContact}>{opportunity.contact}</Text>
+        <TouchableOpacity
+          style={styles.cardDeleteButton}
+          onPress={(event: GestureResponderEvent) => {
+            event.stopPropagation();
+            logger.click('PipelineScreen', 'Delete button clicked', { opportunityId: opportunity.id });
+            handleDeleteOpportunity(opportunity.id);
+          }}
+          // @ts-ignore
+          data-no-drag="true"
+          // @ts-ignore
+          pointerEvents="auto"
+        >
+          <Text style={styles.cardDeleteText}>Supprimer</Text>
+        </TouchableOpacity>
+      </View>
+    );
 
-        <View style={styles.cardFooter}>
-          <Text style={styles.cardValue}>{formatCurrency(opportunity.value)}</Text>
-          <Text style={styles.cardDate}>
-            {new Date(opportunity.expectedCloseDate).toLocaleDateString('fr-FR', {
-              day: 'numeric',
-              month: 'short',
-            })}
-          </Text>
-        </View>
-      </TouchableOpacity>
+    return (
+      <MaybeDraxDraggable
+        key={`opp-${opportunity.id}-${index}`}
+        payload={opportunity.id}
+        style={styles.draggableWrapper}
+        draggingStyle={styles.draggableWrapperDragging}
+        onDragStart={() => setDraggingOpportunityId(opportunity.id)}
+        onDragEnd={() => setDraggingOpportunityId(prev => (prev === opportunity.id ? null : prev))}
+      >
+        {cardContent}
+      </MaybeDraxDraggable>
     );
   };
 
-  const renderColumn = (status: OpportunityStatus) => {
-    const config = statusConfig[status];
-    const Icon = config.icon;
-    const columnOpportunities = opportunities.filter((opp) => opp.status === status);
-    const totalValue = getTotalValue(status);
-    const weightedValue = getWeightedValue(status);
+  const handleRestoreOpportunity = async (id: string | number) => {
+    try {
+      logger.info('PIPELINE', 'Restoring opportunity', { opportunityId: id });
+      await pipelineService.restoreOpportunity(id);
+
+      // Remove from deleted list and refresh
+      setRecentlyDeleted((prev) => prev.filter((opp) => opp.id !== id));
+
+      // Refresh the main opportunities list
+      const oppRes = await pipelineService.getOpportunities();
+      setOpportunities(oppRes.data);
+
+      logger.success('PIPELINE', 'Opportunity restored successfully', { opportunityId: id });
+
+      if (Platform.OS === 'web') {
+        alert('Opportunité restaurée avec succès');
+      } else {
+        Alert.alert('Succès', 'Opportunité restaurée avec succès');
+      }
+    } catch (err: any) {
+      logger.error('PIPELINE', 'Failed to restore opportunity', { opportunityId: id, error: err.message });
+      console.error('Erreur restauration opportunité:', err);
+
+      if (Platform.OS === 'web') {
+        alert('Erreur: Impossible de restaurer l\'opportunité');
+      } else {
+        Alert.alert('Erreur', 'Impossible de restaurer l\'opportunité');
+      }
+    }
+  };
+
+  const renderDeletedOpportunityCard = (opportunity: Opportunity, index: number) => {
+    const deletedDate = opportunity.deleted_at
+      ? new Date(opportunity.deleted_at).toLocaleDateString('fr-FR', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        })
+      : 'Date inconnue';
+
+    const previousStage =
+      opportunity.stage_name ||
+      stages.find(stage => stage.id === opportunity.stage_id)?.name ||
+      'N/A';
 
     return (
-      <View key={status} style={styles.column}>
-        <View style={[styles.columnHeader, { borderTopColor: config.color }]}>
+      <View key={`deleted-${opportunity.id}-${index}`} style={styles.deletedCard}>
+        <View style={styles.deletedHeader}>
+          <Text style={styles.deletedTitle} numberOfLines={2}>
+            {opportunity.name}
+          </Text>
+          <Text style={styles.deletedDate}>{deletedDate}</Text>
+        </View>
+        <Text style={styles.deletedValue}>{formatCurrency(opportunity.value)}</Text>
+        <Text style={styles.deletedStage}>Stage précédent: {previousStage}</Text>
+        {opportunity.description ? (
+          <Text style={styles.deletedDescription} numberOfLines={3}>
+            {opportunity.description}
+          </Text>
+        ) : null}
+        <TouchableOpacity
+          style={styles.restoreButton}
+          onPress={() => handleRestoreOpportunity(opportunity.id)}
+        >
+          <Text style={styles.restoreButtonText}>Restaurer</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderColumn = (stage: PipelineStage) => {
+    const columnOpportunities = opportunities.filter((opp) => opp.stage_id === stage.id);
+    const totalValue = getTotalValue(stage.id);
+    const weightedValue = getWeightedValue(stage.id);
+
+    return (
+      <View key={stage.id} style={styles.column}>
+        <View style={[styles.columnHeader, { borderTopColor: stage.color }]}>
           <View style={styles.columnTitleRow}>
-            <Icon size={16} color={config.color} />
-            <Text style={styles.columnTitle}>{config.label}</Text>
-            <View style={[styles.countBadge, { backgroundColor: config.color }]}>
+            <Text style={styles.columnTitle}>{stage.name}</Text>
+            <View style={[styles.countBadge, { backgroundColor: stage.color }]}>
               <Text style={styles.countText}>{columnOpportunities.length}</Text>
             </View>
           </View>
           <Text style={styles.columnValue}>{formatCurrency(totalValue)}</Text>
-          {status !== 'won' && status !== 'lost' && (
-            <Text style={styles.columnWeighted}>
-              Pondéré: {formatCurrency(weightedValue)}
-            </Text>
-          )}
+          <Text style={styles.columnWeighted}>
+            Pondéré: {formatCurrency(weightedValue)}
+          </Text>
         </View>
 
-        <ScrollView
-          style={styles.columnContent}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.columnCards}
+        <MaybeDraxDroppable
+          style={styles.columnDropZone}
+          activeStyle={styles.columnDropZoneActive}
+          onReceive={(payload) => {
+            moveOpportunity(payload, stage.id);
+          }}
         >
-          {columnOpportunities.map((opp) => renderOpportunityCard(opp))}
-          {columnOpportunities.length === 0 && (
-            <View style={styles.emptyColumn}>
-              <Text style={styles.emptyText}>Aucune opportunité</Text>
-            </View>
-          )}
-        </ScrollView>
+          <ScrollView
+            style={styles.columnContent}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.columnCards}
+          >
+            {columnOpportunities.map((opp, idx) => renderOpportunityCard(opp, idx))}
+            {columnOpportunities.length === 0 && (
+              <View style={styles.emptyColumn}>
+                <Text style={styles.emptyText}>Aucune opportunité</Text>
+              </View>
+            )}
+          </ScrollView>
+        </MaybeDraxDroppable>
       </View>
     );
   };
@@ -279,8 +725,21 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
     0
   );
 
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Navigation />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>Chargement...</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
+      <Navigation />
       {/* En-tête */}
       <View style={styles.header}>
         <View>
@@ -297,122 +756,304 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
         </TouchableOpacity>
       </View>
 
-      {/* Statistiques */}
-      <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Valeur Totale</Text>
-          <Text style={styles.statValue}>{formatCurrency(totalPipelineValue)}</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Valeur Pondérée</Text>
-          <Text style={[styles.statValue, { color: '#007AFF' }]}>
-            {formatCurrency(totalWeightedValue)}
+      {/* Onglets */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'pipeline' && styles.tabButtonActive]}
+          onPress={() => setActiveTab('pipeline')}
+        >
+          <Text style={[styles.tabButtonText, activeTab === 'pipeline' && styles.tabButtonTextActive]}>
+            Pipeline
           </Text>
-        </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'deleted' && styles.tabButtonActive]}
+          onPress={() => setActiveTab('deleted')}
+        >
+          <Text style={[styles.tabButtonText, activeTab === 'deleted' && styles.tabButtonTextActive]}>
+            Supprimé récemment
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Colonnes Kanban */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.kanbanContainer}
-        contentContainerStyle={styles.kanbanContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        {renderColumn('prospect')}
-        {renderColumn('qualified')}
-        {renderColumn('proposal')}
-        {renderColumn('negotiation')}
-        {renderColumn('won')}
-        {renderColumn('lost')}
-      </ScrollView>
+      {activeTab === 'pipeline' ? (
+        <MaybeDraxProvider>
+          {/* Statistiques */}
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>Valeur Totale</Text>
+              <Text style={styles.statValue}>{formatCurrency(totalPipelineValue)}</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>Valeur Pondérée</Text>
+              <Text style={[styles.statValue, { color: '#007AFF' }]}>
+                {formatCurrency(totalWeightedValue)}
+              </Text>
+            </View>
+          </View>
 
-      {/* Modal Détails */}
+          {/* Colonnes Kanban */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.kanbanContainer}
+            contentContainerStyle={styles.kanbanContent}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          >
+            {stages.map(stage => renderColumn(stage))}
+          </ScrollView>
+        </MaybeDraxProvider>
+      ) : (
+        <View style={styles.deletedWrapper}>
+          <ScrollView
+            style={styles.deletedScroll}
+            contentContainerStyle={styles.deletedContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          >
+            {recentlyDeleted.length === 0 ? (
+              <Text style={styles.emptyDeletedText}>
+                Aucune opportunité supprimée au cours des 30 derniers jours
+              </Text>
+            ) : (
+              recentlyDeleted.map((opp, idx) => renderDeletedOpportunityCard(opp, idx))
+            )}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Modal Détails/Édition */}
       <Modal
         visible={modalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={() => {
+          setModalVisible(false);
+          setIsEditMode(false);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            {selectedOpportunity && (
+            {selectedOpportunity && editForm && (
               <>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{selectedOpportunity.title}</Text>
-                  <TouchableOpacity onPress={() => setModalVisible(false)}>
-                    <XCircleIcon size={24} color="#8E8E93" />
-                  </TouchableOpacity>
+                  <Text style={styles.modalTitle}>
+                    {isEditMode ? 'Modifier' : selectedOpportunity.name}
+                  </Text>
+                  <View style={styles.modalHeaderActions}>
+                    {!isEditMode && (
+                      <TouchableOpacity
+                        onPress={() => setIsEditMode(true)}
+                        style={styles.editButton}
+                      >
+                        <Text style={styles.editButtonText}>Modifier</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity onPress={() => {
+                      setModalVisible(false);
+                      setIsEditMode(false);
+                    }}>
+                      <XCircleIcon size={24} color="#8E8E93" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
-                <View style={styles.modalBody}>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Entreprise</Text>
-                    <Text style={styles.detailValue}>{selectedOpportunity.company}</Text>
-                  </View>
+                <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                  {isEditMode ? (
+                    /* Mode Édition */
+                    <>
+                      <View style={styles.editGroup}>
+                        <Text style={styles.editLabel}>Nom</Text>
+                        <TextInput
+                          style={styles.editInput}
+                          value={editForm.name}
+                          onChangeText={(text) => setEditForm({ ...editForm, name: text })}
+                        />
+                      </View>
 
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Contact</Text>
-                    <Text style={styles.detailValue}>{selectedOpportunity.contact}</Text>
-                  </View>
+                      <View style={styles.editGroup}>
+                        <Text style={styles.editLabel}>Valeur (€)</Text>
+                        <TextInput
+                          style={styles.editInput}
+                          value={editForm.value.toString()}
+                          onChangeText={(text) => setEditForm({ ...editForm, value: parseFloat(text) || 0 })}
+                          keyboardType="numeric"
+                        />
+                      </View>
 
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Valeur</Text>
-                    <Text style={[styles.detailValue, { color: '#34C759', fontWeight: '700' }]}>
-                      {formatCurrency(selectedOpportunity.value)}
-                    </Text>
-                  </View>
+                      <View style={styles.editGroup}>
+                        <Text style={styles.editLabel}>Probabilité (%)</Text>
+                        <TextInput
+                          style={styles.editInput}
+                          value={editForm.probability.toString()}
+                          onChangeText={(text) => setEditForm({ ...editForm, probability: parseInt(text) || 0 })}
+                          keyboardType="numeric"
+                        />
+                      </View>
 
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Probabilité</Text>
-                    <Text style={styles.detailValue}>{selectedOpportunity.probability}%</Text>
-                  </View>
-
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Date de clôture prévue</Text>
-                    <Text style={styles.detailValue}>
-                      {new Date(selectedOpportunity.expectedCloseDate).toLocaleDateString('fr-FR')}
-                    </Text>
-                  </View>
-
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Statut</Text>
-                    <Text style={styles.detailValue}>
-                      {statusConfig[selectedOpportunity.status].label}
-                    </Text>
-                  </View>
-
-                  {selectedOpportunity.notes && (
-                    <View style={styles.notesContainer}>
-                      <Text style={styles.detailLabel}>Notes</Text>
-                      <Text style={styles.notesText}>{selectedOpportunity.notes}</Text>
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.modalActions}>
-                  <Text style={styles.actionsTitle}>Changer le statut</Text>
-                  <View style={styles.statusButtons}>
-                    {(Object.keys(statusConfig) as OpportunityStatus[]).map((status) => {
-                      if (status === selectedOpportunity.status) return null;
-                      const config = statusConfig[status];
-                      return (
+                      <View style={styles.editGroup}>
+                        <Text style={styles.editLabel}>Date de clôture</Text>
                         <TouchableOpacity
-                          key={status}
-                          style={[styles.statusButton, { borderColor: config.color }]}
-                          onPress={() => {
-                            moveOpportunity(selectedOpportunity.id, status);
-                            setModalVisible(false);
-                          }}
+                          style={styles.editDateButton}
+                          onPress={() => showDatePicker('edit')}
+                          activeOpacity={0.85}
                         >
-                          <Text style={[styles.statusButtonText, { color: config.color }]}>
-                            {config.label}
+                          <Text
+                            style={
+                              editForm.expected_close_date
+                                ? styles.editDateButtonText
+                                : styles.editDatePlaceholderText
+                            }
+                          >
+                            {formatDateDisplay(editForm.expected_close_date)}
                           </Text>
                         </TouchableOpacity>
-                      );
-                    })}
+                      </View>
+
+                      <View style={styles.editGroup}>
+                        <Text style={styles.editLabel}>Stage</Text>
+                        <View style={styles.statusSelectEdit}>
+                          {stages.map((stage) => (
+                            <TouchableOpacity
+                              key={stage.id}
+                              style={[
+                                styles.statusButtonEdit,
+                                editForm.stage_id === stage.id && styles.statusButtonEditActive,
+                                { borderColor: stage.color }
+                              ]}
+                              onPress={() => setEditForm({ ...editForm, stage_id: stage.id })}
+                            >
+                              <Text style={[
+                                styles.statusButtonEditText,
+                                { color: editForm.stage_id === stage.id ? stage.color : '#8E8E93' }
+                              ]}>
+                                {stage.name}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+
+                      <View style={styles.editGroup}>
+                        <Text style={styles.editLabel}>Description</Text>
+                        <TextInput
+                          style={[styles.editInput, styles.editTextArea]}
+                          value={editForm.description || ''}
+                          onChangeText={(text) => setEditForm({ ...editForm, description: text })}
+                          multiline
+                          numberOfLines={4}
+                        />
+                      </View>
+
+                      <View style={styles.editActions}>
+                        <TouchableOpacity
+                          style={styles.saveButton}
+                          onPress={handleUpdateOpportunity}
+                        >
+                          <Text style={styles.saveButtonText}>Enregistrer</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.cancelButton}
+                          onPress={() => {
+                            setEditForm(selectedOpportunity);
+                            setIsEditMode(false);
+                          }}
+                        >
+                          <Text style={styles.cancelButtonText}>Annuler</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  ) : (
+                    /* Mode Lecture */
+                    <>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Client</Text>
+                        <TouchableOpacity onPress={() => navigation.navigate('Customers')}>
+                          <Text style={[styles.detailValue, styles.linkText]}>
+                            {selectedOpportunity.customer_name || 'Non défini'} →
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Valeur</Text>
+                        <Text style={[styles.detailValue, { color: '#34C759', fontWeight: '700' }]}>
+                          {formatCurrency(selectedOpportunity.value)}
+                        </Text>
+                      </View>
+
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Probabilité</Text>
+                        <Text style={styles.detailValue}>{selectedOpportunity.probability}%</Text>
+                      </View>
+
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Date de clôture prévue</Text>
+                        <Text style={styles.detailValue}>
+                          {new Date(selectedOpportunity.expected_close_date).toLocaleDateString('fr-FR')}
+                        </Text>
+                      </View>
+
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Stage</Text>
+                        <Text style={styles.detailValue}>
+                          {stages.find(s => s.id === selectedOpportunity.stage_id)?.name || 'N/A'}
+                        </Text>
+                      </View>
+
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Devis associé</Text>
+                        <TouchableOpacity onPress={() => {
+                          setModalVisible(false);
+                          navigation.navigate('Home');
+                        }}>
+                          <Text style={[styles.detailValue, styles.linkText]}>
+                            Voir le devis →
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {selectedOpportunity.description && (
+                        <View style={styles.notesContainer}>
+                          <Text style={styles.detailLabel}>Description</Text>
+                          <Text style={styles.notesText}>{selectedOpportunity.description}</Text>
+                        </View>
+                      )}
+
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => handleDeleteOpportunity(selectedOpportunity.id)}
+                      >
+                        <Text style={styles.deleteButtonText}>Supprimer l'opportunité</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </ScrollView>
+
+                {!isEditMode && (
+                  <View style={styles.modalActions}>
+                    <Text style={styles.actionsTitle}>Changer le stage</Text>
+                    <View style={styles.statusButtons}>
+                      {stages.map((stage) => {
+                        if (stage.id === selectedOpportunity.stage_id) return null;
+                        return (
+                          <TouchableOpacity
+                            key={stage.id}
+                            style={[styles.statusButton, { borderColor: stage.color }]}
+                            onPress={() => {
+                              moveOpportunity(selectedOpportunity.id, stage.id);
+                              setModalVisible(false);
+                            }}
+                          >
+                            <Text style={[styles.statusButtonText, { color: stage.color }]}>
+                              {stage.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   </View>
-                </View>
+                )}
               </>
             )}
           </View>
@@ -437,36 +1078,63 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
 
             <ScrollView style={styles.newModalBody} showsVerticalScrollIndicator={false}>
               <View style={styles.formGroupOpp}>
-                <Text style={styles.formLabelOpp}>Titre *</Text>
+                <Text style={styles.formLabelOpp}>Nom *</Text>
                 <TextInput
                   style={styles.inputOpp}
                   placeholder="Ex: Migration Cloud"
-                  value={newOppForm.title}
-                  onChangeText={(text) => setNewOppForm({ ...newOppForm, title: text })}
+                  value={newOppForm.name}
+                  onChangeText={(text) => setNewOppForm({ ...newOppForm, name: text })}
                   placeholderTextColor="#C7C7CC"
                 />
               </View>
 
               <View style={styles.formGroupOpp}>
-                <Text style={styles.formLabelOpp}>Entreprise *</Text>
-                <TextInput
-                  style={styles.inputOpp}
-                  placeholder="Ex: TechCorp"
-                  value={newOppForm.company}
-                  onChangeText={(text) => setNewOppForm({ ...newOppForm, company: text })}
-                  placeholderTextColor="#C7C7CC"
-                />
-              </View>
+                <Text style={styles.formLabelOpp}>Entreprise</Text>
+                <TouchableOpacity
+                  style={styles.dropdownButton}
+                  onPress={() => setCompanyDropdownOpen(!companyDropdownOpen)}
+                >
+                  <Text style={styles.dropdownButtonText}>
+                    {newOppForm.customer_id
+                      ? companies.find(c => c.id === newOppForm.customer_id)?.name || 'Sélectionner une entreprise'
+                      : 'Sélectionner une entreprise'}
+                  </Text>
+                  <Text style={styles.dropdownArrow}>{companyDropdownOpen ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
 
-              <View style={styles.formGroupOpp}>
-                <Text style={styles.formLabelOpp}>Contact</Text>
-                <TextInput
-                  style={styles.inputOpp}
-                  placeholder="Ex: Marie Dubois"
-                  value={newOppForm.contact}
-                  onChangeText={(text) => setNewOppForm({ ...newOppForm, contact: text })}
-                  placeholderTextColor="#C7C7CC"
-                />
+                {companyDropdownOpen && (
+                  <View style={styles.dropdownList}>
+                    <TouchableOpacity
+                      style={styles.newCustomerButton}
+                      onPress={() => {
+                        setCompanyDropdownOpen(false);
+                        setNewCompanyModalVisible(true);
+                      }}
+                    >
+                      <Text style={styles.newCustomerButtonText}>+ Nouvelle Entreprise</Text>
+                    </TouchableOpacity>
+                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
+                      {companies.map(company => (
+                        <TouchableOpacity
+                          key={company.id}
+                          style={[
+                            styles.dropdownItem,
+                            newOppForm.customer_id === company.id && styles.dropdownItemSelected
+                          ]}
+                          onPress={() => {
+                            setNewOppForm({ ...newOppForm, customer_id: company.id });
+                            setCompanyDropdownOpen(false);
+                          }}
+                        >
+                          <Text style={styles.dropdownItemText}>{company.name}</Text>
+                          {company.industry && (
+                            <Text style={styles.dropdownItemSubtext}>{company.industry}</Text>
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
               </View>
 
               <View style={styles.formGroupOpp}>
@@ -494,24 +1162,24 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
               </View>
 
               <View style={styles.formGroupOpp}>
-                <Text style={styles.formLabelOpp}>Statut</Text>
+                <Text style={styles.formLabelOpp}>Stage</Text>
                 <View style={styles.statusSelectOpp}>
-                  {(['prospect', 'qualified', 'proposal', 'negotiation'] as OpportunityStatus[]).map(status => (
+                  {stages.map(stage => (
                     <TouchableOpacity
-                      key={status}
+                      key={stage.id}
                       style={[
                         styles.statusButtonOpp,
-                        newOppForm.status === status && styles.statusButtonActiveOpp,
-                        { borderColor: statusConfig[status].color }
+                        newOppForm.stage_id === stage.id && styles.statusButtonActiveOpp,
+                        { borderColor: stage.color }
                       ]}
-                      onPress={() => setNewOppForm({ ...newOppForm, status })}
+                      onPress={() => setNewOppForm({ ...newOppForm, stage_id: stage.id })}
                     >
                       <Text style={{
-                        color: newOppForm.status === status ? statusConfig[status].color : '#8E8E93',
+                        color: newOppForm.stage_id === stage.id ? stage.color : '#8E8E93',
                         fontWeight: '600',
                         fontSize: 11
                       }}>
-                        {statusConfig[status].label}
+                        {stage.name}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -520,22 +1188,30 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
 
               <View style={styles.formGroupOpp}>
                 <Text style={styles.formLabelOpp}>Date Clôture</Text>
-                <TextInput
-                  style={styles.inputOpp}
-                  placeholder="2025-12-31"
-                  value={newOppForm.expectedCloseDate}
-                  onChangeText={(text) => setNewOppForm({ ...newOppForm, expectedCloseDate: text })}
-                  placeholderTextColor="#C7C7CC"
-                />
+                <TouchableOpacity
+                  style={styles.inputButton}
+                  onPress={() => showDatePicker('new')}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={
+                      newOppForm.expected_close_date
+                        ? styles.inputButtonText
+                        : styles.inputButtonPlaceholder
+                    }
+                  >
+                    {formatDateDisplay(newOppForm.expected_close_date)}
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               <View style={styles.formGroupOpp}>
-                <Text style={styles.formLabelOpp}>Notes</Text>
+                <Text style={styles.formLabelOpp}>Description</Text>
                 <TextInput
                   style={[styles.inputOpp, styles.textAreaOpp]}
-                  placeholder="Ajoutez des notes..."
-                  value={newOppForm.notes}
-                  onChangeText={(text) => setNewOppForm({ ...newOppForm, notes: text })}
+                  placeholder="Ajoutez une description..."
+                  value={newOppForm.description}
+                  onChangeText={(text) => setNewOppForm({ ...newOppForm, description: text })}
                   multiline
                   numberOfLines={3}
                   placeholderTextColor="#C7C7CC"
@@ -560,6 +1236,120 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
           </View>
         </View>
       </Modal>
+
+      <DateTimePickerWrapper
+        visible={isDatePickerVisible}
+        date={datePickerInitialDate}
+        onConfirm={handleDateConfirm}
+        onCancel={handleDateCancel}
+      />
+
+      {/* New Company Modal */}
+      <Modal
+        visible={newCompanyModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setNewCompanyModalVisible(false)}
+      >
+        <View style={styles.newModalContainer}>
+          <View style={styles.newModalContent}>
+            <View style={styles.newModalHeader}>
+              <Text style={styles.newModalTitle}>Nouvelle Entreprise</Text>
+              <TouchableOpacity onPress={() => setNewCompanyModalVisible(false)}>
+                <Text style={styles.closeButtonNew}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.newModalBody} showsVerticalScrollIndicator={false}>
+              <View style={styles.formGroupOpp}>
+                <Text style={styles.formLabelOpp}>Nom *</Text>
+                <TextInput
+                  style={styles.inputOpp}
+                  placeholder="Ex: Acme Corp"
+                  value={newCompanyForm.name}
+                  onChangeText={(text) => setNewCompanyForm({ ...newCompanyForm, name: text })}
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              <View style={styles.formGroupOpp}>
+                <Text style={styles.formLabelOpp}>Secteur</Text>
+                <TextInput
+                  style={styles.inputOpp}
+                  placeholder="Ex: Technologie"
+                  value={newCompanyForm.industry}
+                  onChangeText={(text) => setNewCompanyForm({ ...newCompanyForm, industry: text })}
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              <View style={styles.formGroupOpp}>
+                <Text style={styles.formLabelOpp}>Email</Text>
+                <TextInput
+                  style={styles.inputOpp}
+                  placeholder="contact@acme.com"
+                  value={newCompanyForm.email}
+                  onChangeText={(text) => setNewCompanyForm({ ...newCompanyForm, email: text })}
+                  keyboardType="email-address"
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              <View style={styles.formGroupOpp}>
+                <Text style={styles.formLabelOpp}>Téléphone</Text>
+                <TextInput
+                  style={styles.inputOpp}
+                  placeholder="+33 1 23 45 67 89"
+                  value={newCompanyForm.phone}
+                  onChangeText={(text) => setNewCompanyForm({ ...newCompanyForm, phone: text })}
+                  keyboardType="phone-pad"
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              <View style={styles.formGroupOpp}>
+                <Text style={styles.formLabelOpp}>Site Web</Text>
+                <TextInput
+                  style={styles.inputOpp}
+                  placeholder="https://www.acme.com"
+                  value={newCompanyForm.website}
+                  onChangeText={(text) => setNewCompanyForm({ ...newCompanyForm, website: text })}
+                  keyboardType="url"
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooterOpp}>
+              <TouchableOpacity
+                style={styles.buttonSecondaryOpp}
+                onPress={() => setNewCompanyModalVisible(false)}
+              >
+                <Text style={styles.buttonSecondaryTextOpp}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.buttonPrimaryOpp}
+                onPress={handleCreateCompany}
+              >
+                <Text style={styles.buttonPrimaryTextOpp}>Créer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <ConfirmModal
+        visible={confirmModalVisible}
+        title="Supprimer l'opportunité"
+        message="Êtes-vous sûr de vouloir supprimer cette opportunité ? Cette action est irréversible."
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        onConfirm={confirmDeleteOpportunity}
+        onCancel={() => {
+          setConfirmModalVisible(false);
+          setOpportunityToDelete(null);
+        }}
+      />
     </View>
   );
 }
@@ -571,7 +1361,7 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#FFFFFF',
-    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingTop: 16,
     paddingHorizontal: 20,
     paddingBottom: 16,
     flexDirection: 'row',
@@ -589,6 +1379,38 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#8E8E93',
     letterSpacing: -0.2,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#E5E5EA',
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 16,
+    padding: 4,
+    borderRadius: 12,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  tabButtonActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  tabButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8E8E93',
+    letterSpacing: -0.1,
+  },
+  tabButtonTextActive: {
+    color: '#007AFF',
   },
   addButton: {
     backgroundColor: '#007AFF',
@@ -631,6 +1453,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#000000',
     letterSpacing: -0.4,
+  },
+  deletedWrapper: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  deletedScroll: {
+    flex: 1,
+  },
+  deletedContent: {
+    paddingBottom: 32,
   },
   kanbanContainer: {
     flex: 1,
@@ -701,21 +1533,51 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 20,
   },
+  columnDropZone: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  columnDropZoneActive: {
+    borderColor: '#007AFF33',
+    backgroundColor: '#F0F8FF',
+  },
+  draggableWrapper: {
+    borderRadius: 12,
+  },
+  draggableWrapperDragging: {
+    opacity: 0.95,
+  },
   opportunityCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 2,
+    position: 'relative',
+  },
+  opportunityCardDragging: {
+    opacity: 0.85,
+  },
+  draggingCard: {
+    opacity: 0.9,
+    transform: [{ scale: 1.02 }],
+  },
+  cardClickableArea: {
+    padding: 14,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 8,
+  },
+  cardHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   cardTitle: {
     fontSize: 15,
@@ -729,6 +1591,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+  },
+  cardDeleteButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#FFE5E5',
+    zIndex: 999,
+    elevation: 999,
+  },
+  cardDeleteText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FF3B30',
+    letterSpacing: -0.1,
   },
   probabilityText: {
     fontSize: 12,
@@ -776,6 +1655,76 @@ const styles = StyleSheet.create({
     color: '#C7C7CC',
     letterSpacing: -0.2,
   },
+  emptyDeletedText: {
+    fontSize: 14,
+    color: '#8E8E93',
+    textAlign: 'center',
+    marginTop: 32,
+    letterSpacing: -0.1,
+  },
+  deletedCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  deletedHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  deletedTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    flex: 1,
+    marginRight: 12,
+    letterSpacing: -0.2,
+  },
+  deletedDate: {
+    fontSize: 12,
+    color: '#8E8E93',
+    letterSpacing: -0.1,
+  },
+  deletedValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#34C759',
+    letterSpacing: -0.2,
+    marginBottom: 4,
+  },
+  deletedStage: {
+    fontSize: 13,
+    color: '#8E8E93',
+    letterSpacing: -0.1,
+  },
+  deletedDescription: {
+    fontSize: 13,
+    color: '#6C6C70',
+    marginTop: 8,
+    lineHeight: 18,
+    letterSpacing: -0.1,
+  },
+  restoreButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  restoreButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -794,6 +1743,22 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#F2F2F7',
+  },
+  modalHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  editButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  editButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
   modalTitle: {
     fontSize: 20,
@@ -823,6 +1788,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#000000',
     letterSpacing: -0.2,
+  },
+  linkText: {
+    color: '#007AFF',
+    textDecorationLine: 'underline',
   },
   notesContainer: {
     marginTop: 16,
@@ -915,6 +1884,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#000000',
   },
+  inputButton: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  inputButtonText: {
+    fontSize: 14,
+    color: '#000000',
+    fontWeight: '600',
+  },
+  inputButtonPlaceholder: {
+    fontSize: 14,
+    color: '#C7C7CC',
+    fontWeight: '500',
+  },
   textAreaOpp: {
     height: 100,
     textAlignVertical: 'top',
@@ -962,5 +1949,191 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#8E8E93',
+  },
+  // Styles d'édition
+  editGroup: {
+    marginBottom: 16,
+  },
+  editLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8E8E93',
+    marginBottom: 8,
+  },
+  editInput: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#000000',
+    backgroundColor: '#FFFFFF',
+  },
+  editDateButton: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  editDateButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#000000',
+  },
+  editDatePlaceholderText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#C7C7CC',
+  },
+  editTextArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  statusSelectEdit: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statusButtonEdit: {
+    flex: 1,
+    minWidth: '30%',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  statusButtonEditActive: {
+    borderWidth: 2,
+  },
+  statusButtonEditText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  editActions: {
+    flexDirection: 'row',
+    marginTop: 20,
+    marginBottom: 16,
+  },
+  saveButton: {
+    flex: 1,
+    backgroundColor: '#34C759',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginRight: 6,
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#F2F2F7',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginLeft: 6,
+  },
+  cancelButtonText: {
+    color: '#8E8E93',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  deleteButton: {
+    backgroundColor: '#FEF6F6',
+    borderWidth: 1,
+    borderColor: '#FF3B30',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  deleteButtonText: {
+    color: '#FF3B30',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 15,
+    color: '#8E8E93',
+  },
+  dropdownButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  dropdownButtonText: {
+    fontSize: 15,
+    color: '#000000',
+    flex: 1,
+  },
+  dropdownArrow: {
+    fontSize: 12,
+    color: '#8E8E93',
+  },
+  dropdownList: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    maxHeight: 250,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  dropdownScroll: {
+    maxHeight: 200,
+  },
+  newCustomerButton: {
+    backgroundColor: '#007AFF',
+    padding: 12,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  newCustomerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  dropdownItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  dropdownItemSelected: {
+    backgroundColor: '#E3F2FD',
+  },
+  dropdownItemText: {
+    fontSize: 15,
+    color: '#000000',
+    fontWeight: '500',
+  },
+  dropdownItemSubtext: {
+    fontSize: 13,
+    color: '#8E8E93',
+    marginTop: 2,
   },
 });

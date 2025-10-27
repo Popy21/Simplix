@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { productService } from '../services/api';
 import { Product } from '../types';
+import Navigation from '../components/Navigation';
 
 interface ProductWithDetails extends Product {
   category?: string;
@@ -252,6 +253,7 @@ export default function ProductsScreen() {
 
   return (
     <View style={styles.container}>
+      <Navigation />
       {/* En-tête */}
       <View style={styles.header}>
         <View>

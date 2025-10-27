@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { Customer, Product, Sale, Supplier, Expense } from '../types';
 import { storage } from '../utils/storage';
+import logger from '../utils/logger';
 
 const API_BASE_URL = 'http://localhost:3000/api';
 
@@ -19,17 +20,31 @@ api.interceptors.request.use(
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
+      // Log API request
+      logger.apiRequest(config.method?.toUpperCase() || 'GET', config.url || '', config.data);
     } catch (error) {
       console.error('Error retrieving token:', error);
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    logger.error('API', 'Request interceptor error', error);
+    return Promise.reject(error);
+  }
 );
 
 // Response interceptor to handle 401 errors with token refresh
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Log successful API response
+    logger.apiResponse(
+      response.config.method?.toUpperCase() || 'GET',
+      response.config.url || '',
+      response.status,
+      response.data
+    );
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
@@ -75,6 +90,13 @@ api.interceptors.response.use(
       }
     }
 
+    // Log API error
+    logger.apiError(
+      error.config?.method?.toUpperCase() || 'UNKNOWN',
+      error.config?.url || '',
+      error.response?.data || error.message
+    );
+
     return Promise.reject(error);
   }
 );
@@ -86,6 +108,36 @@ export const customerService = {
   create: (customer: Customer) => api.post<Customer>('/customers', customer),
   update: (id: number, customer: Customer) => api.put<Customer>(`/customers/${id}`, customer),
   delete: (id: number) => api.delete(`/customers/${id}`),
+};
+
+// Company API
+export const companyService = {
+  getAll: () => api.get('/companies'),
+  getById: (id: string) => api.get(`/companies/${id}`),
+  create: (company: any) => api.post('/companies', company),
+  update: (id: string, company: any) => api.put(`/companies/${id}`, company),
+  delete: (id: string) => api.delete(`/companies/${id}`),
+};
+
+// Activities API
+export const activitiesService = {
+  getAll: (params?: { contact_id?: string; deal_id?: string; type?: string; from_date?: string; to_date?: string; user_id?: string }) =>
+    api.get('/activities', { params }),
+  getById: (id: string) => api.get(`/activities/${id}`),
+  getByContact: (contactId: string) => api.get(`/activities/contact/${contactId}`),
+  create: (activity: { type: string; description: string; contact_id?: string; deal_id?: string; activity_date?: string; scheduled_at?: string }) =>
+    api.post('/activities', activity),
+  createCall: (call: { contact_id: string; deal_id?: string; duration_minutes?: number; notes?: string; status?: string }) =>
+    api.post('/activities/call', call),
+  createEmail: (email: { contact_id: string; deal_id?: string; subject: string; email_body?: string; recipients?: string; status?: string }) =>
+    api.post('/activities/email', email),
+  createMeeting: (meeting: { contact_id: string; deal_id?: string; title: string; start_time: string; end_time?: string; location?: string; attendees?: string; notes?: string; status?: string }) =>
+    api.post('/activities/meeting', meeting),
+  createNote: (note: { contact_id?: string; deal_id?: string; content: string }) =>
+    api.post('/activities/note', note),
+  update: (id: string, activity: { type?: string; description?: string; status?: string; metadata?: any }) =>
+    api.put(`/activities/${id}`, activity),
+  delete: (id: string) => api.delete(`/activities/${id}`),
 };
 
 // Product API
@@ -118,6 +170,80 @@ export const saleService = {
   create: (sale: Sale) => api.post<Sale>('/sales', sale),
   update: (id: number, sale: Sale) => api.put<Sale>(`/sales/${id}`, sale),
   delete: (id: number) => api.delete(`/sales/${id}`),
+};
+
+// Quotes API
+export const quotesService = {
+  getAll: (params?: { status?: string; customer_id?: string }) => api.get('/quotes', { params }),
+  getById: (id: string) => api.get(`/quotes/${id}`),
+  create: (quote: any) => api.post('/quotes', quote),
+  update: (id: string, quote: any) => api.put(`/quotes/${id}`, quote),
+  delete: (id: string) => api.delete(`/quotes/${id}`),
+  convertToInvoice: (id: string) => api.post(`/quotes/${id}/convert-to-invoice`),
+  sendEmail: (id: string) => api.post(`/quotes/${id}/send-email`),
+};
+
+// Invoices API
+export const invoicesService = {
+  getAll: (params?: { status?: string; customer_id?: string; from_date?: string; to_date?: string; overdue?: boolean }) =>
+    api.get('/invoices', { params }),
+  getById: (id: string) => api.get(`/invoices/${id}`),
+  create: (invoice: any) => api.post('/invoices', invoice),
+  update: (id: string, invoice: any) => api.put(`/invoices/${id}`, invoice),
+  delete: (id: string) => api.delete(`/invoices/${id}`),
+  sendReminder: (id: string) => api.post(`/invoices/${id}/send-reminder`),
+  markAsPaid: (id: string, data: { payment_method: string; payment_date: string; amount: number; reference?: string }) =>
+    api.post(`/invoices/${id}/mark-as-paid`, data),
+  sendEmail: (id: string) => api.post(`/invoices/${id}/send-email`),
+};
+
+// Payments API
+export const paymentsService = {
+  getAll: (params?: { invoice_id?: string; from_date?: string; to_date?: string; payment_method?: string }) =>
+    api.get('/payments', { params }),
+  getById: (id: string) => api.get(`/payments/${id}`),
+  create: (payment: { invoice_id: string; amount: number; payment_date: string; payment_method: string; reference?: string; notes?: string }) =>
+    api.post('/payments', payment),
+  delete: (id: string) => api.delete(`/payments/${id}`),
+  processCardPayment: (data: { invoice_id: string; amount: number; card_token: string }) =>
+    api.post('/payments/process-card', data),
+  processApplePay: (data: { invoice_id: string; amount: number; apple_pay_token: string }) =>
+    api.post('/payments/process-apple-pay', data),
+  processGooglePay: (data: { invoice_id: string; amount: number; google_pay_token: string }) =>
+    api.post('/payments/process-google-pay', data),
+};
+
+// Dashboard API
+export const dashboardService = {
+  getKPIs: (period: 'week' | 'month' | 'quarter' | 'year' = 'month') =>
+    api.get('/dashboard/kpis', { params: { period } }),
+  getRevenue: (period: 'week' | 'month' | 'quarter' | 'year' = 'month') =>
+    api.get('/dashboard/revenue', { params: { period } }),
+  getCashFlow: (period: 'week' | 'month' | 'quarter' | 'year' = 'month') =>
+    api.get('/dashboard/cashflow', { params: { period } }),
+  getInvoicesMetrics: (period: 'week' | 'month' | 'quarter' | 'year' = 'month') =>
+    api.get('/dashboard/invoices-metrics', { params: { period } }),
+  getCustomerMetrics: (period: 'week' | 'month' | 'quarter' | 'year' = 'month') =>
+    api.get('/dashboard/customer-metrics', { params: { period } }),
+  getProjections: (period: 'week' | 'month' | 'quarter' | 'year' = 'month') =>
+    api.get('/dashboard/projections', { params: { period } }),
+  createProjection: (projection: {
+    projection_date: string;
+    projection_type: string;
+    projected_revenue: number;
+    projected_costs?: number;
+    confidence_level?: number;
+  }) => api.post('/dashboard/projections', projection),
+};
+
+// Templates API
+export const templatesService = {
+  getAll: () => api.get('/templates'),
+  getById: (id: string) => api.get(`/templates/${id}`),
+  getDefault: () => api.get('/templates/default/template'),
+  create: (template: any) => api.post('/templates', template),
+  update: (id: string, template: any) => api.put(`/templates/${id}`, template),
+  delete: (id: string) => api.delete(`/templates/${id}`),
 };
 
 // Expenses API
@@ -260,38 +386,46 @@ export const notificationsService = {
 export const tasksService = {
   getAll: (params?: { userId?: number; status?: string; priority?: string }) =>
     api.get('/tasks', { params }),
-  getById: (id: number) => api.get(`/tasks/${id}`),
-  create: (data: { title: string; description?: string; assigned_to: number; customer_id?: number; due_date?: string; priority?: string; status?: string }) =>
+  getById: (id: string) => api.get(`/tasks/${id}`),
+  create: (data: { title: string; description?: string; assigned_to: string; company_id?: string; contact_id?: string; due_date?: string; priority?: string; status?: string }) =>
     api.post('/tasks', data),
-  update: (id: number, data: any) => api.put(`/tasks/${id}`, data),
-  updateStatus: (id: number, status: string) => api.patch(`/tasks/${id}/status`, { status }),
-  delete: (id: number) => api.delete(`/tasks/${id}`),
+  update: (id: string, data: any) => api.put(`/tasks/${id}`, data),
+  updateStatus: (id: string, status: string) => api.patch(`/tasks/${id}/status`, { status }),
+  delete: (id: string) => api.delete(`/tasks/${id}`),
   getByUser: (userId: number, status?: string) =>
     api.get(`/tasks/user/${userId}${status ? `?status=${status}` : ''}`),
   getOverdue: () => api.get('/tasks/overdue/all'),
+  getRecentlyDeleted: (params?: { limit?: number }) =>
+    api.get('/tasks/deleted/recent', { params }),
+  restore: (id: string) => api.patch(`/tasks/${id}/restore`),
 };
 
 // Pipeline API
 export const pipelineService = {
   // Stages
   getStages: () => api.get('/pipeline/stages'),
-  getStageById: (id: number) => api.get(`/pipeline/stages/${id}`),
+  getStageById: (id: string | number) => api.get(`/pipeline/stages/${id}`),
   createStage: (data: { name: string; color?: string; position?: number }) =>
     api.post('/pipeline/stages', data),
-  updateStage: (id: number, data: any) => api.put(`/pipeline/stages/${id}`, data),
-  deleteStage: (id: number) => api.delete(`/pipeline/stages/${id}`),
-  
+  updateStage: (id: string | number, data: any) => api.put(`/pipeline/stages/${id}`, data),
+  deleteStage: (id: string | number) => api.delete(`/pipeline/stages/${id}`),
+
   // Opportunities
-  getOpportunities: (params?: { stageId?: number; userId?: number; customerId?: number }) =>
+  getOpportunities: (params?: { stageId?: string | number; userId?: string | number; customerId?: string | number }) =>
     api.get('/pipeline/opportunities', { params }),
-  getOpportunityById: (id: number) => api.get(`/pipeline/opportunities/${id}`),
-  createOpportunity: (data: { name: string; customer_id: number; user_id: number; stage_id: number; value?: number; probability?: number; expected_close_date?: string; description?: string }) =>
+  getOpportunityById: (id: string | number) => api.get(`/pipeline/opportunities/${id}`),
+  createOpportunity: (data: { name: string; customer_id?: string | number; user_id: string | number; stage_id: string | number; value?: number; probability?: number; expected_close_date?: string; description?: string }) =>
     api.post('/pipeline/opportunities', data),
-  updateOpportunity: (id: number, data: any) => api.put(`/pipeline/opportunities/${id}`, data),
-  moveOpportunity: (id: number, stage_id: number) =>
+  updateOpportunity: (id: string | number, data: any) => api.put(`/pipeline/opportunities/${id}`, data),
+  moveOpportunity: (id: string | number, stage_id: string | number) =>
     api.patch(`/pipeline/opportunities/${id}/stage`, { stage_id }),
-  deleteOpportunity: (id: number) => api.delete(`/pipeline/opportunities/${id}`),
-  
+  moveOpportunityToStage: (id: string | number, stage_id: string | number) =>
+    api.patch(`/pipeline/opportunities/${id}/stage`, { stage_id }),
+  deleteOpportunity: (id: string | number) => api.delete(`/pipeline/opportunities/${id}`),
+  getRecentlyDeletedOpportunities: (params?: { limit?: number }) =>
+    api.get('/pipeline/opportunities/deleted/recent', { params }),
+  restoreOpportunity: (id: string | number) => api.patch(`/pipeline/opportunities/${id}/restore`),
+
   // Summary
   getSummary: () => api.get('/pipeline/summary'),
 };

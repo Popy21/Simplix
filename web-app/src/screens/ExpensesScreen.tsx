@@ -16,6 +16,7 @@ import {
 import { expenseService, supplierService } from '../services/api';
 import { Expense, Supplier } from '../types';
 import { DollarIcon, FileTextIcon, CalendarIcon } from '../components/Icons';
+import Navigation from '../components/Navigation';
 
 type ExpenseFilters = {
   status?: string;
@@ -180,6 +181,7 @@ const ExpensesScreen = () => {
 
   return (
     <View style={styles.container}>
+      <Navigation />
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={styles.content}

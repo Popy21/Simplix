@@ -2,6 +2,7 @@ import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import customersRouter from './routes/customers';
+import companiesRouter from './routes/companies';
 import productsRouter from './routes/products';
 import salesRouter from './routes/sales';
 import authRouter from './routes/auth';
@@ -27,6 +28,10 @@ import workflowsRouter from './routes/workflows';
 import emailsRouter from './routes/emails';
 import suppliersRouter from './routes/suppliers';
 import expensesRouter from './routes/expenses';
+import logsRouter from './routes/logs';
+import dashboardRouter from './routes/dashboard';
+import templatesRouter from './routes/templates';
+import logger from './utils/logger';
 
 dotenv.config();
 
@@ -37,6 +42,9 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Logger middleware
+app.use(logger.httpMiddleware());
 
 // Routes
 app.get('/', (req: Request, res: Response) => {
@@ -61,13 +69,16 @@ app.get('/', (req: Request, res: Response) => {
       invoices: '/api/invoices',
       payments: '/api/payments',
       suppliers: '/api/suppliers',
-      expenses: '/api/expenses'
+      expenses: '/api/expenses',
+      dashboard: '/api/dashboard',
+      templates: '/api/templates'
     }
   });
 });
 
 app.use('/api/auth', authRouter);
 app.use('/api/customers', customersRouter);
+app.use('/api/companies', companiesRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/sales', salesRouter);
 app.use('/api/teams', teamsRouter);
@@ -92,11 +103,23 @@ app.use('/api/workflows', workflowsRouter);
 app.use('/api/emails', emailsRouter);
 app.use('/api/suppliers', suppliersRouter);
 app.use('/api/expenses', expensesRouter);
+app.use('/api/logs', logsRouter);
+app.use('/api/dashboard', dashboardRouter);
+app.use('/api/templates', templatesRouter);
 
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: Function) => {
+  // Always log the full stack on the server
   console.error(err.stack);
-  res.status(500).json({ error: 'Something went wrong!' });
+
+  // In development, expose the error message and stack to help debugging.
+  // In production, return a generic message to avoid leaking internals.
+  const isProd = process.env.NODE_ENV === 'production';
+  if (!isProd) {
+    res.status(500).json({ error: err.message || 'Internal Server Error', stack: err.stack });
+  } else {
+    res.status(500).json({ error: 'Something went wrong!' });
+  }
 });
 
 // Start server

@@ -12,6 +12,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { TrendingUpIcon, TrendingDownIcon, UsersIcon } from '../components/Icons';
+import Navigation from '../components/Navigation';
 
 type AnalyticsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -210,6 +211,7 @@ export default function AnalyticsScreen({ navigation }: AnalyticsScreenProps) {
 
   return (
     <View style={styles.container}>
+      <Navigation />
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>📊 Analytics</Text>
@@ -364,7 +366,7 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#FFFFFF',
-    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingTop: 16,
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,

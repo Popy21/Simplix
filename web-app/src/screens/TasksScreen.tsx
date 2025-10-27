@@ -8,6 +8,8 @@ import {
   TextInput,
   Modal,
   Alert,
+  Dimensions,
+  GestureResponderEvent,
   Platform,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -18,14 +20,27 @@ import {
   AlertTriangleIcon,
   CalendarIcon,
   UsersIcon,
+  XCircleIcon,
 } from '../components/Icons';
+import Navigation from '../components/Navigation';
+import {
+  MaybeDraxProvider,
+  MaybeDraxDraggable,
+  MaybeDraxDroppable,
+} from '../components/shared/MaybeDrax';
+import logger from '../utils/logger';
+import { tasksService, customerService, companyService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import ConfirmModal from '../components/shared/ConfirmModal';
+import DatePicker from '../components/shared/DatePicker';
+import Dropdown from '../components/shared/Dropdown';
 
 type TasksScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Tasks'>;
 };
 
 type Priority = 'high' | 'medium' | 'low';
-type TaskStatus = 'todo' | 'in_progress' | 'done';
+type TaskStatus = string; // Allow custom statuses for Kanban columns
 
 interface Task {
   id: string;
@@ -38,69 +53,94 @@ interface Task {
   relatedTo?: string;
 }
 
-export default function TasksScreen({ navigation }: TasksScreenProps) {
-  const [tasks, setTasks] = useState<Task[]>([
-    {
-      id: '1',
-      title: 'Appeler TechCorp pour rendez-vous',
-      description: 'Planifier une démo du produit',
-      priority: 'high',
-      status: 'todo',
-      dueDate: '2025-10-23',
-      assignedTo: 'Marie Dubois',
-      relatedTo: 'TechCorp',
-    },
-    {
-      id: '2',
-      title: 'Envoyer proposition commerciale',
-      description: 'Préparer et envoyer la proposition pour BigCorp',
-      priority: 'high',
-      status: 'in_progress',
-      dueDate: '2025-10-24',
-      assignedTo: 'Jean Martin',
-      relatedTo: 'BigCorp',
-    },
-    {
-      id: '3',
-      title: 'Relance client StartupXYZ',
-      description: 'Follow-up sur le devis envoyé',
-      priority: 'medium',
-      status: 'todo',
-      dueDate: '2025-10-25',
-      assignedTo: 'Sophie Laurent',
-      relatedTo: 'StartupXYZ',
-    },
-    {
-      id: '4',
-      title: 'Réunion équipe commerciale',
-      description: 'Review des performances du mois',
-      priority: 'medium',
-      status: 'todo',
-      dueDate: '2025-10-26',
-      assignedTo: 'Pierre Leroy',
-    },
-    {
-      id: '5',
-      title: 'Mettre à jour le CRM',
-      description: 'Saisir les nouveaux contacts',
-      priority: 'low',
-      status: 'done',
-      dueDate: '2025-10-22',
-      assignedTo: 'Marie Dubois',
-    },
-  ]);
+interface Column {
+  id: TaskStatus;
+  title: string;
+  color: string;
+  icon: React.ComponentType<any>;
+}
 
+const { width } = Dimensions.get('window');
+const COLUMN_WIDTH = Math.min(width - 40, 340);
+
+export default function TasksScreen({ navigation }: TasksScreenProps) {
+  const { user } = useAuth();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<any[]>([]);
+
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [selectedFilter, setSelectedFilter] = useState<TaskStatus | 'all'>('all');
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [newTaskModalVisible, setNewTaskModalVisible] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editForm, setEditForm] = useState<Task | null>(null);
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const [columnModalVisible, setColumnModalVisible] = useState(false);
+  const [editingColumn, setEditingColumn] = useState<Column | null>(null);
+  const [columnForm, setColumnForm] = useState({ title: '', color: '#0052CC' });
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [newTaskForm, setNewTaskForm] = useState({
     title: '',
     description: '',
     priority: 'medium' as Priority,
     dueDate: '',
-    assignedTo: '',
+    assignedTo: user?.id || '',
+    relatedTo: '',
   });
+
+  // Load columns from localStorage or use defaults
+  const loadColumns = (): Column[] => {
+    if (Platform.OS === 'web') {
+      try {
+        const saved = localStorage.getItem('taskColumns');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // Map icon names back to icon components
+          return parsed.map((col: any) => ({
+            ...col,
+            icon: col.iconName === 'Clock' ? ClockIcon :
+                  col.iconName === 'AlertTriangle' ? AlertTriangleIcon :
+                  col.iconName === 'CheckCircle' ? CheckCircleIcon : ClockIcon,
+          }));
+        }
+      } catch (err) {
+        console.error('Error loading columns from localStorage:', err);
+      }
+    }
+    return [
+      { id: 'todo', title: 'À faire', color: '#6C757D', icon: ClockIcon },
+      { id: 'in_progress', title: 'En cours', color: '#0052CC', icon: AlertTriangleIcon },
+      { id: 'completed', title: 'Terminé', color: '#00875A', icon: CheckCircleIcon },
+    ];
+  };
+
+  const [columns, setColumns] = useState<Column[]>(loadColumns());
+
+  // Save columns to localStorage whenever they change
+  const saveColumns = (newColumns: Column[]) => {
+    if (Platform.OS === 'web') {
+      try {
+        // Map icon components to names for serialization
+        const toSave = newColumns.map(col => ({
+          id: col.id,
+          title: col.title,
+          color: col.color,
+          iconName: col.icon === ClockIcon ? 'Clock' :
+                    col.icon === AlertTriangleIcon ? 'AlertTriangle' :
+                    col.icon === CheckCircleIcon ? 'CheckCircle' : 'Clock',
+        }));
+        localStorage.setItem('taskColumns', JSON.stringify(toSave));
+      } catch (err) {
+        console.error('Error saving columns to localStorage:', err);
+      }
+    }
+    setColumns(newColumns);
+  };
 
   const priorityConfig = {
     high: { label: 'Urgent', color: '#FF3B30', bgColor: '#FF3B3020' },
@@ -108,72 +148,337 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
     low: { label: 'Faible', color: '#34C759', bgColor: '#34C75920' },
   };
 
-  const statusConfig = {
-    todo: { label: 'À faire', color: '#8E8E93', icon: ClockIcon },
-    in_progress: { label: 'En cours', color: '#007AFF', icon: AlertTriangleIcon },
-    done: { label: 'Terminé', color: '#34C759', icon: CheckCircleIcon },
+  // Load tasks and reference data from API
+  React.useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [tasksRes, customersRes, companiesRes] = await Promise.all([
+        tasksService.getAll(),
+        customerService.getAll(),
+        companyService.getAll(),
+      ]);
+
+      // Use current user as the only assignee option for now
+      if (user) {
+        setUsers([
+          { id: user.id, name: user.full_name || user.email, email: user.email },
+        ]);
+      }
+
+      // Map API response to our Task interface
+      const mappedTasks: Task[] = tasksRes.data.map((task: any) => {
+        // Find assigned user name
+        const assignedUserName = task.assigned_to === user?.id
+          ? (user.full_name || user.email)
+          : 'Utilisateur inconnu';
+
+        return {
+          id: task.id.toString(),
+          title: task.title,
+          description: task.description || '',
+          priority: task.priority || 'medium',
+          status: task.status || 'todo',
+          dueDate: task.due_date || new Date().toISOString().split('T')[0],
+          assignedTo: assignedUserName,
+          relatedTo: task.customer_id?.toString() || undefined,
+        };
+      });
+      setTasks(mappedTasks);
+      setCustomers(customersRes.data);
+      setCompanies(companiesRes.data);
+
+      logger.success('TASKS', 'Data loaded successfully', {
+        tasks: mappedTasks.length,
+        customers: customersRes.data.length,
+        companies: companiesRes.data.length,
+      });
+    } catch (err: any) {
+      logger.error('TASKS', 'Failed to load data', { error: err.message });
+      console.error('Erreur chargement données:', err);
+      setTasks([]);
+      setCustomers([]);
+      setCompanies([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const toggleTaskStatus = (taskId: string) => {
-    setTasks((prev) =>
-      prev.map((task) => {
-        if (task.id === taskId) {
-          const newStatus: TaskStatus =
-            task.status === 'todo'
-              ? 'in_progress'
-              : task.status === 'in_progress'
-              ? 'done'
-              : 'todo';
-          return { ...task, status: newStatus };
-        }
-        return task;
-      })
-    );
-  };
-
-  const handleCreateTask = () => {
+  const handleCreateTask = async () => {
     if (!newTaskForm.title.trim()) {
-      Alert.alert('Erreur', 'Veuillez entrer un titre pour la tâche');
+      if (Platform.OS === 'web') {
+        alert('Veuillez entrer un titre pour la tâche');
+      } else {
+        Alert.alert('Erreur', 'Veuillez entrer un titre pour la tâche');
+      }
       return;
     }
 
-    const newTask: Task = {
-      id: `task_${Date.now()}`,
-      title: newTaskForm.title,
-      description: newTaskForm.description,
-      priority: newTaskForm.priority,
-      status: 'todo',
-      dueDate: newTaskForm.dueDate || new Date().toISOString().split('T')[0],
-      assignedTo: newTaskForm.assignedTo || 'Non assignée',
-    };
+    try {
+      logger.info('TASKS', 'Creating new task', { title: newTaskForm.title });
 
-    setTasks([...tasks, newTask]);
-    setNewTaskForm({ title: '', description: '', priority: 'medium', dueDate: '', assignedTo: '' });
-    setNewTaskModalVisible(false);
-    Alert.alert('Succès', `Tâche "${newTask.title}" créée avec succès!`);
+      // Determine if relatedTo is a company or contact
+      let company_id: string | undefined;
+      let contact_id: string | undefined;
+
+      if (newTaskForm.relatedTo) {
+        if (newTaskForm.relatedTo.startsWith('company_')) {
+          company_id = newTaskForm.relatedTo.replace('company_', '');
+        } else {
+          contact_id = newTaskForm.relatedTo;
+        }
+      }
+
+      // Create task via API
+      const response = await tasksService.create({
+        title: newTaskForm.title,
+        description: newTaskForm.description,
+        assigned_to: newTaskForm.assignedTo || user?.id, // Use current user if not specified
+        company_id,
+        contact_id,
+        due_date: newTaskForm.dueDate || new Date().toISOString().split('T')[0],
+        priority: newTaskForm.priority,
+        status: 'todo',
+      });
+
+      const createdTask = response.data;
+
+      // Find assigned user name
+      const assignedUserName = createdTask.assigned_to === user?.id
+        ? (user.full_name || user.email)
+        : 'Utilisateur inconnu';
+
+      // Add to local state
+      const newTask: Task = {
+        id: createdTask.id.toString(),
+        title: createdTask.title,
+        description: createdTask.description || '',
+        priority: createdTask.priority,
+        status: createdTask.status,
+        dueDate: createdTask.due_date,
+        assignedTo: assignedUserName,
+        relatedTo: createdTask.customer_id?.toString() || undefined,
+      };
+
+      setTasks([...tasks, newTask]);
+      setNewTaskForm({
+        title: '',
+        description: '',
+        priority: 'medium',
+        dueDate: '',
+        assignedTo: user?.id || '',
+        relatedTo: '',
+      });
+      setNewTaskModalVisible(false);
+
+      logger.success('TASKS', 'Task created successfully', { id: newTask.id });
+    } catch (err: any) {
+      logger.error('TASKS', 'Failed to create task', { error: err.message });
+      console.error('Erreur création tâche:', err);
+
+      if (Platform.OS === 'web') {
+        alert('Erreur: Impossible de créer la tâche');
+      } else {
+        Alert.alert('Erreur', 'Impossible de créer la tâche');
+      }
+    }
   };
 
   const handleResetTaskForm = () => {
-    setNewTaskForm({ title: '', description: '', priority: 'medium', dueDate: '', assignedTo: '' });
+    setNewTaskForm({
+      title: '',
+      description: '',
+      priority: 'medium',
+      dueDate: '',
+      assignedTo: user?.id || '',
+      relatedTo: '',
+    });
     setNewTaskModalVisible(false);
   };
 
-  const deleteTask = (taskId: string) => {
-    Alert.alert('Supprimer la tâche', 'Êtes-vous sûr de vouloir supprimer cette tâche ?', [
-      { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Supprimer',
-        style: 'destructive',
-        onPress: () => setTasks((prev) => prev.filter((task) => task.id !== taskId)),
-      },
-    ]);
+  const openAddColumn = () => {
+    setEditingColumn(null);
+    setColumnForm({ title: '', color: '#0052CC' });
+    setColumnModalVisible(true);
   };
 
-  const filteredTasks =
-    selectedFilter === 'all' ? tasks : tasks.filter((task) => task.status === selectedFilter);
+  const openEditColumn = (column: Column) => {
+    setEditingColumn(column);
+    setColumnForm({ title: column.title, color: column.color });
+    setColumnModalVisible(true);
+  };
+
+  const handleSaveColumn = () => {
+    if (!columnForm.title.trim()) {
+      if (Platform.OS === 'web') {
+        alert('Veuillez entrer un nom pour la colonne');
+      } else {
+        Alert.alert('Erreur', 'Veuillez entrer un nom pour la colonne');
+      }
+      return;
+    }
+
+    if (editingColumn) {
+      // Renommer
+      const updated = columns.map((col) =>
+        col.id === editingColumn.id
+          ? { ...col, title: columnForm.title, color: columnForm.color }
+          : col
+      );
+      saveColumns(updated);
+      if (Platform.OS === 'web') {
+        alert('Colonne mise à jour');
+      } else {
+        Alert.alert('Succès', 'Colonne mise à jour');
+      }
+    } else {
+      // Ajouter
+      const newColumn: Column = {
+        id: `col_${Date.now()}` as TaskStatus,
+        title: columnForm.title,
+        color: columnForm.color,
+        icon: ClockIcon,
+      };
+      saveColumns([...columns, newColumn]);
+      Alert.alert('Succès', 'Colonne créée');
+    }
+
+    setColumnModalVisible(false);
+    setColumnForm({ title: '', color: '#0052CC' });
+    setEditingColumn(null);
+  };
+
+  const handleDeleteColumn = (columnId: TaskStatus) => {
+    const tasksInColumn = tasks.filter((t) => t.status === columnId);
+
+    if (tasksInColumn.length > 0) {
+      if (Platform.OS === 'web') {
+        alert(`Cette colonne contient ${tasksInColumn.length} tâche(s). Déplacez-les d'abord.`);
+      } else {
+        Alert.alert(
+          'Impossible de supprimer',
+          `Cette colonne contient ${tasksInColumn.length} tâche(s). Déplacez-les d'abord.`
+        );
+      }
+      return;
+    }
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Êtes-vous sûr de vouloir supprimer cette colonne ?')) {
+        const updated = columns.filter((col) => col.id !== columnId);
+        saveColumns(updated);
+        alert('Colonne supprimée');
+      }
+    } else {
+      Alert.alert(
+        'Supprimer la colonne',
+        'Êtes-vous sûr de vouloir supprimer cette colonne ?',
+        [
+          { text: 'Annuler', style: 'cancel' },
+          {
+            text: 'Supprimer',
+            style: 'destructive',
+            onPress: () => {
+              const updated = columns.filter((col) => col.id !== columnId);
+              saveColumns(updated);
+              Alert.alert('Succès', 'Colonne supprimée');
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  const deleteTask = (taskId: string) => {
+    setTaskToDelete(taskId);
+    setConfirmModalVisible(true);
+  };
+
+  const confirmDeleteTask = async () => {
+    if (!taskToDelete) return;
+
+    const taskId = taskToDelete;
+    setConfirmModalVisible(false);
+    setTaskToDelete(null);
+
+    try {
+      logger.info('DELETE', 'Deleting task', { taskId });
+      await tasksService.delete(taskId);
+      setTasks((prev) => prev.filter((task) => task.id !== taskId));
+      setModalVisible(false);
+      setIsEditMode(false);
+      setSelectedTask(null);
+      setEditForm(null);
+      logger.success('DELETE', 'Task deleted successfully', { taskId });
+    } catch (err: any) {
+      logger.error('DELETE', 'Failed to delete task', { taskId, error: err.message });
+      console.error('Erreur suppression tâche:', err);
+
+      if (Platform.OS === 'web') {
+        alert('Erreur: Impossible de supprimer la tâche');
+      } else {
+        Alert.alert('Erreur', 'Impossible de supprimer la tâche');
+      }
+    }
+  };
+
+  const moveTask = async (taskId: string, newStatus: TaskStatus) => {
+    const previousTask = tasks.find(t => t.id === taskId);
+    if (!previousTask || previousTask.status === newStatus) {
+      setDraggingTaskId(null);
+      return;
+    }
+
+    // Optimistic update
+    setTasks((prev) =>
+      prev.map((task) => (task.id === taskId ? { ...task, status: newStatus } : task))
+    );
+
+    try {
+      logger.info('TASKS', 'Moving task to new status', { taskId, newStatus });
+      await tasksService.updateStatus(taskId, newStatus);
+      logger.success('TASKS', 'Task moved successfully', { taskId, newStatus });
+    } catch (err: any) {
+      logger.error('TASKS', 'Failed to move task', { taskId, newStatus, error: err.message });
+      // Rollback on error
+      setTasks((prev) =>
+        prev.map((task) => (task.id === taskId ? previousTask : task))
+      );
+      if (Platform.OS === 'web') {
+        alert('Erreur: Impossible de déplacer la tâche');
+      } else {
+        Alert.alert('Erreur', 'Impossible de déplacer la tâche');
+      }
+    } finally {
+      setDraggingTaskId(null);
+    }
+
+    // Update selected task and edit form if currently viewing this task
+    if (selectedTask?.id === taskId) {
+      const updatedTask = { ...selectedTask, status: newStatus };
+      setSelectedTask(updatedTask);
+      if (editForm?.id === taskId) {
+        setEditForm(updatedTask);
+      }
+    }
+  };
+
+  const handleUpdateTask = () => {
+    if (!editForm) return;
+
+    setTasks((prev) => prev.map((t) => (t.id === editForm.id ? editForm : t)));
+    setSelectedTask(editForm);
+    setIsEditMode(false);
+    Alert.alert('Succès', 'Tâche mise à jour');
+  };
 
   const openTaskDetails = (task: Task) => {
-    setSelectedTask(task);
+    setSelectedTask({ ...task });
+    setEditForm({ ...task });
+    setIsEditMode(false);
     setModalVisible(true);
   };
 
@@ -185,63 +490,180 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
     return new Date(dueDate).toDateString() === new Date().toDateString();
   };
 
-  const renderTask = (task: Task) => {
+  const renderTaskCard = (task: Task, index: number) => {
     const priorityStyle = priorityConfig[task.priority];
-    const StatusIcon = statusConfig[task.status].icon;
-    const overdue = isOverdue(task.dueDate) && task.status !== 'done';
+    const overdue = isOverdue(task.dueDate) && task.status !== 'completed';
+    const today = isToday(task.dueDate);
+    const isDragging = draggingTaskId === task.id;
+
+    const cardContent = (
+      <View style={[styles.taskCard, isDragging && styles.taskCardDragging]}>
+        <TouchableOpacity
+          style={styles.cardClickableArea}
+          onPress={() => openTaskDetails(task)}
+          activeOpacity={0.85}
+        >
+          <View style={styles.cardHeader}>
+            <View style={[styles.priorityBadge, { backgroundColor: priorityStyle.bgColor }]}>
+              <Text style={[styles.priorityText, { color: priorityStyle.color }]}>
+                {priorityStyle.label}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {task.title}
+          </Text>
+
+          {task.description && (
+            <Text style={styles.cardDescription} numberOfLines={2}>
+              {task.description}
+            </Text>
+          )}
+
+          <View style={styles.cardFooter}>
+            <View style={styles.cardFooterLeft}>
+              <View style={styles.metaItem}>
+                <CalendarIcon size={14} color={overdue ? '#FF3B30' : today ? '#FF9500' : '#8E8E93'} />
+                <Text
+                  style={[
+                    styles.metaText,
+                    overdue && styles.metaTextOverdue,
+                    today && styles.metaTextToday,
+                  ]}
+                >
+                  {overdue
+                    ? 'En retard'
+                    : today
+                    ? "Aujourd'hui"
+                    : new Date(task.dueDate).toLocaleDateString('fr-FR', {
+                        day: 'numeric',
+                        month: 'short',
+                      })}
+                </Text>
+              </View>
+              {task.assignedTo && (
+                <View style={styles.metaItem}>
+                  <UsersIcon size={14} color="#8E8E93" />
+                  <Text style={styles.metaText} numberOfLines={1}>
+                    {task.assignedTo.split(' ')[0]}
+                  </Text>
+                </View>
+              )}
+            </View>
+            {task.relatedTo && (
+              <View style={styles.relatedBadge}>
+                <Text style={styles.relatedText} numberOfLines={1}>
+                  {task.relatedTo}
+                </Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.cardDeleteButton}
+          onPress={(event: GestureResponderEvent) => {
+            event.stopPropagation();
+            logger.click('TasksScreen', 'Delete button clicked', { taskId: task.id });
+            deleteTask(task.id);
+          }}
+          // @ts-ignore
+          data-no-drag="true"
+          // @ts-ignore
+          pointerEvents="auto"
+        >
+          <XCircleIcon size={18} color="#8E8E93" />
+        </TouchableOpacity>
+      </View>
+    );
+
+    if (viewMode === 'kanban') {
+      return (
+        <MaybeDraxDraggable
+          key={`task-${task.id}-${index}`}
+          payload={task.id}
+          style={styles.draggableWrapper}
+          draggingStyle={styles.draggableWrapperDragging}
+          onDragStart={() => setDraggingTaskId(task.id)}
+          onDragEnd={() => setDraggingTaskId((prev) => (prev === task.id ? null : prev))}
+        >
+          {cardContent}
+        </MaybeDraxDraggable>
+      );
+    }
+
+    return <View key={`task-${task.id}-${index}`}>{cardContent}</View>;
+  };
+
+  const renderListTask = (task: Task) => {
+    const priorityStyle = priorityConfig[task.priority];
+    const StatusIcon = columns.find((c) => c.id === task.status)?.icon || ClockIcon;
+    const overdue = isOverdue(task.dueDate) && task.status !== 'completed';
     const today = isToday(task.dueDate);
 
     return (
       <TouchableOpacity
         key={task.id}
         style={[
-          styles.taskCard,
-          task.status === 'done' && styles.taskCardDone,
-          overdue && styles.taskCardOverdue,
+          styles.listTaskCard,
+          task.status === 'completed' && styles.listTaskCardDone,
+          overdue && styles.listTaskCardOverdue,
         ]}
         onPress={() => openTaskDetails(task)}
         activeOpacity={0.7}
       >
-        <View style={styles.taskHeader}>
-          <TouchableOpacity
+        <View style={styles.listTaskHeader}>
+          <View
             style={[
-              styles.checkbox,
-              task.status === 'done' && styles.checkboxChecked,
-              task.status === 'in_progress' && styles.checkboxInProgress,
+              styles.listCheckbox,
+              task.status === 'completed' && styles.listCheckboxChecked,
+              task.status === 'in_progress' && styles.listCheckboxInProgress,
             ]}
-            onPress={() => toggleTaskStatus(task.id)}
           >
-            {task.status === 'done' && <CheckCircleIcon size={20} color="#34C759" />}
-            {task.status === 'in_progress' && <ClockIcon size={20} color="#007AFF" />}
-          </TouchableOpacity>
+            {task.status === 'completed' && <CheckCircleIcon size={20} color="#00875A" />}
+            {task.status === 'in_progress' && <ClockIcon size={20} color="#0052CC" />}
+          </View>
 
-          <View style={styles.taskContent}>
-            <View style={styles.taskTitleRow}>
+          <View style={styles.listTaskContent}>
+            <View style={styles.listTaskTitleRow}>
               <Text
                 style={[
-                  styles.taskTitle,
-                  task.status === 'done' && styles.taskTitleDone,
+                  styles.listTaskTitle,
+                  task.status === 'completed' && styles.listTaskTitleDone,
                 ]}
                 numberOfLines={2}
               >
                 {task.title}
               </Text>
+              <TouchableOpacity
+                style={styles.listDeleteButton}
+                onPress={(event: GestureResponderEvent) => {
+                  event.stopPropagation();
+                  deleteTask(task.id);
+                }}
+                // @ts-ignore
+                data-no-drag="true"
+              >
+                <XCircleIcon size={18} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+
+            {task.description && (
+              <Text style={styles.listTaskDescription} numberOfLines={2}>
+                {task.description}
+              </Text>
+            )}
+
+            <View style={styles.listTaskMeta}>
               <View style={[styles.priorityBadge, { backgroundColor: priorityStyle.bgColor }]}>
                 <Text style={[styles.priorityText, { color: priorityStyle.color }]}>
                   {priorityStyle.label}
                 </Text>
               </View>
-            </View>
 
-            {task.description && (
-              <Text style={styles.taskDescription} numberOfLines={2}>
-                {task.description}
-              </Text>
-            )}
-
-            <View style={styles.taskMeta}>
               <View style={styles.metaItem}>
-                <CalendarIcon size={14} color={overdue ? '#FF3B30' : today ? '#FF9500' : '#8E8E93'} />
+                <CalendarIcon size={14} color={overdue ? '#FF3B30' : today ? '#FF9500' : '#5E6C84'} />
                 <Text
                   style={[
                     styles.metaText,
@@ -262,7 +684,7 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
 
               {task.assignedTo && (
                 <View style={styles.metaItem}>
-                  <UsersIcon size={14} color="#8E8E93" />
+                  <UsersIcon size={14} color="#5E6C84" />
                   <Text style={styles.metaText}>{task.assignedTo}</Text>
                 </View>
               )}
@@ -279,27 +701,84 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
     );
   };
 
+  const renderColumn = (column: Column) => {
+    const columnTasks = tasks.filter((task) => task.status === column.id);
+    const Icon = column.icon;
+
+    return (
+      <View key={column.id} style={styles.column}>
+        <View style={[styles.columnHeader, { borderTopColor: column.color }]}>
+          <View style={styles.columnTitleRow}>
+            <Icon size={18} color={column.color} />
+            <Text style={styles.columnTitle}>{column.title}</Text>
+            <View style={[styles.countBadge, { backgroundColor: column.color }]}>
+              <Text style={styles.countText}>{columnTasks.length}</Text>
+            </View>
+          </View>
+          <View style={styles.columnActions}>
+            <TouchableOpacity
+              style={styles.columnActionButton}
+              onPress={() => openEditColumn(column)}
+              // @ts-ignore
+              data-no-drag="true"
+            >
+              <Text style={styles.columnActionText}>✎</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.columnActionButton}
+              onPress={() => handleDeleteColumn(column.id)}
+              // @ts-ignore
+              data-no-drag="true"
+            >
+              <Text style={styles.columnActionTextDelete}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <MaybeDraxDroppable
+          style={styles.columnDropZone}
+          activeStyle={[styles.columnDropZoneActive, { backgroundColor: `${column.color}10` }]}
+          onReceive={(payload) => {
+            moveTask(payload, column.id);
+          }}
+        >
+          <ScrollView
+            style={styles.columnContent}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.columnCards}
+          >
+            {columnTasks.map((task, idx) => renderTaskCard(task, idx))}
+            {columnTasks.length === 0 && (
+              <View style={styles.emptyColumn}>
+                <Icon size={32} color="#D1D1D6" />
+                <Text style={styles.emptyText}>Aucune tâche</Text>
+              </View>
+            )}
+          </ScrollView>
+        </MaybeDraxDroppable>
+      </View>
+    );
+  };
+
   const stats = {
     todo: tasks.filter((t) => t.status === 'todo').length,
     in_progress: tasks.filter((t) => t.status === 'in_progress').length,
-    done: tasks.filter((t) => t.status === 'done').length,
-    overdue: tasks.filter((t) => isOverdue(t.dueDate) && t.status !== 'done').length,
+    completed: tasks.filter((t) => t.status === 'completed').length,
+    overdue: tasks.filter((t) => isOverdue(t.dueDate) && t.status !== 'completed').length,
   };
 
   return (
     <View style={styles.container}>
+      <Navigation />
       {/* En-tête */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Tâches</Text>
           <Text style={styles.headerSubtitle}>
-            {stats.todo + stats.in_progress} en cours • {stats.done} terminées
+            {stats.todo + stats.in_progress} en cours • {stats.completed} terminées
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setNewTaskModalVisible(true)}
-        >
+        <TouchableOpacity style={styles.addButton} onPress={() => setNewTaskModalVisible(true)}>
           <Text style={styles.addButtonText}>+ Nouvelle</Text>
         </TouchableOpacity>
       </View>
@@ -311,11 +790,11 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
           <Text style={styles.statLabel}>À faire</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={[styles.statValue, { color: '#007AFF' }]}>{stats.in_progress}</Text>
+          <Text style={[styles.statValue, { color: '#0052CC' }]}>{stats.in_progress}</Text>
           <Text style={styles.statLabel}>En cours</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={[styles.statValue, { color: '#34C759' }]}>{stats.done}</Text>
+          <Text style={[styles.statValue, { color: '#00875A' }]}>{stats.completed}</Text>
           <Text style={styles.statLabel}>Terminées</Text>
         </View>
         {stats.overdue > 0 && (
@@ -326,184 +805,329 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
         )}
       </View>
 
-      {/* Filtres */}
-      <View style={styles.filtersContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <TouchableOpacity
-            style={[styles.filterChip, selectedFilter === 'all' && styles.filterChipActive]}
-            onPress={() => setSelectedFilter('all')}
-          >
-            <Text
-              style={[
-                styles.filterText,
-                selectedFilter === 'all' && styles.filterTextActive,
-              ]}
-            >
-              Toutes ({tasks.length})
-            </Text>
-          </TouchableOpacity>
-
-          {(Object.keys(statusConfig) as TaskStatus[]).map((status) => (
-            <TouchableOpacity
-              key={status}
-              style={[styles.filterChip, selectedFilter === status && styles.filterChipActive]}
-              onPress={() => setSelectedFilter(status)}
-            >
-              <Text
-                style={[
-                  styles.filterText,
-                  selectedFilter === status && styles.filterTextActive,
-                ]}
-              >
-                {statusConfig[status].label} ({tasks.filter((t) => t.status === status).length})
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+      {/* Toggle Vue */}
+      <View style={styles.viewToggleContainer}>
+        <TouchableOpacity
+          style={[styles.viewToggleButton, viewMode === 'list' && styles.viewToggleButtonActive]}
+          onPress={() => setViewMode('list')}
+        >
+          <Text style={[styles.viewToggleText, viewMode === 'list' && styles.viewToggleTextActive]}>
+            Liste
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.viewToggleButton, viewMode === 'kanban' && styles.viewToggleButtonActive]}
+          onPress={() => setViewMode('kanban')}
+        >
+          <Text style={[styles.viewToggleText, viewMode === 'kanban' && styles.viewToggleTextActive]}>
+            Kanban
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Liste des tâches */}
-      <ScrollView style={styles.tasksList} contentContainerStyle={styles.tasksListContent}>
-        {filteredTasks.length > 0 ? (
-          filteredTasks.map((task) => renderTask(task))
-        ) : (
-          <View style={styles.emptyState}>
-            <CheckCircleIcon size={64} color="#D1D1D6" />
-            <Text style={styles.emptyText}>Aucune tâche</Text>
-          </View>
-        )}
-      </ScrollView>
+      {viewMode === 'kanban' ? (
+        <MaybeDraxProvider>
+          {/* Colonnes Kanban */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.kanbanContainer}
+            contentContainerStyle={styles.kanbanContent}
+          >
+            {columns.map((column) => renderColumn(column))}
 
-      {/* Modal Détails */}
+            {/* Bouton Ajouter Colonne */}
+            <TouchableOpacity style={styles.addColumnButton} onPress={openAddColumn}>
+              <Text style={styles.addColumnIcon}>+</Text>
+              <Text style={styles.addColumnText}>Ajouter une colonne</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </MaybeDraxProvider>
+      ) : (
+        <>
+          {/* Filtres */}
+          <View style={styles.filtersContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <TouchableOpacity
+                style={[styles.filterChip, selectedFilter === 'all' && styles.filterChipActive]}
+                onPress={() => setSelectedFilter('all')}
+              >
+                <Text
+                  style={[
+                    styles.filterText,
+                    selectedFilter === 'all' && styles.filterTextActive,
+                  ]}
+                >
+                  Toutes ({tasks.length})
+                </Text>
+              </TouchableOpacity>
+
+              {columns.map((col) => (
+                <TouchableOpacity
+                  key={col.id}
+                  style={[styles.filterChip, selectedFilter === col.id && styles.filterChipActive]}
+                  onPress={() => setSelectedFilter(col.id)}
+                >
+                  <Text
+                    style={[
+                      styles.filterText,
+                      selectedFilter === col.id && styles.filterTextActive,
+                    ]}
+                  >
+                    {col.title} ({tasks.filter((t) => t.status === col.id).length})
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* Liste des tâches */}
+          <ScrollView style={styles.listContainer} contentContainerStyle={styles.listContent}>
+            {(selectedFilter === 'all'
+              ? tasks
+              : tasks.filter((t) => t.status === selectedFilter)
+            ).map((task) => renderListTask(task))}
+          </ScrollView>
+        </>
+      )}
+
+      {/* Modal Détails/Édition */}
       <Modal
         visible={modalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={() => {
+          setModalVisible(false);
+          setIsEditMode(false);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            {selectedTask && (
+            {selectedTask && editForm && (
               <>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{selectedTask.title}</Text>
-                  <TouchableOpacity onPress={() => setModalVisible(false)}>
-                    <Text style={styles.closeButton}>✕</Text>
-                  </TouchableOpacity>
+                  <Text style={styles.modalTitle}>
+                    {isEditMode ? 'Modifier la tâche' : selectedTask.title}
+                  </Text>
+                  <View style={styles.modalHeaderActions}>
+                    {!isEditMode && (
+                      <TouchableOpacity
+                        onPress={() => setIsEditMode(true)}
+                        style={styles.editButton}
+                      >
+                        <Text style={styles.editButtonText}>Modifier</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      onPress={() => {
+                        setModalVisible(false);
+                        setIsEditMode(false);
+                      }}
+                      // @ts-ignore
+                      data-no-drag="true"
+                    >
+                      <XCircleIcon size={24} color="#8E8E93" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
-                <View style={styles.modalBody}>
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailLabel}>Description</Text>
-                    <Text style={styles.detailText}>{selectedTask.description}</Text>
-                  </View>
+                <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                  {isEditMode ? (
+                    /* Mode Édition */
+                    <>
+                      <View style={styles.editGroup}>
+                        <Text style={styles.editLabel}>Titre</Text>
+                        <TextInput
+                          style={styles.editInput}
+                          value={editForm.title}
+                          onChangeText={(text) => setEditForm({ ...editForm, title: text })}
+                        />
+                      </View>
 
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailLabel}>Statut</Text>
-                    <View style={styles.statusOptions}>
-                      {(Object.keys(statusConfig) as TaskStatus[]).map((status) => (
+                      <View style={styles.editGroup}>
+                        <Text style={styles.editLabel}>Description</Text>
+                        <TextInput
+                          style={[styles.editInput, styles.editTextArea]}
+                          value={editForm.description}
+                          onChangeText={(text) => setEditForm({ ...editForm, description: text })}
+                          multiline
+                          numberOfLines={3}
+                        />
+                      </View>
+
+                      <View style={styles.editGroup}>
+                        <Text style={styles.editLabel}>Priorité</Text>
+                        <View style={styles.prioritySelectEdit}>
+                          {(['low', 'medium', 'high'] as Priority[]).map((priority) => (
+                            <TouchableOpacity
+                              key={priority}
+                              style={[
+                                styles.priorityButtonEdit,
+                                editForm.priority === priority && styles.priorityButtonEditActive,
+                                {
+                                  borderColor: priorityConfig[priority].color,
+                                  backgroundColor:
+                                    editForm.priority === priority
+                                      ? priorityConfig[priority].bgColor
+                                      : '#FFFFFF',
+                                },
+                              ]}
+                              onPress={() => setEditForm({ ...editForm, priority })}
+                            >
+                              <Text style={{ color: priorityConfig[priority].color, fontWeight: '600' }}>
+                                {priorityConfig[priority].label}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+
+                      <View style={styles.editGroup}>
+                        <Text style={styles.editLabel}>Statut</Text>
+                        <View style={styles.statusSelectEdit}>
+                          {columns.map((col) => (
+                            <TouchableOpacity
+                              key={col.id}
+                              style={[
+                                styles.statusButtonEdit,
+                                editForm.status === col.id && styles.statusButtonEditActive,
+                                { borderColor: col.color },
+                              ]}
+                              onPress={() => setEditForm({ ...editForm, status: col.id })}
+                            >
+                              <Text
+                                style={[
+                                  styles.statusButtonEditText,
+                                  { color: editForm.status === col.id ? col.color : '#8E8E93' },
+                                ]}
+                              >
+                                {col.title}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+
+                      <View style={styles.editGroup}>
+                        <Text style={styles.editLabel}>Date d'échéance</Text>
+                        <TextInput
+                          style={styles.editInput}
+                          value={editForm.dueDate}
+                          onChangeText={(text) => setEditForm({ ...editForm, dueDate: text })}
+                          placeholder="2025-12-31"
+                        />
+                      </View>
+
+                      <View style={styles.editGroup}>
+                        <Text style={styles.editLabel}>Assigné à</Text>
+                        <TextInput
+                          style={styles.editInput}
+                          value={editForm.assignedTo}
+                          onChangeText={(text) => setEditForm({ ...editForm, assignedTo: text })}
+                        />
+                      </View>
+
+                      <View style={styles.editActions}>
+                        <TouchableOpacity style={styles.saveButton} onPress={handleUpdateTask}>
+                          <Text style={styles.saveButtonText}>Enregistrer</Text>
+                        </TouchableOpacity>
                         <TouchableOpacity
-                          key={status}
-                          style={[
-                            styles.statusOption,
-                            selectedTask.status === status && styles.statusOptionActive,
-                          ]}
+                          style={styles.cancelButton}
                           onPress={() => {
-                            setTasks((prev) =>
-                              prev.map((t) =>
-                                t.id === selectedTask.id ? { ...t, status } : t
-                              )
-                            );
-                            setSelectedTask({ ...selectedTask, status });
+                            setEditForm(selectedTask);
+                            setIsEditMode(false);
                           }}
+                        >
+                          <Text style={styles.cancelButtonText}>Annuler</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  ) : (
+                    /* Mode Lecture */
+                    <>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Description</Text>
+                        <Text style={styles.detailValue}>
+                          {selectedTask.description || 'Aucune description'}
+                        </Text>
+                      </View>
+
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Priorité</Text>
+                        <View
+                          style={[
+                            styles.priorityBadge,
+                            { backgroundColor: priorityConfig[selectedTask.priority].bgColor },
+                          ]}
                         >
                           <Text
                             style={[
-                              styles.statusOptionText,
-                              selectedTask.status === status && styles.statusOptionTextActive,
+                              styles.priorityText,
+                              { color: priorityConfig[selectedTask.priority].color },
                             ]}
                           >
-                            {statusConfig[status].label}
+                            {priorityConfig[selectedTask.priority].label}
                           </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
+                        </View>
+                      </View>
 
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailLabel}>Priorité</Text>
-                    <View style={styles.priorityOptions}>
-                      {(Object.keys(priorityConfig) as Priority[]).map((priority) => (
-                        <TouchableOpacity
-                          key={priority}
-                          style={[
-                            styles.priorityOption,
-                            {
-                              borderColor: priorityConfig[priority].color,
-                              backgroundColor:
-                                selectedTask.priority === priority
-                                  ? priorityConfig[priority].bgColor
-                                  : 'transparent',
-                            },
-                          ]}
-                          onPress={() => {
-                            setTasks((prev) =>
-                              prev.map((t) =>
-                                t.id === selectedTask.id ? { ...t, priority } : t
-                              )
-                            );
-                            setSelectedTask({ ...selectedTask, priority });
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.priorityOptionText,
-                              { color: priorityConfig[priority].color },
-                            ]}
-                          >
-                            {priorityConfig[priority].label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Date d'échéance</Text>
+                        <Text style={styles.detailValue}>
+                          {new Date(selectedTask.dueDate).toLocaleDateString('fr-FR', {
+                            weekday: 'long',
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric',
+                          })}
+                        </Text>
+                      </View>
 
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailLabel}>Date d'échéance</Text>
-                    <Text style={styles.detailText}>
-                      {new Date(selectedTask.dueDate).toLocaleDateString('fr-FR', {
-                        weekday: 'long',
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric',
-                      })}
-                    </Text>
-                  </View>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Assigné à</Text>
+                        <Text style={styles.detailValue}>{selectedTask.assignedTo}</Text>
+                      </View>
 
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailLabel}>Assigné à</Text>
-                    <Text style={styles.detailText}>{selectedTask.assignedTo}</Text>
-                  </View>
+                      {selectedTask.relatedTo && (
+                        <View style={styles.detailRow}>
+                          <Text style={styles.detailLabel}>Lié à</Text>
+                          <Text style={styles.detailValue}>{selectedTask.relatedTo}</Text>
+                        </View>
+                      )}
 
-                  {selectedTask.relatedTo && (
-                    <View style={styles.detailSection}>
-                      <Text style={styles.detailLabel}>Lié à</Text>
-                      <Text style={styles.detailText}>{selectedTask.relatedTo}</Text>
-                    </View>
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => deleteTask(selectedTask.id)}
+                      >
+                        <Text style={styles.deleteButtonText}>Supprimer la tâche</Text>
+                      </TouchableOpacity>
+                    </>
                   )}
-                </View>
+                </ScrollView>
 
-                <View style={styles.modalActions}>
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => {
-                      setModalVisible(false);
-                      deleteTask(selectedTask.id);
-                    }}
-                  >
-                    <Text style={styles.deleteButtonText}>Supprimer</Text>
-                  </TouchableOpacity>
-                </View>
+                {!isEditMode && (
+                  <View style={styles.modalActions}>
+                    <Text style={styles.actionsTitle}>Changer le statut</Text>
+                    <View style={styles.statusButtons}>
+                      {columns
+                        .filter((col) => col.id !== selectedTask.status)
+                        .map((col) => (
+                          <TouchableOpacity
+                            key={col.id}
+                            style={[styles.statusButton, { borderColor: col.color }]}
+                            onPress={() => {
+                              moveTask(selectedTask.id, col.id);
+                              setModalVisible(false);
+                            }}
+                          >
+                            <Text style={[styles.statusButtonText, { color: col.color }]}>
+                              {col.title}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+                  </View>
+                )}
               </>
             )}
           </View>
@@ -517,16 +1141,16 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
         animationType="slide"
         onRequestClose={handleResetTaskForm}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContentNew}>
-            <View style={styles.modalHeaderNew}>
-              <Text style={styles.modalTitleNew}>Nouvelle Tâche</Text>
+        <View style={styles.newModalContainer}>
+          <View style={styles.newModalContent}>
+            <View style={styles.newModalHeader}>
+              <Text style={styles.newModalTitle}>Nouvelle Tâche</Text>
               <TouchableOpacity onPress={handleResetTaskForm}>
                 <Text style={styles.closeButtonNew}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBodyNew} showsVerticalScrollIndicator={false}>
+            <ScrollView style={styles.newModalBody} showsVerticalScrollIndicator={false}>
               <View style={styles.formGroupNew}>
                 <Text style={styles.formLabelNew}>Titre *</Text>
                 <TextInput
@@ -554,53 +1178,88 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
               <View style={styles.formGroupNew}>
                 <Text style={styles.formLabelNew}>Priorité</Text>
                 <View style={styles.prioritySelectNew}>
-                  {['low', 'medium', 'high'].map(priority => (
+                  {(['low', 'medium', 'high'] as Priority[]).map((priority) => (
                     <TouchableOpacity
                       key={priority}
                       style={[
                         styles.priorityButtonNew,
                         newTaskForm.priority === priority && styles.priorityButtonActiveNew,
                         {
-                          borderColor: priorityConfig[priority as Priority].color,
-                          backgroundColor: newTaskForm.priority === priority 
-                            ? priorityConfig[priority as Priority].bgColor
-                            : '#FFFFFF'
-                        }
+                          borderColor: priorityConfig[priority].color,
+                          backgroundColor:
+                            newTaskForm.priority === priority
+                              ? priorityConfig[priority].bgColor
+                              : '#FFFFFF',
+                        },
                       ]}
-                      onPress={() => setNewTaskForm({ ...newTaskForm, priority: priority as Priority })}
+                      onPress={() => setNewTaskForm({ ...newTaskForm, priority })}
                     >
-                      <Text style={{ color: priorityConfig[priority as Priority].color, fontWeight: '600' }}>
-                        {priorityConfig[priority as Priority].label}
+                      <Text style={{ color: priorityConfig[priority].color, fontWeight: '600' }}>
+                        {priorityConfig[priority].label}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               </View>
 
-              <View style={styles.formGroupNew}>
-                <Text style={styles.formLabelNew}>Date d'échéance</Text>
-                <TextInput
-                  style={styles.inputNew}
-                  placeholder="2025-12-31"
-                  value={newTaskForm.dueDate}
-                  onChangeText={(text) => setNewTaskForm({ ...newTaskForm, dueDate: text })}
-                  placeholderTextColor="#C7C7CC"
-                />
-              </View>
+              <DatePicker
+                label="Date d'échéance"
+                value={newTaskForm.dueDate}
+                onChange={(date) => setNewTaskForm({ ...newTaskForm, dueDate: date })}
+                placeholder="Sélectionner une date"
+              />
 
-              <View style={styles.formGroupNew}>
-                <Text style={styles.formLabelNew}>Assigné à</Text>
-                <TextInput
-                  style={styles.inputNew}
-                  placeholder="Nom de la personne"
-                  value={newTaskForm.assignedTo}
-                  onChangeText={(text) => setNewTaskForm({ ...newTaskForm, assignedTo: text })}
-                  placeholderTextColor="#C7C7CC"
-                />
-              </View>
+              <Dropdown
+                label="Assigné à"
+                value={newTaskForm.assignedTo}
+                options={users.map(u => ({
+                  id: u.id,
+                  label: u.name,
+                  subtitle: u.email,
+                }))}
+                onChange={(value) => setNewTaskForm({ ...newTaskForm, assignedTo: value })}
+                placeholder="Sélectionner une personne"
+                onCreateNew={() => {
+                  // TODO: Open user creation modal
+                  if (Platform.OS === 'web') {
+                    alert('Fonctionnalité de création d\'utilisateur à venir');
+                  } else {
+                    Alert.alert('Info', 'Fonctionnalité de création d\'utilisateur à venir');
+                  }
+                }}
+                createButtonLabel="Créer un nouvel utilisateur"
+              />
+
+              <Dropdown
+                label="Lié à"
+                value={newTaskForm.relatedTo}
+                options={[
+                  ...customers.map(c => ({
+                    id: c.id.toString(),
+                    label: c.name,
+                    subtitle: `Client - ${c.email || ''}`,
+                  })),
+                  ...companies.map(c => ({
+                    id: `company_${c.id}`,
+                    label: c.name,
+                    subtitle: `Entreprise - ${c.industry || ''}`,
+                  })),
+                ]}
+                onChange={(value) => setNewTaskForm({ ...newTaskForm, relatedTo: value })}
+                placeholder="Sélectionner un client ou entreprise"
+                onCreateNew={() => {
+                  // TODO: Open customer/company creation modal
+                  if (Platform.OS === 'web') {
+                    alert('Fonctionnalité de création de client à venir');
+                  } else {
+                    Alert.alert('Info', 'Fonctionnalité de création de client à venir');
+                  }
+                }}
+                createButtonLabel="Créer un nouveau client"
+              />
             </ScrollView>
 
-            <View style={styles.modalFooterNew}>
+            <View style={styles.newModalFooter}>
               <TouchableOpacity
                 style={[styles.buttonNew, styles.buttonSecondaryNew]}
                 onPress={handleResetTaskForm}
@@ -617,6 +1276,93 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
           </View>
         </View>
       </Modal>
+
+      {/* Modal Gestion Colonne */}
+      <Modal
+        visible={columnModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setColumnModalVisible(false)}
+      >
+        <View style={styles.newModalContainer}>
+          <View style={styles.newModalContent}>
+            <View style={styles.newModalHeader}>
+              <Text style={styles.newModalTitle}>
+                {editingColumn ? 'Modifier la colonne' : 'Nouvelle colonne'}
+              </Text>
+              <TouchableOpacity onPress={() => setColumnModalVisible(false)}>
+                <Text style={styles.closeButtonNew}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.newModalBody}>
+              <View style={styles.formGroupNew}>
+                <Text style={styles.formLabelNew}>Nom de la colonne *</Text>
+                <TextInput
+                  style={styles.inputNew}
+                  placeholder="Ex: En révision"
+                  value={columnForm.title}
+                  onChangeText={(text) => setColumnForm({ ...columnForm, title: text })}
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              <View style={styles.formGroupNew}>
+                <Text style={styles.formLabelNew}>Couleur</Text>
+                <View style={styles.colorPicker}>
+                  {['#6C757D', '#0052CC', '#00875A', '#FF3B30', '#FF9500', '#9333EA'].map(
+                    (color) => (
+                      <TouchableOpacity
+                        key={color}
+                        style={[
+                          styles.colorOption,
+                          { backgroundColor: color },
+                          columnForm.color === color && styles.colorOptionSelected,
+                        ]}
+                        onPress={() => setColumnForm({ ...columnForm, color })}
+                      >
+                        {columnForm.color === color && (
+                          <Text style={styles.colorCheck}>✓</Text>
+                        )}
+                      </TouchableOpacity>
+                    )
+                  )}
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.newModalFooter}>
+              <TouchableOpacity
+                style={[styles.buttonNew, styles.buttonSecondaryNew]}
+                onPress={() => setColumnModalVisible(false)}
+              >
+                <Text style={styles.buttonSecondaryTextNew}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.buttonNew, styles.buttonPrimaryNew]}
+                onPress={handleSaveColumn}
+              >
+                <Text style={styles.buttonPrimaryTextNew}>
+                  {editingColumn ? 'Enregistrer' : 'Créer'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <ConfirmModal
+        visible={confirmModalVisible}
+        title="Supprimer la tâche"
+        message="Êtes-vous sûr de vouloir supprimer cette tâche ? Cette action est irréversible."
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        onConfirm={confirmDeleteTask}
+        onCancel={() => {
+          setConfirmModalVisible(false);
+          setTaskToDelete(null);
+        }}
+      />
     </View>
   );
 }
@@ -624,34 +1370,36 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#F4F5F7',
   },
   header: {
     backgroundColor: '#FFFFFF',
-    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingTop: 16,
     paddingHorizontal: 20,
     paddingBottom: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#DFE1E6',
   },
   headerTitle: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#000000',
+    color: '#172B4D',
     letterSpacing: -0.6,
     marginBottom: 4,
   },
   headerSubtitle: {
     fontSize: 15,
-    color: '#8E8E93',
+    color: '#5E6C84',
     letterSpacing: -0.2,
   },
   addButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#0052CC',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: 3,
   },
   addButtonText: {
     color: '#FFFFFF',
@@ -663,19 +1411,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    gap: 10,
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#DFE1E6',
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: '#F4F5F7',
+    borderRadius: 3,
     padding: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
   statCardOverdue: {
     borderWidth: 1.5,
@@ -684,130 +1430,180 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#000000',
+    color: '#172B4D',
     letterSpacing: -0.5,
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#5E6C84',
     letterSpacing: -0.1,
+    fontWeight: '600',
   },
-  filtersContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-  },
-  filterChipActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  filterText: {
-    fontSize: 14,
-    color: '#000000',
-    fontWeight: '500',
-    letterSpacing: -0.2,
-  },
-  filterTextActive: {
-    color: '#FFFFFF',
-  },
-  tasksList: {
+  kanbanContainer: {
     flex: 1,
   },
-  tasksListContent: {
-    padding: 20,
+  kanbanContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
     gap: 12,
+  },
+  column: {
+    width: COLUMN_WIDTH,
+    marginRight: 12,
+  },
+  columnHeader: {
+    backgroundColor: '#EBECF0',
+    borderRadius: 3,
+    padding: 12,
+    marginBottom: 8,
+    borderTopWidth: 0,
+  },
+  columnTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  columnTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#172B4D',
+    letterSpacing: -0.2,
+    flex: 1,
+    textTransform: 'uppercase',
+  },
+  columnActions: {
+    flexDirection: 'row',
+    gap: 4,
+    marginTop: 8,
+  },
+  columnActionButton: {
+    padding: 4,
+    borderRadius: 3,
+    backgroundColor: '#FAFBFC',
+  },
+  columnActionText: {
+    fontSize: 14,
+    color: '#5E6C84',
+    fontWeight: '600',
+  },
+  columnActionTextDelete: {
+    fontSize: 14,
+    color: '#FF3B30',
+    fontWeight: '600',
+  },
+  countBadge: {
+    minWidth: 24,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  countText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.1,
+  },
+  columnDropZone: {
+    flex: 1,
+    borderRadius: 3,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    borderStyle: 'dashed',
+    minHeight: 200,
+  },
+  columnDropZoneActive: {
+    borderColor: '#0052CC',
+  },
+  columnContent: {
+    flex: 1,
+  },
+  columnCards: {
+    gap: 8,
+    paddingBottom: 8,
+    paddingHorizontal: 4,
+  },
+  draggableWrapper: {
+    borderRadius: 3,
+  },
+  draggableWrapperDragging: {
+    opacity: 0.5,
   },
   taskCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 2,
+    borderRadius: 3,
+    shadowColor: '#091E4240',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.5,
+    shadowRadius: 1,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#DFE1E6',
+    position: 'relative',
   },
-  taskCardDone: {
-    opacity: 0.6,
+  taskCardDragging: {
+    opacity: 0.5,
+    transform: [{ scale: 1.05 }],
   },
-  taskCardOverdue: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#FF3B30',
+  cardClickableArea: {
+    padding: 12,
   },
-  taskHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  checkbox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: '#D1D1D6',
-    marginRight: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxChecked: {
-    borderColor: '#34C759',
-    backgroundColor: '#34C75920',
-  },
-  checkboxInProgress: {
-    borderColor: '#007AFF',
-    backgroundColor: '#007AFF20',
-  },
-  taskContent: {
-    flex: 1,
-  },
-  taskTitleRow: {
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 6,
-  },
-  taskTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
-    letterSpacing: -0.3,
-    flex: 1,
-    marginRight: 8,
-  },
-  taskTitleDone: {
-    textDecorationLine: 'line-through',
-    color: '#8E8E93',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   priorityBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 3,
   },
   priorityText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  cardDeleteButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    padding: 6,
+    zIndex: 999,
+    elevation: 999,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 3,
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#172B4D',
+    letterSpacing: -0.2,
+    marginBottom: 6,
+    lineHeight: 20,
+  },
+  cardDescription: {
+    fontSize: 13,
+    color: '#5E6C84',
+    marginBottom: 8,
+    lineHeight: 18,
     letterSpacing: -0.1,
   },
-  taskDescription: {
-    fontSize: 14,
-    color: '#8E8E93',
-    marginBottom: 12,
-    lineHeight: 20,
-    letterSpacing: -0.2,
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
   },
-  taskMeta: {
+  cardFooterLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 12,
+    gap: 8,
+    flex: 1,
   },
   metaItem: {
     flexDirection: 'row',
@@ -815,8 +1611,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   metaText: {
-    fontSize: 13,
-    color: '#8E8E93',
+    fontSize: 12,
+    color: '#5E6C84',
     letterSpacing: -0.1,
   },
   metaTextOverdue: {
@@ -828,26 +1624,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   relatedBadge: {
-    backgroundColor: '#007AFF20',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: '#0052CC15',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 3,
+    maxWidth: 100,
   },
   relatedText: {
-    fontSize: 12,
-    color: '#007AFF',
+    fontSize: 11,
+    color: '#0052CC',
     fontWeight: '600',
     letterSpacing: -0.1,
   },
-  emptyState: {
+  emptyColumn: {
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: 40,
   },
   emptyText: {
-    marginTop: 16,
-    fontSize: 17,
-    color: '#8E8E93',
-    letterSpacing: -0.4,
+    marginTop: 8,
+    fontSize: 13,
+    color: '#5E6C84',
+    letterSpacing: -0.2,
   },
   modalOverlay: {
     flex: 1,
@@ -866,102 +1663,190 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+    borderBottomColor: '#DFE1E6',
+  },
+  modalHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  editButton: {
+    backgroundColor: '#0052CC',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 3,
+  },
+  editButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#000000',
+    color: '#172B4D',
     letterSpacing: -0.4,
     flex: 1,
-  },
-  closeButton: {
-    fontSize: 28,
-    color: '#8E8E93',
-    fontWeight: '300',
   },
   modalBody: {
     padding: 20,
   },
-  detailSection: {
+  detailRow: {
     marginBottom: 20,
   },
   detailLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#8E8E93',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5E6C84',
     marginBottom: 8,
     textTransform: 'uppercase',
-    letterSpacing: -0.1,
+    letterSpacing: 0.3,
   },
-  detailText: {
-    fontSize: 16,
-    color: '#000000',
+  detailValue: {
+    fontSize: 15,
+    color: '#172B4D',
     lineHeight: 22,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
-  statusOptions: {
+  editGroup: {
+    marginBottom: 16,
+  },
+  editLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5E6C84',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  editInput: {
+    borderWidth: 2,
+    borderColor: '#DFE1E6',
+    borderRadius: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#172B4D',
+    backgroundColor: '#FAFBFC',
+  },
+  editTextArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  prioritySelectEdit: {
     flexDirection: 'row',
     gap: 8,
   },
-  statusOption: {
-    paddingHorizontal: 16,
+  priorityButtonEdit: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 3,
+    borderWidth: 2,
+    alignItems: 'center',
+  },
+  priorityButtonEditActive: {
+    borderWidth: 3,
+  },
+  statusSelectEdit: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statusButtonEdit: {
+    flex: 1,
     paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#E5E5EA',
+    borderRadius: 3,
+    borderWidth: 2,
+    alignItems: 'center',
   },
-  statusOptionActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
+  statusButtonEditActive: {
+    borderWidth: 3,
   },
-  statusOptionText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000000',
-    letterSpacing: -0.2,
+  statusButtonEditText: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
-  statusOptionTextActive: {
+  editActions: {
+    flexDirection: 'row',
+    marginTop: 20,
+    marginBottom: 16,
+    gap: 8,
+  },
+  saveButton: {
+    flex: 1,
+    backgroundColor: '#00875A',
+    paddingVertical: 14,
+    borderRadius: 3,
+    alignItems: 'center',
+  },
+  saveButtonText: {
     color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
-  priorityOptions: {
-    flexDirection: 'row',
-    gap: 8,
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#EBECF0',
+    paddingVertical: 14,
+    borderRadius: 3,
+    alignItems: 'center',
   },
-  priorityOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1.5,
+  cancelButtonText: {
+    color: '#5E6C84',
+    fontSize: 16,
+    fontWeight: '700',
   },
-  priorityOptionText: {
-    fontSize: 14,
+  deleteButton: {
+    backgroundColor: '#FEF6F6',
+    borderWidth: 1,
+    borderColor: '#FF3B30',
+    paddingVertical: 12,
+    borderRadius: 3,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  deleteButtonText: {
+    color: '#FF3B30',
+    fontSize: 15,
     fontWeight: '600',
-    letterSpacing: -0.2,
   },
   modalActions: {
     padding: 20,
     borderTopWidth: 1,
-    borderTopColor: '#F2F2F7',
+    borderTopColor: '#DFE1E6',
   },
-  deleteButton: {
-    backgroundColor: '#FF3B30',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
+  actionsTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5E6C84',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
-  deleteButtonText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '600',
-    letterSpacing: -0.4,
+  statusButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  modalContainer: {
+  statusButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 3,
+    borderWidth: 2,
+  },
+  statusButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  newModalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
-  modalContentNew: {
+  newModalContent: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -969,23 +1854,23 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     maxHeight: '90%',
   },
-  modalHeaderNew: {
+  newModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
   },
-  modalTitleNew: {
+  newModalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#000000',
+    color: '#172B4D',
   },
   closeButtonNew: {
     fontSize: 24,
-    color: '#8E8E93',
+    color: '#5E6C84',
   },
-  modalBodyNew: {
-    maxHeight: 400,
+  newModalBody: {
+    maxHeight: 450,
     marginBottom: 16,
   },
   formGroupNew: {
@@ -993,18 +1878,21 @@ const styles = StyleSheet.create({
   },
   formLabelNew: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
+    fontWeight: '700',
+    color: '#5E6C84',
     marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   inputNew: {
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#DFE1E6',
+    borderRadius: 3,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#000000',
+    color: '#172B4D',
+    backgroundColor: '#FAFBFC',
   },
   textAreaNew: {
     height: 100,
@@ -1017,14 +1905,14 @@ const styles = StyleSheet.create({
   priorityButtonNew: {
     flex: 1,
     paddingVertical: 8,
-    borderRadius: 6,
-    borderWidth: 1,
+    borderRadius: 3,
+    borderWidth: 2,
     alignItems: 'center',
   },
   priorityButtonActiveNew: {
-    borderWidth: 2,
+    borderWidth: 3,
   },
-  modalFooterNew: {
+  newModalFooter: {
     flexDirection: 'row',
     gap: 8,
     paddingTop: 16,
@@ -1033,11 +1921,11 @@ const styles = StyleSheet.create({
   buttonNew: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 3,
     alignItems: 'center',
   },
   buttonPrimaryNew: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#0052CC',
   },
   buttonPrimaryTextNew: {
     fontSize: 14,
@@ -1045,11 +1933,214 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   buttonSecondaryNew: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#EBECF0',
   },
   buttonSecondaryTextNew: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#8E8E93',
+    color: '#5E6C84',
+  },
+  // Mode toggle
+  viewToggleContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#DFE1E6',
+    gap: 8,
+  },
+  viewToggleButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 3,
+    alignItems: 'center',
+    backgroundColor: '#FAFBFC',
+    borderWidth: 2,
+    borderColor: '#DFE1E6',
+  },
+  viewToggleButtonActive: {
+    backgroundColor: '#0052CC',
+    borderColor: '#0052CC',
+  },
+  viewToggleText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#5E6C84',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  viewToggleTextActive: {
+    color: '#FFFFFF',
+  },
+  // Mode Liste
+  filtersContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#DFE1E6',
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#FAFBFC',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#DFE1E6',
+  },
+  filterChipActive: {
+    backgroundColor: '#0052CC',
+    borderColor: '#0052CC',
+  },
+  filterText: {
+    fontSize: 13,
+    color: '#5E6C84',
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  filterTextActive: {
+    color: '#FFFFFF',
+  },
+  listContainer: {
+    flex: 1,
+    backgroundColor: '#F4F5F7',
+  },
+  listContent: {
+    padding: 20,
+    gap: 12,
+  },
+  listTaskCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 3,
+    padding: 16,
+    shadowColor: '#091E4240',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.5,
+    shadowRadius: 1,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#DFE1E6',
+  },
+  listTaskCardDone: {
+    opacity: 0.6,
+  },
+  listTaskCardOverdue: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF3B30',
+  },
+  listTaskHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  listCheckbox: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#DFE1E6',
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  listCheckboxChecked: {
+    borderColor: '#00875A',
+    backgroundColor: '#00875A20',
+  },
+  listCheckboxInProgress: {
+    borderColor: '#0052CC',
+    backgroundColor: '#0052CC20',
+  },
+  listTaskContent: {
+    flex: 1,
+  },
+  listTaskTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+  },
+  listTaskTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#172B4D',
+    letterSpacing: -0.3,
+    flex: 1,
+    marginRight: 8,
+  },
+  listTaskTitleDone: {
+    textDecorationLine: 'line-through',
+    color: '#5E6C84',
+  },
+  listDeleteButton: {
+    padding: 4,
+  },
+  listTaskDescription: {
+    fontSize: 14,
+    color: '#5E6C84',
+    marginBottom: 12,
+    lineHeight: 20,
+    letterSpacing: -0.2,
+  },
+  listTaskMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  // Ajouter colonne
+  addColumnButton: {
+    width: COLUMN_WIDTH,
+    marginRight: 12,
+    backgroundColor: '#FAFBFC',
+    borderRadius: 3,
+    borderWidth: 2,
+    borderColor: '#DFE1E6',
+    borderStyle: 'dashed',
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 200,
+  },
+  addColumnIcon: {
+    fontSize: 32,
+    color: '#5E6C84',
+    fontWeight: '300',
+    marginBottom: 8,
+  },
+  addColumnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#5E6C84',
+    letterSpacing: -0.2,
+  },
+  // Color picker
+  colorPicker: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  colorOption: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  colorOptionSelected: {
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  colorCheck: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
   },
 });

@@ -3,12 +3,19 @@ import { pool as db } from '../database/db';
 
 const router = express.Router();
 
+const clampProbability = (value: number | null | undefined) => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return null;
+  }
+  return Math.min(100, Math.max(0, value));
+};
+
 // ========== PIPELINE STAGES ==========
 
 // Get all pipeline stages
 router.get('/stages', async (req: Request, res: Response) => {
   try {
-    const result = await db.query('SELECT * FROM pipeline_stages ORDER BY position ASC', []);
+    const result = await db.query('SELECT * FROM pipeline_stages ORDER BY display_order ASC', []);
     res.json(result.rows);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -33,21 +40,21 @@ router.get('/stages/:id', async (req: Request, res: Response) => {
 
 // Create pipeline stage
 router.post('/stages', async (req: Request, res: Response) => {
-  const { name, color, position } = req.body;
+  const { name, color, display_order, pipeline_id } = req.body;
 
-  if (!name) {
-    res.status(400).json({ error: 'name is required' });
+  if (!name || !pipeline_id) {
+    res.status(400).json({ error: 'name and pipeline_id are required' });
     return;
   }
 
   const query = `
-    INSERT INTO pipeline_stages (name, color, position)
-    VALUES ($1, $2, $3)
+    INSERT INTO pipeline_stages (name, color, display_order, pipeline_id)
+    VALUES ($1, $2, $3, $4)
     RETURNING *
   `;
 
   try {
-    const result = await db.query(query, [name, color || '#2196F3', position || 0]);
+    const result = await db.query(query, [name, color || '#2196F3', display_order || 0, pipeline_id]);
     res.status(201).json({ id: result.rows[0].id, message: 'Stage created successfully' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -57,16 +64,16 @@ router.post('/stages', async (req: Request, res: Response) => {
 // Update pipeline stage
 router.put('/stages/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, color, position } = req.body;
+  const { name, color, display_order } = req.body;
 
   const query = `
     UPDATE pipeline_stages
-    SET name = $1, color = $2, position = $3
+    SET name = $1, color = $2, display_order = $3
     WHERE id = $4
   `;
 
   try {
-    const result = await db.query(query, [name, color, position, id]);
+    const result = await db.query(query, [name, color, display_order, id]);
     if (result.rowCount === 0) {
       res.status(404).json({ error: 'Stage not found' });
       return;
@@ -93,47 +100,67 @@ router.delete('/stages/:id', async (req: Request, res: Response) => {
   }
 });
 
-// ========== OPPORTUNITIES ==========
+// ========== OPPORTUNITIES (DEALS) ==========
 
 // Get all opportunities
 router.get('/opportunities', async (req: Request, res: Response) => {
   const { stageId, userId, customerId } = req.query;
 
   let query = `
-    SELECT o.*, c.name as customer_name, c.email as customer_email,
-           u.name as owner_name, s.name as stage_name, s.color as stage_color
-    FROM opportunities o
-    LEFT JOIN customers c ON o.customer_id = c.id
-    LEFT JOIN users u ON o.user_id = u.id
-    LEFT JOIN pipeline_stages s ON o.stage_id = s.id
-    WHERE 1=1
+    SELECT d.*,
+           comp.name as customer_name,
+           u.full_name as owner_name,
+           s.name as stage_name,
+           s.color as stage_color,
+           d.id, d.title as name, d.value, d.expected_close_date, d.description, d.stage_id, d.company_id as customer_id, d.owner_id as user_id
+    FROM deals d
+    LEFT JOIN companies comp ON d.company_id = comp.id
+    LEFT JOIN users u ON d.owner_id = u.id
+    LEFT JOIN pipeline_stages s ON d.stage_id = s.id
+    WHERE d.deleted_at IS NULL
   `;
   const params: any[] = [];
   let paramCount = 1;
 
   if (stageId) {
-    query += ` AND o.stage_id = $${paramCount}`;
+    query += ` AND d.stage_id = $${paramCount}`;
     params.push(stageId);
     paramCount++;
   }
 
   if (userId) {
-    query += ` AND o.user_id = $${paramCount}`;
+    query += ` AND d.owner_id = $${paramCount}`;
     params.push(userId);
     paramCount++;
   }
 
   if (customerId) {
-    query += ` AND o.customer_id = $${paramCount}`;
+    query += ` AND d.company_id = $${paramCount}`;
     params.push(customerId);
     paramCount++;
   }
 
-  query += ' ORDER BY o.expected_close_date ASC';
+  query += ' ORDER BY d.expected_close_date ASC';
 
   try {
     const result = await db.query(query, params);
-    res.json(result.rows);
+    // Transform data to match expected format
+    const transformedRows = result.rows.map(row => ({
+      id: row.id,
+      name: row.title || row.name,
+      value: parseFloat(row.value) || 0,
+      probability: row.probability ?? 0,
+      expected_close_date: row.expected_close_date,
+      description: row.description,
+      stage_id: row.stage_id,
+      customer_id: row.company_id,
+      customer_name: row.customer_name,
+      user_id: row.owner_id,
+      owner_name: row.owner_name,
+      stage_name: row.stage_name,
+      stage_color: row.stage_color
+    }));
+    res.json(transformedRows);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -144,13 +171,16 @@ router.get('/opportunities/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   const query = `
-    SELECT o.*, c.name as customer_name, c.email as customer_email,
-           u.name as owner_name, s.name as stage_name, s.color as stage_color
-    FROM opportunities o
-    LEFT JOIN customers c ON o.customer_id = c.id
-    LEFT JOIN users u ON o.user_id = u.id
-    LEFT JOIN pipeline_stages s ON o.stage_id = s.id
-    WHERE o.id = $1
+    SELECT d.*,
+           comp.name as customer_name,
+           u.full_name as owner_name,
+           s.name as stage_name,
+           s.color as stage_color
+    FROM deals d
+    LEFT JOIN companies comp ON d.company_id = comp.id
+    LEFT JOIN users u ON d.owner_id = u.id
+    LEFT JOIN pipeline_stages s ON d.stage_id = s.id
+    WHERE d.id = $1 AND d.deleted_at IS NULL
   `;
 
   try {
@@ -159,7 +189,22 @@ router.get('/opportunities/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Opportunity not found' });
       return;
     }
-    res.json(result.rows[0]);
+    const row = result.rows[0];
+    res.json({
+      id: row.id,
+      name: row.title,
+      value: parseFloat(row.value) || 0,
+      probability: row.probability ?? 0,
+      expected_close_date: row.expected_close_date,
+      description: row.description,
+      stage_id: row.stage_id,
+      customer_id: row.company_id,
+      customer_name: row.customer_name,
+      user_id: row.owner_id,
+      owner_name: row.owner_name,
+      stage_name: row.stage_name,
+      stage_color: row.stage_color
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -169,21 +214,75 @@ router.get('/opportunities/:id', async (req: Request, res: Response) => {
 router.post('/opportunities', async (req: Request, res: Response) => {
   const { name, customer_id, user_id, stage_id, value, probability, expected_close_date, description } = req.body;
 
-  if (!name || !customer_id || !user_id || !stage_id) {
-    res.status(400).json({ error: 'name, customer_id, user_id, and stage_id are required' });
+  if (!name || !user_id || !stage_id) {
+    res.status(400).json({ error: 'name, user_id, and stage_id are required' });
     return;
   }
 
-  const query = `
-    INSERT INTO opportunities (name, customer_id, user_id, stage_id, value, probability, expected_close_date, description)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    RETURNING *
-  `;
-
   try {
+    // Get organization_id and pipeline_id from stage
+    const stageQuery = 'SELECT pipeline_id FROM pipeline_stages WHERE id = $1';
+    const stageResult = await db.query(stageQuery, [stage_id]);
+
+    if (stageResult.rows.length === 0) {
+      res.status(400).json({ error: 'Invalid stage_id' });
+      return;
+    }
+
+    const pipeline_id = stageResult.rows[0].pipeline_id;
+
+    // Get organization from user
+    const userQuery = 'SELECT organization_id FROM users WHERE id = $1';
+    const userResult = await db.query(userQuery, [user_id]);
+
+    if (userResult.rows.length === 0) {
+      res.status(400).json({ error: 'Invalid user_id' });
+      return;
+    }
+
+    const organization_id = userResult.rows[0].organization_id;
+
+    const probabilityValueRaw =
+      typeof probability === 'number'
+        ? probability
+        : probability
+        ? parseInt(probability, 10)
+        : null;
+    const finalProbability = clampProbability(probabilityValueRaw);
+
+    const query = `
+      INSERT INTO deals (
+        title,
+        company_id,
+        owner_id,
+        stage_id,
+        pipeline_id,
+        organization_id,
+        value,
+        probability,
+        expected_close_date,
+        description,
+        created_by
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING *
+    `;
+
     const result = await db.query(
       query,
-      [name, customer_id, user_id, stage_id, value || 0, probability || 50, expected_close_date, description]
+      [
+        name,
+        customer_id || null,
+        user_id,
+        stage_id,
+        pipeline_id,
+        organization_id,
+        value || 0,
+        finalProbability ?? 0,
+        expected_close_date,
+        description,
+        user_id,
+      ]
     );
     res.status(201).json({ id: result.rows[0].id, message: 'Opportunity created successfully' });
   } catch (err: any) {
@@ -196,16 +295,44 @@ router.put('/opportunities/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, customer_id, user_id, stage_id, value, probability, expected_close_date, description } = req.body;
 
+  const probabilityProvided = probability !== undefined;
+  const probabilityValue =
+    typeof probability === 'number'
+      ? probability
+      : probabilityProvided && probability !== null
+      ? parseInt(probability, 10)
+      : null;
+
+  const normalizedProbability = clampProbability(probabilityValue);
+
   const query = `
-    UPDATE opportunities
-    SET name = $1, customer_id = $2, user_id = $3, stage_id = $4, value = $5, probability = $6, expected_close_date = $7, description = $8
-    WHERE id = $9
+    UPDATE deals
+    SET
+      title = $1,
+      company_id = $2,
+      owner_id = $3,
+      stage_id = $4,
+      value = $5,
+      probability = COALESCE($6, probability),
+      expected_close_date = $7,
+      description = $8
+    WHERE id = $9 AND deleted_at IS NULL
   `;
 
   try {
     const result = await db.query(
       query,
-      [name, customer_id, user_id, stage_id, value, probability, expected_close_date, description, id]
+      [
+        name,
+        customer_id,
+        user_id,
+        stage_id,
+        value,
+        probabilityProvided ? normalizedProbability : null,
+        expected_close_date,
+        description,
+        id,
+      ]
     );
     if (result.rowCount === 0) {
       res.status(404).json({ error: 'Opportunity not found' });
@@ -228,7 +355,16 @@ router.patch('/opportunities/:id/stage', async (req: Request, res: Response) => 
   }
 
   try {
-    const result = await db.query('UPDATE opportunities SET stage_id = $1 WHERE id = $2', [stage_id, id]);
+    const stageExists = await db.query('SELECT id FROM pipeline_stages WHERE id = $1', [stage_id]);
+    if (stageExists.rows.length === 0) {
+      res.status(404).json({ error: 'Stage not found' });
+      return;
+    }
+
+    const result = await db.query(
+      'UPDATE deals SET stage_id = $1 WHERE id = $2 AND deleted_at IS NULL',
+      [stage_id, id]
+    );
     if (result.rowCount === 0) {
       res.status(404).json({ error: 'Opportunity not found' });
       return;
@@ -239,17 +375,92 @@ router.patch('/opportunities/:id/stage', async (req: Request, res: Response) => 
   }
 });
 
-// Delete opportunity
+// Delete opportunity (soft delete)
 router.delete('/opportunities/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    const result = await db.query('DELETE FROM opportunities WHERE id = $1', [id]);
+    const result = await db.query('UPDATE deals SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL', [id]);
     if (result.rowCount === 0) {
       res.status(404).json({ error: 'Opportunity not found' });
       return;
     }
     res.json({ message: 'Opportunity deleted successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Recently deleted opportunities (last 30 days)
+router.get('/opportunities/deleted/recent', async (req: Request, res: Response) => {
+  const { limit } = req.query;
+
+  // normalize query params that can be string | string[] | ParsedQs
+  const normalizeQueryParam = (param: any): string | undefined => {
+    if (typeof param === 'string') return param;
+    if (Array.isArray(param) && param.length > 0 && typeof param[0] === 'string') return param[0];
+    return undefined;
+  };
+
+  const limitStr = normalizeQueryParam(limit);
+  const parsedLimit = limitStr ? parseInt(limitStr, 10) : NaN;
+  const limitValue = !Number.isNaN(parsedLimit) && parsedLimit > 0 ? parsedLimit : 20;
+
+  const query = `
+    SELECT
+      d.*,
+      comp.name AS customer_name,
+      u.full_name AS owner_name,
+      s.name AS stage_name,
+      s.color AS stage_color
+    FROM deals d
+    LEFT JOIN companies comp ON d.company_id = comp.id
+    LEFT JOIN users u ON d.owner_id = u.id
+    LEFT JOIN pipeline_stages s ON d.stage_id = s.id
+    WHERE d.deleted_at IS NOT NULL
+      AND d.deleted_at >= NOW() - INTERVAL '30 days'
+    ORDER BY d.deleted_at DESC
+    LIMIT $1
+  `;
+
+  try {
+    const result = await db.query(query, [limitValue]);
+    const transformedRows = result.rows.map(row => ({
+      id: row.id,
+      name: row.title || row.name,
+      value: parseFloat(row.value) || 0,
+      probability: row.probability ?? 0,
+      expected_close_date: row.expected_close_date,
+      description: row.description,
+      stage_id: row.stage_id,
+      customer_id: row.company_id,
+      customer_name: row.customer_name,
+      user_id: row.owner_id,
+      owner_name: row.owner_name,
+      stage_name: row.stage_name,
+      stage_color: row.stage_color,
+      deleted_at: row.deleted_at,
+    }));
+    res.json(transformedRows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Restore deleted opportunity
+router.patch('/opportunities/:id/restore', async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const result = await db.query(
+      'UPDATE deals SET deleted_at = NULL WHERE id = $1 AND deleted_at IS NOT NULL RETURNING *',
+      [id]
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Deleted opportunity not found' });
+      return;
+    }
+    res.json({ message: 'Opportunity restored successfully', opportunity: result.rows[0] });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -262,13 +473,13 @@ router.get('/summary', async (req: Request, res: Response) => {
       s.id as stage_id,
       s.name as stage_name,
       s.color as stage_color,
-      COUNT(o.id) as opportunity_count,
-      COALESCE(SUM(o.value), 0) as total_value,
-      COALESCE(AVG(o.probability), 0) as avg_probability
+      COUNT(d.id) as opportunity_count,
+      COALESCE(SUM(d.value), 0) as total_value,
+      COALESCE(AVG(d.probability), 0) as avg_probability
     FROM pipeline_stages s
-    LEFT JOIN opportunities o ON s.id = o.stage_id
+    LEFT JOIN deals d ON s.id = d.stage_id AND d.deleted_at IS NULL
     GROUP BY s.id
-    ORDER BY s.position ASC
+    ORDER BY s.display_order ASC
   `;
 
   try {

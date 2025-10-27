@@ -10,98 +10,102 @@ import {
   Alert,
   RefreshControl,
   Platform,
-  FlatList,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { customerService } from '../services/api';
+import { customerService, companyService, activitiesService } from '../services/api';
 import {
   UsersIcon,
-  CalendarIcon,
-  ActivityIcon,
-  FileTextIcon,
-  DollarIcon,
-  CheckCircleIcon,
-  AlertTriangleIcon,
+  BuildingIcon,
+  PhoneIcon,
+  MailIcon,
+  MapPinIcon,
+  EditIcon,
+  TrashIcon,
+  PlusIcon,
 } from '../components/Icons';
+import Navigation from '../components/Navigation';
+import { useAuth } from '../context/AuthContext';
 
 type ContactsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Contacts'>;
 };
 
 interface Contact {
-  id: number;
+  id: string;
   name: string;
   email: string;
   phone: string;
   company: string;
-  position: string;
-  status: 'lead' | 'prospect' | 'client' | 'inactive';
-  lastContact: string;
-  totalRevenue: number;
-  notes: string;
+  created_at: string;
+  updated_at: string;
 }
 
-interface Interaction {
+interface Company {
+  id: string;
+  name: string;
+  industry: string;
+  website: string;
+  phone: string;
+  email: string;
+  address: any;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Activity {
   id: string;
   type: 'call' | 'email' | 'meeting' | 'note';
-  date: string;
-  subject: string;
-  details: string;
+  description: string;
+  created_at: string;
+  created_by_name?: string;
+  metadata?: any;
 }
 
+type ViewMode = 'contacts' | 'companies';
+
 export default function ContactsScreen({ navigation }: ContactsScreenProps) {
+  const { user } = useAuth();
+  const [viewMode, setViewMode] = useState<ViewMode>('contacts');
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [filteredContacts, setFilteredContacts] = useState<Contact[]>([]);
+  const [filteredCompanies, setFilteredCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'lead' | 'prospect' | 'client' | 'inactive'>('all');
-  const [modalVisible, setModalVisible] = useState(false);
+  const [contactModalVisible, setContactModalVisible] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [contactActivities, setContactActivities] = useState<Activity[]>([]);
   const [newContactModalVisible, setNewContactModalVisible] = useState(false);
-  const [newContactForm, setNewContactForm] = useState({
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [contactForm, setContactForm] = useState({
     name: '',
     email: '',
     phone: '',
     company: '',
-    position: '',
-    status: 'lead' as 'lead' | 'prospect' | 'client' | 'inactive',
-    lastContact: new Date().toISOString(),
-    notes: '',
   });
-  const [interactions, setInteractions] = useState<Interaction[]>([
-    {
-      id: '1',
-      type: 'call',
-      date: '2025-10-20',
-      subject: 'Appel de prospection',
-      details: 'Discussion sur les besoins de l\'entreprise',
-    },
-    {
-      id: '2',
-      type: 'email',
-      date: '2025-10-18',
-      subject: 'Envoi de proposition',
-      details: 'Proposition commerciale envoyée par email',
-    },
-    {
-      id: '3',
-      type: 'meeting',
-      date: '2025-10-15',
-      subject: 'Rendez-vous de qualification',
-      details: 'Réunion au siège pour présenter nos solutions',
-    },
-  ]);
+  const [companyModalVisible, setCompanyModalVisible] = useState(false);
+  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [newCompanyModalVisible, setNewCompanyModalVisible] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [companyForm, setCompanyForm] = useState({
+    name: '',
+    industry: '',
+    website: '',
+    phone: '',
+    email: '',
+    address: '',
+  });
+  const [activityModalVisible, setActivityModalVisible] = useState(false);
+  const [activityForm, setActivityForm] = useState({
+    type: 'note' as 'call' | 'email' | 'meeting' | 'note',
+    description: '',
+    duration_minutes: '',
+    subject: '',
+  });
 
-  const statusConfig = {
-    lead: { label: 'Lead', color: '#8E8E93', bgColor: '#8E8E9320' },
-    prospect: { label: 'Prospect', color: '#007AFF', bgColor: '#007AFF20' },
-    client: { label: 'Client', color: '#34C759', bgColor: '#34C75920' },
-    inactive: { label: 'Inactif', color: '#FF3B30', bgColor: '#FF3B3020' },
-  };
-
-  const interactionConfig = {
+  const activityConfig = {
     call: { label: 'Appel', icon: '📞', color: '#007AFF' },
     email: { label: 'Email', icon: '📧', color: '#FF9500' },
     meeting: { label: 'Réunion', icon: '🤝', color: '#34C759' },
@@ -109,172 +113,220 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
   };
 
   useEffect(() => {
-    fetchContacts();
+    fetchData();
   }, []);
 
   useEffect(() => {
-    filterContacts();
-  }, [searchQuery, selectedFilter, contacts]);
+    filterData();
+  }, [searchQuery, contacts, companies, viewMode]);
 
-  const fetchContacts = async () => {
+  const fetchData = async () => {
     try {
-      const response = await customerService.getAll();
-      const contactsData = response.data.map((customer: any) => ({
-        id: customer.id,
-        name: customer.name,
-        email: customer.email || '',
-        phone: customer.phone || '',
-        company: customer.company || '',
-        position: customer.position || 'N/A',
-        status: determineStatus(customer),
-        lastContact: customer.created_at || new Date().toISOString(),
-        totalRevenue: 0,
-        notes: customer.notes || '',
-      }));
-      setContacts(contactsData);
+      const [contactsRes, companiesRes] = await Promise.all([
+        customerService.getAll(),
+        companyService.getAll(),
+      ]);
+      setContacts(contactsRes.data);
+      setCompanies(companiesRes.data);
     } catch (error) {
-      console.error('Erreur chargement contacts:', error);
-      Alert.alert('Erreur', 'Impossible de charger les contacts');
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const handleCreateContact = () => {
-    if (!newContactForm.name.trim() || !newContactForm.email.trim()) {
-      Alert.alert('Erreur', 'Le nom et l\'email sont obligatoires');
-      return;
+  const filterData = () => {
+    if (viewMode === 'contacts') {
+      let filtered = contacts;
+      if (searchQuery) {
+        filtered = filtered.filter(
+          (c) =>
+            c.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.company?.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+      }
+      setFilteredContacts(filtered);
+    } else {
+      let filtered = companies;
+      if (searchQuery) {
+        filtered = filtered.filter(
+          (c) =>
+            c.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.industry?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.email?.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+      }
+      setFilteredCompanies(filtered);
     }
-
-    const newContact: Contact = {
-      id: Date.now(),
-      name: newContactForm.name,
-      email: newContactForm.email,
-      phone: newContactForm.phone,
-      company: newContactForm.company,
-      position: newContactForm.position,
-      status: newContactForm.status,
-      lastContact: new Date().toISOString(),
-      totalRevenue: 0,
-      notes: newContactForm.notes,
-    };
-
-    setContacts([...contacts, newContact]);
-    handleResetContactForm();
-    setNewContactModalVisible(false);
-    Alert.alert('Succès', `Contact ${newContact.name} créé avec succès`);
-  };
-
-  const handleResetContactForm = () => {
-    setNewContactForm({
-      name: '',
-      email: '',
-      phone: '',
-      company: '',
-      position: '',
-      status: 'lead',
-      lastContact: new Date().toISOString(),
-      notes: '',
-    });
-  };
-
-  const determineStatus = (customer: any): 'lead' | 'prospect' | 'client' | 'inactive' => {
-    // Simple logic pour déterminer le statut
-    if (customer.email && customer.phone) return 'client';
-    if (customer.phone) return 'prospect';
-    if (customer.email) return 'lead';
-    return 'inactive';
-  };
-
-  const filterContacts = () => {
-    let filtered = contacts;
-
-    if (selectedFilter !== 'all') {
-      filtered = filtered.filter((c) => c.status === selectedFilter);
-    }
-
-    if (searchQuery) {
-      filtered = filtered.filter(
-        (c) =>
-          c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          c.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          c.company.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    setFilteredContacts(filtered);
   };
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchContacts();
+    fetchData();
   };
 
-  const openContactDetails = (contact: Contact) => {
+  const openContactDetails = async (contact: Contact) => {
     setSelectedContact(contact);
-    setModalVisible(true);
+    setContactModalVisible(true);
+    try {
+      const res = await activitiesService.getByContact(contact.id);
+      setContactActivities(res.data);
+    } catch (error) {
+      console.error('Error fetching activities:', error);
+    }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 0,
-    }).format(amount);
+  const handleCreateContact = async () => {
+    if (!contactForm.name.trim() || !contactForm.email.trim()) {
+      Platform.OS === 'web' ? alert('Le nom et l\'email sont obligatoires') : Alert.alert('Erreur', 'Le nom et l\'email sont obligatoires');
+      return;
+    }
+    try {
+      if (editingContact) {
+        await customerService.update(parseInt(editingContact.id), contactForm);
+      } else {
+        await customerService.create(contactForm as any);
+      }
+      setNewContactModalVisible(false);
+      resetContactForm();
+      fetchData();
+    } catch (error) {
+      console.error('Error saving contact:', error);
+    }
+  };
+
+  const handleEditContact = (contact: Contact) => {
+    setEditingContact(contact);
+    setContactForm({
+      name: contact.name,
+      email: contact.email || '',
+      phone: contact.phone || '',
+      company: contact.company || '',
+    });
+    setContactModalVisible(false);
+    setNewContactModalVisible(true);
+  };
+
+  const handleDeleteContact = async (contact: Contact) => {
+    const confirmDelete = () => {
+      customerService.delete(parseInt(contact.id)).then(() => {
+        setContactModalVisible(false);
+        fetchData();
+      });
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm('Êtes-vous sûr de vouloir supprimer ce contact ?')) confirmDelete();
+    } else {
+      Alert.alert('Confirmer', 'Êtes-vous sûr de vouloir supprimer ce contact ?', [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Supprimer', onPress: confirmDelete, style: 'destructive' },
+      ]);
+    }
+  };
+
+  const resetContactForm = () => {
+    setContactForm({ name: '', email: '', phone: '', company: '' });
+    setEditingContact(null);
+  };
+
+  const openCompanyDetails = (company: Company) => {
+    setSelectedCompany(company);
+    setCompanyModalVisible(true);
+  };
+
+  const handleCreateCompany = async () => {
+    if (!companyForm.name.trim()) {
+      Platform.OS === 'web' ? alert('Le nom est obligatoire') : Alert.alert('Erreur', 'Le nom est obligatoire');
+      return;
+    }
+    try {
+      if (editingCompany) {
+        await companyService.update(editingCompany.id, companyForm);
+      } else {
+        await companyService.create(companyForm);
+      }
+      setNewCompanyModalVisible(false);
+      resetCompanyForm();
+      fetchData();
+    } catch (error) {
+      console.error('Error saving company:', error);
+    }
+  };
+
+  const handleEditCompany = (company: Company) => {
+    setEditingCompany(company);
+    setCompanyForm({
+      name: company.name,
+      industry: company.industry || '',
+      website: company.website || '',
+      phone: company.phone || '',
+      email: company.email || '',
+      address: typeof company.address === 'string' ? company.address : JSON.stringify(company.address || ''),
+    });
+    setCompanyModalVisible(false);
+    setNewCompanyModalVisible(true);
+  };
+
+  const handleDeleteCompany = async (company: Company) => {
+    const confirmDelete = () => {
+      companyService.delete(company.id).then(() => {
+        setCompanyModalVisible(false);
+        fetchData();
+      });
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm('Êtes-vous sûr de vouloir supprimer cette entreprise ?')) confirmDelete();
+    } else {
+      Alert.alert('Confirmer', 'Êtes-vous sûr ?', [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Supprimer', onPress: confirmDelete, style: 'destructive' },
+      ]);
+    }
+  };
+
+  const resetCompanyForm = () => {
+    setCompanyForm({ name: '', industry: '', website: '', phone: '', email: '', address: '' });
+    setEditingCompany(null);
+  };
+
+  const handleCreateActivity = async () => {
+    if (!selectedContact) return;
+    try {
+      const { type, description, duration_minutes, subject } = activityForm;
+      if (type === 'call') {
+        await activitiesService.createCall({ contact_id: selectedContact.id, duration_minutes: parseInt(duration_minutes) || 0, notes: description });
+      } else if (type === 'email') {
+        await activitiesService.createEmail({ contact_id: selectedContact.id, subject: subject, email_body: description });
+      } else if (type === 'meeting') {
+        await activitiesService.createMeeting({ contact_id: selectedContact.id, title: subject, start_time: new Date().toISOString(), notes: description });
+      } else {
+        await activitiesService.createNote({ contact_id: selectedContact.id, content: description });
+      }
+      setActivityModalVisible(false);
+      resetActivityForm();
+      const res = await activitiesService.getByContact(selectedContact.id);
+      setContactActivities(res.data);
+    } catch (error) {
+      console.error('Error creating activity:', error);
+    }
+  };
+
+  const resetActivityForm = () => {
+    setActivityForm({ type: 'note', description: '', duration_minutes: '', subject: '' });
   };
 
   const stats = {
-    total: contacts.length,
-    lead: contacts.filter((c) => c.status === 'lead').length,
-    prospect: contacts.filter((c) => c.status === 'prospect').length,
-    client: contacts.filter((c) => c.status === 'client').length,
-    inactive: contacts.filter((c) => c.status === 'inactive').length,
-  };
-
-  const renderContact = (contact: Contact) => {
-    const statusStyle = statusConfig[contact.status];
-    
-    return (
-      <TouchableOpacity
-        key={contact.id}
-        style={styles.contactCard}
-        onPress={() => openContactDetails(contact)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.contactHeader}>
-          <View style={styles.contactAvatar}>
-            <Text style={styles.contactInitial}>
-              {contact.name.charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          <View style={styles.contactInfo}>
-            <Text style={styles.contactName}>{contact.name}</Text>
-            {contact.company && (
-              <Text style={styles.contactCompany}>{contact.company}</Text>
-            )}
-            <View style={styles.contactMeta}>
-              {contact.email && (
-                <Text style={styles.contactMetaText} numberOfLines={1}>
-                  {contact.email}
-                </Text>
-              )}
-            </View>
-          </View>
-          <View style={[styles.statusBadge, { backgroundColor: statusStyle.bgColor }]}>
-            <Text style={[styles.statusText, { color: statusStyle.color }]}>
-              {statusStyle.label}
-            </Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
+    totalContacts: contacts.length,
+    totalCompanies: companies.length,
+    contactsWithEmail: contacts.filter((c) => c.email).length,
+    contactsWithPhone: contacts.filter((c) => c.phone).length,
   };
 
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIcon size={48} color="#007AFF" />
         <Text style={styles.loadingText}>Chargement...</Text>
       </View>
     );
@@ -282,217 +334,175 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
 
   return (
     <View style={styles.container}>
-      {/* En-tête */}
+      <Navigation />
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Contacts</Text>
           <Text style={styles.headerSubtitle}>
-            {stats.total} contacts • {stats.client} clients actifs
+            {viewMode === 'contacts' ? `${stats.totalContacts} contacts` : `${stats.totalCompanies} entreprises`}
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setNewContactModalVisible(true)}
-        >
+        <TouchableOpacity style={styles.addButton} onPress={() => viewMode === 'contacts' ? setNewContactModalVisible(true) : setNewCompanyModalVisible(true)}>
           <Text style={styles.addButtonText}>+ Nouveau</Text>
         </TouchableOpacity>
       </View>
-
-      {/* Statistiques */}
-      <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{stats.lead}</Text>
-          <Text style={styles.statLabel}>Leads</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statValue, { color: '#007AFF' }]}>{stats.prospect}</Text>
-          <Text style={styles.statLabel}>Prospects</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statValue, { color: '#34C759' }]}>{stats.client}</Text>
-          <Text style={styles.statLabel}>Clients</Text>
-        </View>
+      <View style={styles.toggleContainer}>
+        <TouchableOpacity style={[styles.toggleButton, viewMode === 'contacts' && styles.toggleButtonActive]} onPress={() => setViewMode('contacts')}>
+          <UsersIcon size={18} color={viewMode === 'contacts' ? '#FFFFFF' : '#8E8E93'} />
+          <Text style={[styles.toggleText, viewMode === 'contacts' && styles.toggleTextActive]}>Contacts ({stats.totalContacts})</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.toggleButton, viewMode === 'companies' && styles.toggleButtonActive]} onPress={() => setViewMode('companies')}>
+          <BuildingIcon size={18} color={viewMode === 'companies' ? '#FFFFFF' : '#8E8E93'} />
+          <Text style={[styles.toggleText, viewMode === 'companies' && styles.toggleTextActive]}>Entreprises ({stats.totalCompanies})</Text>
+        </TouchableOpacity>
       </View>
-
-      {/* Recherche */}
+      <View style={styles.statsContainer}>
+        {viewMode === 'contacts' ? (
+          <>
+            <View style={styles.statCard}>
+              <MailIcon size={20} color="#007AFF" />
+              <Text style={styles.statValue}>{stats.contactsWithEmail}</Text>
+              <Text style={styles.statLabel}>Avec email</Text>
+            </View>
+            <View style={styles.statCard}>
+              <PhoneIcon size={20} color="#34C759" />
+              <Text style={styles.statValue}>{stats.contactsWithPhone}</Text>
+              <Text style={styles.statLabel}>Avec téléphone</Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.statCard}>
+              <BuildingIcon size={20} color="#34C759" />
+              <Text style={styles.statValue}>{stats.totalCompanies}</Text>
+              <Text style={styles.statLabel}>Entreprises</Text>
+            </View>
+            <View style={styles.statCard}>
+              <UsersIcon size={20} color="#007AFF" />
+              <Text style={styles.statValue}>{stats.totalContacts}</Text>
+              <Text style={styles.statLabel}>Contacts</Text>
+            </View>
+          </>
+        )}
+      </View>
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Rechercher un contact..."
+          placeholder={viewMode === 'contacts' ? 'Rechercher un contact...' : 'Rechercher une entreprise...'}
           placeholderTextColor="#8E8E93"
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
       </View>
-
-      {/* Filtres */}
-      <View style={styles.filtersContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <TouchableOpacity
-            style={[styles.filterChip, selectedFilter === 'all' && styles.filterChipActive]}
-            onPress={() => setSelectedFilter('all')}
-          >
-            <Text style={[styles.filterText, selectedFilter === 'all' && styles.filterTextActive]}>
-              Tous ({stats.total})
-            </Text>
-          </TouchableOpacity>
-
-          {(Object.keys(statusConfig) as Array<keyof typeof statusConfig>).map((status) => (
-            <TouchableOpacity
-              key={status}
-              style={[styles.filterChip, selectedFilter === status && styles.filterChipActive]}
-              onPress={() => setSelectedFilter(status)}
-            >
-              <Text style={[styles.filterText, selectedFilter === status && styles.filterTextActive]}>
-                {statusConfig[status].label} ({stats[status]})
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Liste des contacts */}
-      <ScrollView
-        style={styles.contactsList}
-        contentContainerStyle={styles.contactsListContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        {filteredContacts.length > 0 ? (
-          filteredContacts.map((contact) => renderContact(contact))
+      <ScrollView style={styles.list} contentContainerStyle={styles.listContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        {viewMode === 'contacts' ? (
+          filteredContacts.length > 0 ? (
+            filteredContacts.map((contact) => (
+              <TouchableOpacity key={contact.id} style={styles.card} onPress={() => openContactDetails(contact)}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>{contact.name.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.cardName}>{contact.name}</Text>
+                    {contact.company && <Text style={styles.cardCompany}>{contact.company}</Text>}
+                    {contact.email && <Text style={styles.cardMetaText} numberOfLines={1}>{contact.email}</Text>}
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <UsersIcon size={64} color="#D1D1D6" />
+              <Text style={styles.emptyText}>Aucun contact trouvé</Text>
+            </View>
+          )
         ) : (
-          <View style={styles.emptyState}>
-            <UsersIcon size={64} color="#D1D1D6" />
-            <Text style={styles.emptyText}>Aucun contact trouvé</Text>
-          </View>
+          filteredCompanies.length > 0 ? (
+            filteredCompanies.map((company) => (
+              <TouchableOpacity key={company.id} style={styles.card} onPress={() => openCompanyDetails(company)}>
+                <View style={styles.cardHeader}>
+                  <View style={[styles.avatar, { backgroundColor: '#34C759' }]}>
+                    <BuildingIcon size={24} color="#FFFFFF" />
+                  </View>
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.cardName}>{company.name}</Text>
+                    {company.industry && <Text style={styles.cardCompany}>{company.industry}</Text>}
+                    {company.email && <Text style={styles.cardMetaText} numberOfLines={1}>{company.email}</Text>}
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <BuildingIcon size={64} color="#D1D1D6" />
+              <Text style={styles.emptyText}>Aucune entreprise trouvée</Text>
+            </View>
+          )
         )}
       </ScrollView>
 
-      {/* Modal Détails Contact */}
-      <Modal
-        visible={modalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setModalVisible(false)}
-      >
+      {/* Contact Detail Modal */}
+      <Modal visible={contactModalVisible} animationType="slide" transparent onRequestClose={() => setContactModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             {selectedContact && (
               <>
                 <View style={styles.modalHeader}>
-                  <View style={styles.modalContactHeader}>
-                    <View style={styles.modalContactAvatar}>
-                      <Text style={styles.modalContactInitial}>
-                        {selectedContact.name.charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                    <View>
-                      <Text style={styles.modalTitle}>{selectedContact.name}</Text>
-                      {selectedContact.company && (
-                        <Text style={styles.modalSubtitle}>{selectedContact.company}</Text>
-                      )}
-                      <View
-                        style={[
-                          styles.modalStatusBadge,
-                          { backgroundColor: statusConfig[selectedContact.status].bgColor },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.modalStatusText,
-                            { color: statusConfig[selectedContact.status].color },
-                          ]}
-                        >
-                          {statusConfig[selectedContact.status].label}
-                        </Text>
-                      </View>
-                    </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modalTitle}>{selectedContact.name}</Text>
+                    {selectedContact.company && <Text style={styles.modalSubtitle}>{selectedContact.company}</Text>}
                   </View>
-                  <TouchableOpacity onPress={() => setModalVisible(false)}>
+                  <TouchableOpacity onPress={() => setContactModalVisible(false)}>
                     <Text style={styles.closeButton}>✕</Text>
                   </TouchableOpacity>
                 </View>
-
                 <ScrollView style={styles.modalBody}>
-                  {/* Informations */}
                   <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>INFORMATIONS</Text>
+                    <Text style={styles.sectionTitle}>INFORMATIONS</Text>
                     {selectedContact.email && (
                       <View style={styles.infoRow}>
-                        <Text style={styles.infoLabel}>Email</Text>
+                        <MailIcon size={16} color="#8E8E93" />
                         <Text style={styles.infoValue}>{selectedContact.email}</Text>
                       </View>
                     )}
                     {selectedContact.phone && (
                       <View style={styles.infoRow}>
-                        <Text style={styles.infoLabel}>Téléphone</Text>
+                        <PhoneIcon size={16} color="#8E8E93" />
                         <Text style={styles.infoValue}>{selectedContact.phone}</Text>
                       </View>
                     )}
-                    {selectedContact.position && (
-                      <View style={styles.infoRow}>
-                        <Text style={styles.infoLabel}>Poste</Text>
-                        <Text style={styles.infoValue}>{selectedContact.position}</Text>
-                      </View>
-                    )}
                   </View>
-
-                  {/* Historique des interactions */}
                   <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>HISTORIQUE</Text>
-                    {interactions.map((interaction) => (
-                      <View key={interaction.id} style={styles.interactionCard}>
-                        <View style={styles.interactionHeader}>
-                          <Text style={styles.interactionIcon}>
-                            {interactionConfig[interaction.type].icon}
-                          </Text>
-                          <View style={styles.interactionInfo}>
-                            <Text style={styles.interactionSubject}>{interaction.subject}</Text>
-                            <Text style={styles.interactionDate}>
-                              {new Date(interaction.date).toLocaleDateString('fr-FR', {
-                                day: 'numeric',
-                                month: 'long',
-                                year: 'numeric',
-                              })}
-                            </Text>
-                          </View>
-                          <View
-                            style={[
-                              styles.interactionTypeBadge,
-                              { backgroundColor: `${interactionConfig[interaction.type].color}20` },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.interactionTypeText,
-                                { color: interactionConfig[interaction.type].color },
-                              ]}
-                            >
-                              {interactionConfig[interaction.type].label}
+                    <Text style={styles.sectionTitle}>ACTIVITÉS RÉCENTES</Text>
+                    {contactActivities.length > 0 ? (
+                      contactActivities.map((activity) => (
+                        <View key={activity.id} style={styles.activityCard}>
+                          <Text style={styles.activityIcon}>{activityConfig[activity.type].icon}</Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.activityDescription}>{activity.description}</Text>
+                            <Text style={styles.activityDate}>
+                              {new Date(activity.created_at).toLocaleDateString('fr-FR')}
                             </Text>
                           </View>
                         </View>
-                        <Text style={styles.interactionDetails}>{interaction.details}</Text>
-                      </View>
-                    ))}
+                      ))
+                    ) : (
+                      <Text style={styles.emptyText}>Aucune activité</Text>
+                    )}
                   </View>
-
-                  {/* Notes */}
-                  {selectedContact.notes && (
-                    <View style={styles.modalSection}>
-                      <Text style={styles.modalSectionTitle}>NOTES</Text>
-                      <View style={styles.notesContainer}>
-                        <Text style={styles.notesText}>{selectedContact.notes}</Text>
-                      </View>
-                    </View>
-                  )}
                 </ScrollView>
-
                 <View style={styles.modalActions}>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => Alert.alert('À venir', 'Ajout d\'interaction')}
-                  >
-                    <Text style={styles.actionButtonText}>+ Nouvelle Interaction</Text>
+                  <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => handleEditContact(selectedContact)}>
+                    <EditIcon size={16} color="#007AFF" />
+                    <Text style={styles.actionButtonSecondaryText}>Modifier</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionButtonPrimary} onPress={() => setActivityModalVisible(true)}>
+                    <PlusIcon size={16} color="#FFFFFF" />
+                    <Text style={styles.actionButtonPrimaryText}>Activité</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionButtonDanger} onPress={() => handleDeleteContact(selectedContact)}>
+                    <TrashIcon size={16} color="#FF3B30" />
                   </TouchableOpacity>
                 </View>
               </>
@@ -501,140 +511,200 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
         </View>
       </Modal>
 
-      {/* Modal Création Contact */}
-      <Modal visible={newContactModalVisible} transparent animationType="slide" onRequestClose={() => setNewContactModalVisible(false)}>
-        <View style={styles.newModalContainer}>
-          <View style={styles.newModalContent}>
-            <View style={styles.newModalHeader}>
-              <Text style={styles.newModalTitle}>Nouveau Contact</Text>
-              <TouchableOpacity onPress={() => setNewContactModalVisible(false)}>
-                <Text style={styles.closeButtonNew}>×</Text>
+      {/* Company Detail Modal */}
+      <Modal visible={companyModalVisible} animationType="slide" transparent onRequestClose={() => setCompanyModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {selectedCompany && (
+              <>
+                <View style={styles.modalHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modalTitle}>{selectedCompany.name}</Text>
+                    {selectedCompany.industry && <Text style={styles.modalSubtitle}>{selectedCompany.industry}</Text>}
+                  </View>
+                  <TouchableOpacity onPress={() => setCompanyModalVisible(false)}>
+                    <Text style={styles.closeButton}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView style={styles.modalBody}>
+                  <View style={styles.modalSection}>
+                    <Text style={styles.sectionTitle}>INFORMATIONS</Text>
+                    {selectedCompany.email && (
+                      <View style={styles.infoRow}>
+                        <MailIcon size={16} color="#8E8E93" />
+                        <Text style={styles.infoValue}>{selectedCompany.email}</Text>
+                      </View>
+                    )}
+                    {selectedCompany.phone && (
+                      <View style={styles.infoRow}>
+                        <PhoneIcon size={16} color="#8E8E93" />
+                        <Text style={styles.infoValue}>{selectedCompany.phone}</Text>
+                      </View>
+                    )}
+                    {selectedCompany.website && (
+                      <View style={styles.infoRow}>
+                        <Text style={styles.infoLabel}>🌐</Text>
+                        <Text style={styles.infoValue}>{selectedCompany.website}</Text>
+                      </View>
+                    )}
+                    {selectedCompany.address && (
+                      <View style={styles.infoRow}>
+                        <MapPinIcon size={16} color="#8E8E93" />
+                        <Text style={styles.infoValue}>
+                          {typeof selectedCompany.address === 'string' ? selectedCompany.address : JSON.stringify(selectedCompany.address)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </ScrollView>
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => handleEditCompany(selectedCompany)}>
+                    <EditIcon size={16} color="#007AFF" />
+                    <Text style={styles.actionButtonSecondaryText}>Modifier</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionButtonDanger} onPress={() => handleDeleteCompany(selectedCompany)}>
+                    <TrashIcon size={16} color="#FF3B30" />
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* New/Edit Contact Modal */}
+      <Modal visible={newContactModalVisible} transparent animationType="slide" onRequestClose={() => { setNewContactModalVisible(false); resetContactForm(); }}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingContact ? 'Modifier le contact' : 'Nouveau contact'}</Text>
+              <TouchableOpacity onPress={() => { setNewContactModalVisible(false); resetContactForm(); }}>
+                <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
-
-            <ScrollView style={styles.newModalBody}>
-              {/* Nom */}
-              <View style={styles.formGroupContact}>
-                <Text style={styles.formLabelContact}>Nom *</Text>
-                <TextInput
-                  style={styles.inputContact}
-                  placeholder="Nom du contact"
-                  value={newContactForm.name}
-                  onChangeText={(text) => setNewContactForm({ ...newContactForm, name: text })}
-                  placeholderTextColor="#8E8E93"
-                />
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Nom *</Text>
+                <TextInput style={styles.input} placeholder="Nom du contact" value={contactForm.name} onChangeText={(text) => setContactForm({ ...contactForm, name: text })} placeholderTextColor="#8E8E93" />
               </View>
-
-              {/* Email */}
-              <View style={styles.formGroupContact}>
-                <Text style={styles.formLabelContact}>Email *</Text>
-                <TextInput
-                  style={styles.inputContact}
-                  placeholder="email@example.com"
-                  value={newContactForm.email}
-                  onChangeText={(text) => setNewContactForm({ ...newContactForm, email: text })}
-                  keyboardType="email-address"
-                  placeholderTextColor="#8E8E93"
-                />
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Email *</Text>
+                <TextInput style={styles.input} placeholder="email@example.com" value={contactForm.email} onChangeText={(text) => setContactForm({ ...contactForm, email: text })} keyboardType="email-address" placeholderTextColor="#8E8E93" />
               </View>
-
-              {/* Téléphone */}
-              <View style={styles.formGroupContact}>
-                <Text style={styles.formLabelContact}>Téléphone</Text>
-                <TextInput
-                  style={styles.inputContact}
-                  placeholder="+33 6 XX XX XX XX"
-                  value={newContactForm.phone}
-                  onChangeText={(text) => setNewContactForm({ ...newContactForm, phone: text })}
-                  keyboardType="phone-pad"
-                  placeholderTextColor="#8E8E93"
-                />
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Téléphone</Text>
+                <TextInput style={styles.input} placeholder="+33 6 XX XX XX XX" value={contactForm.phone} onChangeText={(text) => setContactForm({ ...contactForm, phone: text })} keyboardType="phone-pad" placeholderTextColor="#8E8E93" />
               </View>
-
-              {/* Entreprise */}
-              <View style={styles.formGroupContact}>
-                <Text style={styles.formLabelContact}>Entreprise</Text>
-                <TextInput
-                  style={styles.inputContact}
-                  placeholder="Nom de l'entreprise"
-                  value={newContactForm.company}
-                  onChangeText={(text) => setNewContactForm({ ...newContactForm, company: text })}
-                  placeholderTextColor="#8E8E93"
-                />
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Entreprise</Text>
+                <TextInput style={styles.input} placeholder="Nom de l'entreprise" value={contactForm.company} onChangeText={(text) => setContactForm({ ...contactForm, company: text })} placeholderTextColor="#8E8E93" />
               </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity style={styles.buttonSecondary} onPress={() => { setNewContactModalVisible(false); resetContactForm(); }}>
+                <Text style={styles.buttonSecondaryText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.buttonPrimary} onPress={handleCreateContact}>
+                <Text style={styles.buttonPrimaryText}>{editingContact ? 'Modifier' : 'Créer'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
-              {/* Poste */}
-              <View style={styles.formGroupContact}>
-                <Text style={styles.formLabelContact}>Poste</Text>
-                <TextInput
-                  style={styles.inputContact}
-                  placeholder="Titre du poste"
-                  value={newContactForm.position}
-                  onChangeText={(text) => setNewContactForm({ ...newContactForm, position: text })}
-                  placeholderTextColor="#8E8E93"
-                />
+      {/* New/Edit Company Modal */}
+      <Modal visible={newCompanyModalVisible} transparent animationType="slide" onRequestClose={() => { setNewCompanyModalVisible(false); resetCompanyForm(); }}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingCompany ? 'Modifier l\'entreprise' : 'Nouvelle entreprise'}</Text>
+              <TouchableOpacity onPress={() => { setNewCompanyModalVisible(false); resetCompanyForm(); }}>
+                <Text style={styles.closeButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Nom *</Text>
+                <TextInput style={styles.input} placeholder="Nom de l'entreprise" value={companyForm.name} onChangeText={(text) => setCompanyForm({ ...companyForm, name: text })} placeholderTextColor="#8E8E93" />
               </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Secteur</Text>
+                <TextInput style={styles.input} placeholder="ex: Technologie" value={companyForm.industry} onChangeText={(text) => setCompanyForm({ ...companyForm, industry: text })} placeholderTextColor="#8E8E93" />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Site web</Text>
+                <TextInput style={styles.input} placeholder="https://example.com" value={companyForm.website} onChangeText={(text) => setCompanyForm({ ...companyForm, website: text })} keyboardType="url" placeholderTextColor="#8E8E93" />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Email</Text>
+                <TextInput style={styles.input} placeholder="contact@entreprise.com" value={companyForm.email} onChangeText={(text) => setCompanyForm({ ...companyForm, email: text })} keyboardType="email-address" placeholderTextColor="#8E8E93" />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Téléphone</Text>
+                <TextInput style={styles.input} placeholder="+33 1 XX XX XX XX" value={companyForm.phone} onChangeText={(text) => setCompanyForm({ ...companyForm, phone: text })} keyboardType="phone-pad" placeholderTextColor="#8E8E93" />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Adresse</Text>
+                <TextInput style={[styles.input, styles.textArea]} placeholder="Adresse complète" value={companyForm.address} onChangeText={(text) => setCompanyForm({ ...companyForm, address: text })} placeholderTextColor="#8E8E93" multiline numberOfLines={3} />
+              </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity style={styles.buttonSecondary} onPress={() => { setNewCompanyModalVisible(false); resetCompanyForm(); }}>
+                <Text style={styles.buttonSecondaryText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.buttonPrimary} onPress={handleCreateCompany}>
+                <Text style={styles.buttonPrimaryText}>{editingCompany ? 'Modifier' : 'Créer'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
-              {/* Statut */}
-              <View style={styles.formGroupContact}>
-                <Text style={styles.formLabelContact}>Statut</Text>
-                <View style={styles.statusSelectContact}>
-                  {(['lead', 'prospect', 'client', 'inactive'] as const).map((s) => (
-                    <TouchableOpacity
-                      key={s}
-                      style={[
-                        styles.statusButtonContact,
-                        newContactForm.status === s && styles.statusButtonActiveContact,
-                        {
-                          borderColor: newContactForm.status === s ? statusConfig[s].color : '#E5E5EA',
-                          backgroundColor: newContactForm.status === s ? statusConfig[s].bgColor : '#FFFFFF',
-                        },
-                      ]}
-                      onPress={() => setNewContactForm({ ...newContactForm, status: s })}
-                    >
-                      <Text
-                        style={[
-                          styles.statusButtonTextContact,
-                          { color: newContactForm.status === s ? statusConfig[s].color : '#8E8E93' },
-                        ]}
-                      >
-                        {statusConfig[s].label}
-                      </Text>
+      {/* Activity Modal */}
+      <Modal visible={activityModalVisible} transparent animationType="slide" onRequestClose={() => { setActivityModalVisible(false); resetActivityForm(); }}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Nouvelle activité</Text>
+              <TouchableOpacity onPress={() => { setActivityModalVisible(false); resetActivityForm(); }}>
+                <Text style={styles.closeButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Type</Text>
+                <View style={styles.activityTypeSelect}>
+                  {(['call', 'email', 'meeting', 'note'] as const).map((type) => (
+                    <TouchableOpacity key={type} style={[styles.activityTypeButton, activityForm.type === type && styles.activityTypeButtonActive]} onPress={() => setActivityForm({ ...activityForm, type })}>
+                      <Text style={styles.activityTypeIcon}>{activityConfig[type].icon}</Text>
+                      <Text style={styles.activityTypeLabel}>{activityConfig[type].label}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               </View>
-
-              {/* Notes */}
-              <View style={styles.formGroupContact}>
-                <Text style={styles.formLabelContact}>Notes</Text>
-                <TextInput
-                  style={[styles.inputContact, styles.textAreaContact]}
-                  placeholder="Remarques supplémentaires..."
-                  value={newContactForm.notes}
-                  onChangeText={(text) => setNewContactForm({ ...newContactForm, notes: text })}
-                  placeholderTextColor="#8E8E93"
-                  multiline
-                  numberOfLines={4}
-                />
+              {activityForm.type === 'call' && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Durée (minutes)</Text>
+                  <TextInput style={styles.input} placeholder="30" value={activityForm.duration_minutes} onChangeText={(text) => setActivityForm({ ...activityForm, duration_minutes: text })} keyboardType="numeric" placeholderTextColor="#8E8E93" />
+                </View>
+              )}
+              {(activityForm.type === 'email' || activityForm.type === 'meeting') && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>{activityForm.type === 'email' ? 'Sujet' : 'Titre'}</Text>
+                  <TextInput style={styles.input} placeholder={activityForm.type === 'email' ? 'Sujet de l\'email' : 'Titre de la réunion'} value={activityForm.subject} onChangeText={(text) => setActivityForm({ ...activityForm, subject: text })} placeholderTextColor="#8E8E93" />
+                </View>
+              )}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>{activityForm.type === 'note' ? 'Note' : 'Description'}</Text>
+                <TextInput style={[styles.input, styles.textArea]} placeholder="Détails..." value={activityForm.description} onChangeText={(text) => setActivityForm({ ...activityForm, description: text })} placeholderTextColor="#8E8E93" multiline numberOfLines={4} />
               </View>
             </ScrollView>
-
-            <View style={styles.newModalFooter}>
-              <TouchableOpacity
-                style={[styles.buttonContact, styles.buttonSecondaryContact]}
-                onPress={() => {
-                  handleResetContactForm();
-                  setNewContactModalVisible(false);
-                }}
-              >
-                <Text style={styles.buttonSecondaryTextContact}>Annuler</Text>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity style={styles.buttonSecondary} onPress={() => { setActivityModalVisible(false); resetActivityForm(); }}>
+                <Text style={styles.buttonSecondaryText}>Annuler</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.buttonContact, styles.buttonPrimaryContact]}
-                onPress={handleCreateContact}
-              >
-                <Text style={styles.buttonPrimaryTextContact}>Créer</Text>
+              <TouchableOpacity style={styles.buttonPrimary} onPress={handleCreateActivity}>
+                <Text style={styles.buttonPrimaryText}>Enregistrer</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -645,472 +715,71 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F2F2F7',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F2F2F7',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 17,
-    color: '#8E8E93',
-    fontWeight: '500',
-  },
-  header: {
-    backgroundColor: '#FFFFFF',
-    paddingTop: Platform.OS === 'ios' ? 60 : 20,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#000000',
-    letterSpacing: -0.6,
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 15,
-    color: '#8E8E93',
-    letterSpacing: -0.2,
-  },
-  addButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#000000',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#8E8E93',
-  },
-  searchContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-  },
-  searchInput: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 16,
-    color: '#000000',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  filtersContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-  },
-  filterChipActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  filterText: {
-    fontSize: 14,
-    color: '#000000',
-    fontWeight: '500',
-  },
-  filterTextActive: {
-    color: '#FFFFFF',
-  },
-  contactsList: {
-    flex: 1,
-  },
-  contactsListContent: {
-    padding: 20,
-    gap: 12,
-  },
-  contactCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  contactHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  contactAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  contactInitial: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  contactInfo: {
-    flex: 1,
-  },
-  contactName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 2,
-  },
-  contactCompany: {
-    fontSize: 14,
-    color: '#8E8E93',
-    marginBottom: 4,
-  },
-  contactMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  contactMetaText: {
-    fontSize: 13,
-    color: '#8E8E93',
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    marginTop: 16,
-    fontSize: 17,
-    color: '#8E8E93',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '90%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
-  },
-  modalContactHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  modalContactAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  modalContactInitial: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000000',
-    marginBottom: 2,
-  },
-  modalSubtitle: {
-    fontSize: 15,
-    color: '#8E8E93',
-    marginBottom: 6,
-  },
-  modalStatusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  modalStatusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  closeButton: {
-    fontSize: 28,
-    color: '#8E8E93',
-    fontWeight: '300',
-  },
-  modalBody: {
-    flex: 1,
-  },
-  modalSection: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
-  },
-  modalSectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#8E8E93',
-    marginBottom: 12,
-    letterSpacing: -0.1,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
-  infoLabel: {
-    fontSize: 15,
-    color: '#8E8E93',
-  },
-  infoValue: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#000000',
-  },
-  interactionCard: {
-    backgroundColor: '#F2F2F7',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-  },
-  interactionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  interactionIcon: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  interactionInfo: {
-    flex: 1,
-  },
-  interactionSubject: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 2,
-  },
-  interactionDate: {
-    fontSize: 13,
-    color: '#8E8E93',
-  },
-  interactionTypeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  interactionTypeText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  interactionDetails: {
-    fontSize: 14,
-    color: '#000000',
-    lineHeight: 20,
-  },
-  notesContainer: {
-    backgroundColor: '#F2F2F7',
-    borderRadius: 12,
-    padding: 12,
-  },
-  notesText: {
-    fontSize: 14,
-    color: '#000000',
-    lineHeight: 20,
-  },
-  modalActions: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#F2F2F7',
-  },
-  actionButton: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  newModalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  newModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '90%',
-    paddingBottom: 20,
-  },
-  newModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
-  },
-  newModalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000000',
-  },
-  closeButtonNew: {
-    fontSize: 32,
-    color: '#8E8E93',
-    fontWeight: '300',
-  },
-  newModalBody: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  formGroupContact: {
-    marginBottom: 16,
-  },
-  formLabelContact: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 8,
-  },
-  inputContact: {
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: '#000000',
-  },
-  textAreaContact: {
-    textAlignVertical: 'top',
-    paddingTop: 10,
-    height: 100,
-  },
-  statusSelectContact: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  statusButtonContact: {
-    flex: 1,
-    minWidth: '48%',
-    borderWidth: 1.5,
-    borderColor: '#E5E5EA',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  statusButtonActiveContact: {
-    borderWidth: 2,
-  },
-  statusButtonTextContact: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  newModalFooter: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#F2F2F7',
-  },
-  buttonContact: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonPrimaryContact: {
-    backgroundColor: '#007AFF',
-  },
-  buttonPrimaryTextContact: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  buttonSecondaryContact: {
-    backgroundColor: '#F2F2F7',
-  },
-  buttonSecondaryTextContact: {
-    color: '#007AFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  container: { flex: 1, backgroundColor: '#F2F2F7' },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F2F2F7' },
+  loadingText: { fontSize: 17, color: '#8E8E93', fontWeight: '500' },
+  header: { backgroundColor: '#FFFFFF', paddingTop: 16, paddingHorizontal: 20, paddingBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerTitle: { fontSize: 32, fontWeight: '700', color: '#000000', letterSpacing: -0.6, marginBottom: 4 },
+  headerSubtitle: { fontSize: 15, color: '#8E8E93', letterSpacing: -0.2 },
+  addButton: { backgroundColor: '#007AFF', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
+  addButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  toggleContainer: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 12, gap: 8 },
+  toggleButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: '#FFFFFF', gap: 6 },
+  toggleButtonActive: { backgroundColor: '#007AFF' },
+  toggleText: { fontSize: 14, fontWeight: '600', color: '#8E8E93' },
+  toggleTextActive: { color: '#FFFFFF' },
+  statsContainer: { flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 12, gap: 12 },
+  statCard: { flex: 1, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 12, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, gap: 4 },
+  statValue: { fontSize: 20, fontWeight: '700', color: '#000000' },
+  statLabel: { fontSize: 12, color: '#8E8E93' },
+  searchContainer: { paddingHorizontal: 20, paddingBottom: 12 },
+  searchInput: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 12, fontSize: 16, color: '#000000', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  list: { flex: 1 },
+  listContent: { padding: 20, gap: 12 },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center' },
+  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  avatarText: { fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
+  cardInfo: { flex: 1 },
+  cardName: { fontSize: 16, fontWeight: '600', color: '#000000', marginBottom: 2 },
+  cardCompany: { fontSize: 14, color: '#8E8E93', marginBottom: 4 },
+  cardMetaText: { fontSize: 13, color: '#8E8E93' },
+  emptyState: { alignItems: 'center', paddingVertical: 60 },
+  emptyText: { marginTop: 16, fontSize: 17, color: '#8E8E93' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F2F2F7' },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: '#000000' },
+  modalSubtitle: { fontSize: 15, color: '#8E8E93', marginTop: 2 },
+  closeButton: { fontSize: 28, color: '#8E8E93', fontWeight: '300' },
+  modalBody: { flex: 1 },
+  modalSection: { padding: 20, borderBottomWidth: 1, borderBottomColor: '#F2F2F7' },
+  sectionTitle: { fontSize: 13, fontWeight: '600', color: '#8E8E93', marginBottom: 12, letterSpacing: -0.1 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 8 },
+  infoLabel: { fontSize: 15, color: '#8E8E93' },
+  infoValue: { fontSize: 15, fontWeight: '500', color: '#000000', flex: 1 },
+  activityCard: { flexDirection: 'row', backgroundColor: '#F2F2F7', borderRadius: 12, padding: 12, marginBottom: 8 },
+  activityIcon: { fontSize: 24, marginRight: 12 },
+  activityDescription: { fontSize: 15, fontWeight: '500', color: '#000000', marginBottom: 2 },
+  activityDate: { fontSize: 13, color: '#8E8E93' },
+  modalActions: { flexDirection: 'row', padding: 20, borderTopWidth: 1, borderTopColor: '#F2F2F7', gap: 8 },
+  actionButtonPrimary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 10, gap: 6, backgroundColor: '#007AFF' },
+  actionButtonPrimaryText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  actionButtonSecondary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 10, gap: 6, backgroundColor: '#F2F2F7' },
+  actionButtonSecondaryText: { color: '#007AFF', fontSize: 15, fontWeight: '600' },
+  actionButtonDanger: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#FF3B30', flex: 0, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10 },
+  modalFooter: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#F2F2F7' },
+  buttonPrimary: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#007AFF' },
+  buttonPrimaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  buttonSecondary: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F2F2F7' },
+  buttonSecondaryText: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
+  formGroup: { marginBottom: 16 },
+  formLabel: { fontSize: 15, fontWeight: '600', color: '#000000', marginBottom: 8 },
+  input: { borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, color: '#000000' },
+  textArea: { textAlignVertical: 'top', paddingTop: 10, height: 100 },
+  activityTypeSelect: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  activityTypeButton: { flex: 1, minWidth: '48%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E5E5EA', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#FFFFFF', gap: 6 },
+  activityTypeButtonActive: { borderColor: '#007AFF', backgroundColor: '#007AFF10' },
+  activityTypeIcon: { fontSize: 18 },
+  activityTypeLabel: { fontSize: 14, fontWeight: '600', color: '#000000' },
 });

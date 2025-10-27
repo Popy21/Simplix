@@ -16,6 +16,7 @@ import {
 import { supplierService } from '../services/api';
 import { Supplier } from '../types';
 import { DollarIcon, UsersIcon } from '../components/Icons';
+import Navigation from '../components/Navigation';
 
 type SupplierSummary = {
   total_active?: number;
@@ -143,6 +144,7 @@ const SuppliersScreen = () => {
 
   return (
     <View style={styles.container}>
+      <Navigation />
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}

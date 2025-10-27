@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { saleService } from '../services/api';
 import { Sale } from '../types';
+import Navigation from '../components/Navigation';
 
 interface SaleWithDetails extends Sale {
   salesPerson?: string;
@@ -275,6 +276,7 @@ export default function SalesScreen() {
 
   return (
     <View style={styles.container}>
+      <Navigation />
       {/* En-tête */}
       <View style={styles.header}>
         <View>
