@@ -119,6 +119,38 @@ export const companyService = {
   delete: (id: string) => api.delete(`/companies/${id}`),
 };
 
+// Contact API
+export const contactService = {
+  getAll: (params?: { page?: number; limit?: number; type?: string }) => api.get('/contacts', { params }),
+  getById: (id: string) => api.get(`/contacts/${id}`),
+  create: (contact: any) => api.post('/contacts', contact),
+  update: (id: string, contact: any) => api.put(`/contacts/${id}`, contact),
+  delete: (id: string) => api.delete(`/contacts/${id}`),
+};
+
+// Upload API
+export const uploadService = {
+  uploadImage: (file: File) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    return api.post('/upload/image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+  uploadImages: (files: File[]) => {
+    const formData = new FormData();
+    files.forEach(file => formData.append('images', file));
+    return api.post('/upload/images', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+  deleteImage: (filename: string) => api.delete(`/upload/image/${filename}`),
+};
+
 // Activities API
 export const activitiesService = {
   getAll: (params?: { contact_id?: string; deal_id?: string; type?: string; from_date?: string; to_date?: string; user_id?: string }) =>
@@ -181,6 +213,8 @@ export const quotesService = {
   delete: (id: string) => api.delete(`/quotes/${id}`),
   convertToInvoice: (id: string) => api.post(`/quotes/${id}/convert-to-invoice`),
   sendEmail: (id: string) => api.post(`/quotes/${id}/send-email`),
+  markAsPaid: (id: string, data: { amount: number; payment_type: 'deposit' | 'full' }) =>
+    api.post(`/quotes/${id}/mark-as-paid`, data),
 };
 
 // Invoices API
@@ -195,6 +229,7 @@ export const invoicesService = {
   markAsPaid: (id: string, data: { payment_method: string; payment_date: string; amount: number; reference?: string }) =>
     api.post(`/invoices/${id}/mark-as-paid`, data),
   sendEmail: (id: string) => api.post(`/invoices/${id}/send-email`),
+  convertToQuote: (id: number) => api.post(`/invoices/${id}/convert-to-quote`),
 };
 
 // Payments API
@@ -211,6 +246,8 @@ export const paymentsService = {
     api.post('/payments/process-apple-pay', data),
   processGooglePay: (data: { invoice_id: string; amount: number; google_pay_token: string }) =>
     api.post('/payments/process-google-pay', data),
+  createStripePaymentIntent: (data: { invoice_id: number; amount: number; currency?: string }) =>
+    api.post('/payments/stripe/create-payment-intent', data),
 };
 
 // Dashboard API
@@ -244,6 +281,14 @@ export const templatesService = {
   create: (template: any) => api.post('/templates', template),
   update: (id: string, template: any) => api.put(`/templates/${id}`, template),
   delete: (id: string) => api.delete(`/templates/${id}`),
+};
+
+// Company Profile API
+export const companyProfileService = {
+  get: () => api.get('/company-profile'),
+  create: (data: any) => api.post('/company-profile', data),
+  update: (data: any) => api.put('/company-profile', data),
+  delete: () => api.delete('/company-profile'),
 };
 
 // Expenses API
@@ -312,6 +357,7 @@ export const quoteService = {
   update: (id: number, quote: any) => api.put(`/quotes/${id}`, quote),
   delete: (id: number) => api.delete(`/quotes/${id}`),
   updateStatus: (id: number, status: string) => api.patch(`/quotes/${id}/status`, { status }),
+  convertToInvoice: (id: number) => api.post(`/quotes/${id}/convert-to-invoice`),
 };
 
 // Analytics API

@@ -10,30 +10,35 @@ const router = Router();
  * GET /api/invoices
  * Récupérer toutes les factures avec filtres
  */
-router.get('/', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const orgId = getOrgIdFromRequest(req);
     const { status, customer_id, from_date, to_date, overdue } = req.query;
 
     let query = `
       SELECT
         i.*,
-        c.first_name || ' ' || COALESCE(c.last_name, '') as customer_name,
+        c.name as customer_name,
         c.email as customer_email,
-        co.name as customer_company,
-        u.first_name || ' ' || COALESCE(u.last_name, '') as user_name,
+        c.company as customer_company,
         (SELECT COUNT(*) FROM invoice_items WHERE invoice_id = i.id) as items_count,
-        (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = i.id) as total_paid,
-        (i.total_amount - COALESCE((SELECT SUM(amount) FROM payments WHERE invoice_id = i.id), 0)) as balance_due
+        t.id as template_id,
+        t.name as template_name,
+        t.logo_url as template_logo_url,
+        t.primary_color as template_primary_color,
+        t.company_name as template_company_name,
+        t.company_address as template_company_address,
+        t.company_phone as template_company_phone,
+        t.company_email as template_company_email,
+        t.company_siret as template_company_siret,
+        t.company_tva as template_company_tva
       FROM invoices i
-      LEFT JOIN contacts c ON i.customer_id = c.id
-      LEFT JOIN companies co ON c.company_id = co.id
-      LEFT JOIN users u ON i.user_id = u.id
-      WHERE i.organization_id = $1 AND i.deleted_at IS NULL
+      LEFT JOIN customers c ON i.customer_id = c.id
+      LEFT JOIN invoice_templates t ON i.template_id = t.id
+      WHERE 1=1
     `;
 
-    const params: any[] = [orgId];
-    let paramCount = 2;
+    const params: any[] = [];
+    let paramCount = 1;
 
     if (status) {
       query += ` AND i.status = $${paramCount}`;
@@ -92,8 +97,7 @@ router.get('/stats', authenticateToken, requireOrganization, async (req: AuthReq
         COALESCE(SUM(total_amount) FILTER (WHERE status IN ('sent', 'overdue')), 0) as total_pending,
         COALESCE(SUM(total_amount) FILTER (WHERE status = 'overdue'), 0) as total_overdue
       FROM invoices
-      WHERE organization_id = $1 AND deleted_at IS NULL
-    `, [orgId]);
+    `);
 
     res.json(stats.rows[0]);
   } catch (error: any) {
@@ -115,19 +119,18 @@ router.get('/:id', authenticateToken, requireOrganization, async (req: AuthReque
     const invoiceResult = await pool.query(`
       SELECT
         i.*,
-        c.first_name || ' ' || COALESCE(c.last_name, '') as customer_name,
+        c.name as customer_name,
         c.email as customer_email,
         c.phone as customer_phone,
-        co.name as customer_company,
+        c.company as customer_company,
         c.address as customer_address,
         u.first_name || ' ' || COALESCE(u.last_name, '') as user_name,
         (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = i.id) as total_paid
       FROM invoices i
-      LEFT JOIN contacts c ON i.customer_id = c.id
-      LEFT JOIN companies co ON c.company_id = co.id
-      LEFT JOIN users u ON i.user_id = u.id
-      WHERE i.id = $1 AND i.organization_id = $2 AND i.deleted_at IS NULL
-    `, [id, orgId]);
+      LEFT JOIN customers c ON i.customer_id = c.id
+      LEFT JOIN users u ON i.user_id::text = u.id::text
+      WHERE i.id = $1
+    `, [id]);
 
     if (invoiceResult.rows.length === 0) {
       return res.status(404).json({ error: 'Facture non trouvée' });
@@ -137,8 +140,7 @@ router.get('/:id', authenticateToken, requireOrganization, async (req: AuthReque
     const itemsResult = await pool.query(`
       SELECT
         ii.*,
-        p.name as product_name,
-        p.sku as product_sku
+        p.name as product_name
       FROM invoice_items ii
       LEFT JOIN products p ON ii.product_id = p.id
       WHERE ii.invoice_id = $1
@@ -191,7 +193,8 @@ router.post('/', authenticateToken, requireOrganization, async (req: AuthRequest
       status = 'draft',
       notes,
       terms,
-      items = []
+      items = [],
+      template_id
     } = req.body;
 
     // Validation
@@ -201,8 +204,8 @@ router.post('/', authenticateToken, requireOrganization, async (req: AuthRequest
 
     // Vérifier que le numéro de facture n'existe pas
     const existingInvoice = await client.query(
-      'SELECT id FROM invoices WHERE invoice_number = $1 AND organization_id = $2 AND deleted_at IS NULL',
-      [invoice_number, orgId]
+      'SELECT id FROM invoices WHERE invoice_number = $1',
+      [invoice_number]
     );
 
     if (existingInvoice.rows.length > 0) {
@@ -221,12 +224,11 @@ router.post('/', authenticateToken, requireOrganization, async (req: AuthRequest
     // Créer la facture
     const invoiceResult = await client.query(`
       INSERT INTO invoices (
-        organization_id, invoice_number, customer_id, user_id, invoice_date, due_date,
-        status, notes, terms, subtotal, tax_amount, total_amount
+        invoice_number, customer_id, user_id, invoice_date, due_date,
+        status, notes, terms, subtotal, tax_amount, total_amount, template_id
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *
     `, [
-      orgId,
       invoice_number,
       customer_id,
       userId,
@@ -237,7 +239,8 @@ router.post('/', authenticateToken, requireOrganization, async (req: AuthRequest
       terms,
       subtotal,
       tax_amount,
-      total_amount
+      total_amount,
+      template_id || null
     ]);
 
     const invoice = invoiceResult.rows[0];
@@ -305,8 +308,8 @@ router.put('/:id', authenticateToken, requireOrganization, async (req: AuthReque
 
     // Vérifier que la facture existe
     const existingInvoice = await client.query(
-      'SELECT * FROM invoices WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL',
-      [id, orgId]
+      'SELECT * FROM invoices WHERE id = $1',
+      [id]
     );
 
     if (existingInvoice.rows.length === 0) {
@@ -338,7 +341,7 @@ router.put('/:id', authenticateToken, requireOrganization, async (req: AuthReque
         tax_amount = COALESCE($7, tax_amount),
         total_amount = COALESCE($8, total_amount),
         updated_at = NOW()
-      WHERE id = $9 AND organization_id = $10 AND deleted_at IS NULL
+      WHERE id = $9
       RETURNING *
     `, [
       invoice_date,
@@ -349,8 +352,7 @@ router.put('/:id', authenticateToken, requireOrganization, async (req: AuthReque
       subtotal,
       tax_amount,
       total_amount,
-      id,
-      orgId
+      id
     ]);
 
     // Si des items sont fournis, remplacer les items existants
@@ -392,14 +394,13 @@ router.put('/:id', authenticateToken, requireOrganization, async (req: AuthReque
  * DELETE /api/invoices/:id
  * Supprimer une facture (soft delete)
  */
-router.delete('/:id', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const orgId = getOrgIdFromRequest(req);
 
     const result = await pool.query(
-      'UPDATE invoices SET deleted_at = NOW() WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL RETURNING id',
-      [id, orgId]
+      'DELETE FROM invoices WHERE id = $1 RETURNING id',
+      [id]
     );
 
     if (result.rows.length === 0) {
@@ -425,9 +426,9 @@ router.post('/:id/send-email', authenticateToken, requireOrganization, async (re
     const result = await pool.query(`
       UPDATE invoices
       SET status = 'sent', updated_at = NOW()
-      WHERE id = $1 AND organization_id = $2 AND status = 'draft' AND deleted_at IS NULL
+      WHERE id = $1 AND status = 'draft'
       RETURNING *
-    `, [id, orgId]);
+    `, [id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Facture non trouvée ou déjà envoyée' });
@@ -457,8 +458,8 @@ router.post('/:id/mark-as-paid', authenticateToken, requireOrganization, async (
 
     // Récupérer la facture
     const invoiceResult = await client.query(
-      'SELECT * FROM invoices WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL',
-      [id, orgId]
+      'SELECT * FROM invoices WHERE id = $1',
+      [id]
     );
 
     if (invoiceResult.rows.length === 0) {
@@ -487,9 +488,9 @@ router.post('/:id/mark-as-paid', authenticateToken, requireOrganization, async (
     const updateResult = await client.query(`
       UPDATE invoices
       SET status = 'paid', updated_at = NOW()
-      WHERE id = $1 AND organization_id = $2
+      WHERE id = $1
       RETURNING *
-    `, [id, orgId]);
+    `, [id]);
 
     await client.query('COMMIT');
 
@@ -514,8 +515,8 @@ router.post('/:id/send-reminder', authenticateToken, requireOrganization, async 
 
     // Vérifier que la facture existe et n'est pas payée
     const invoiceResult = await pool.query(
-      'SELECT * FROM invoices WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL',
-      [id, orgId]
+      'SELECT * FROM invoices WHERE id = $1',
+      [id]
     );
 
     if (invoiceResult.rows.length === 0) {
@@ -544,6 +545,61 @@ router.post('/:id/send-reminder', authenticateToken, requireOrganization, async 
   } catch (error: any) {
     console.error('Erreur lors de l\'envoi de la relance:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/invoices/:id/convert-to-quote
+ * Convertir une facture en devis
+ */
+router.post('/:id/convert-to-quote', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = (req.user as any)?.userId || 1;
+
+    // Get the invoice
+    const invoiceResult = await pool.query('SELECT * FROM invoices WHERE id = $1', [id]);
+
+    if (invoiceResult.rows.length === 0) {
+      res.status(404).json({ error: 'Facture non trouvée' });
+      return;
+    }
+
+    const invoice = invoiceResult.rows[0];
+
+    // Create quote from invoice
+    const quoteResult = await pool.query(
+      `INSERT INTO quotes (customer_id, user_id, title, description, subtotal, tax_rate, tax_amount, total_amount, status, template_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', $9)
+       RETURNING *`,
+      [
+        invoice.customer_id,
+        userId,
+        invoice.title?.replace('Facture', 'Devis') || 'Devis',
+        invoice.description,
+        invoice.subtotal,
+        invoice.tax_rate,
+        invoice.tax_amount,
+        invoice.total_amount,
+        invoice.template_id
+      ]
+    );
+
+    const quoteId = quoteResult.rows[0].id;
+
+    // Copy invoice items to quote items
+    const itemsResult = await pool.query('SELECT * FROM invoice_items WHERE invoice_id = $1', [id]);
+    for (const item of itemsResult.rows) {
+      await pool.query(
+        'INSERT INTO quote_items (quote_id, product_id, description, quantity, unit_price, total_price) VALUES ($1, $2, $3, $4, $5, $6)',
+        [quoteId, item.product_id, item.description, Math.round(parseFloat(item.quantity)), item.unit_price, item.total_price]
+      );
+    }
+
+    res.status(201).json(quoteResult.rows[0]);
+  } catch (err: any) {
+    console.error('Erreur lors de la conversion en devis:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

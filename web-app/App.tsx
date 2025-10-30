@@ -18,15 +18,16 @@ import TasksScreen from './src/screens/TasksScreen';
 import ContactsScreen from './src/screens/ContactsScreen';
 import AnalyticsScreen from './src/screens/AnalyticsScreen';
 import InvoicesScreen from './src/screens/InvoicesScreen';
-import CustomersScreen from './src/screens/CustomersScreen';
 import ProductsScreen from './src/screens/ProductsScreen';
 import SalesScreen from './src/screens/SalesScreen';
 import SuppliersScreen from './src/screens/SuppliersScreen';
 import ExpensesScreen from './src/screens/ExpensesScreen';
 import PilotageScreen from './src/screens/PilotageScreen';
 import TemplatesScreen from './src/screens/TemplatesScreen';
+import ShowcaseScreen from './src/screens/ShowcaseScreen';
 import TestAllScreen from './src/screens/TestAllScreen';
 import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 
 import { RootStackParamList } from './src/navigation/types';
 
@@ -137,15 +138,6 @@ function Navigation() {
               }}
             />
             <Stack.Screen
-              name="Customers"
-              component={CustomersScreen}
-              options={{ 
-                title: 'Base Clients',
-                headerShown: true,
-                headerStyle: { backgroundColor: '#F2F2F7' },
-              }}
-            />
-            <Stack.Screen
               name="Products"
               component={ProductsScreen}
               options={{ 
@@ -197,6 +189,23 @@ function Navigation() {
                 title: 'Templates de Factures',
                 headerShown: true,
                 headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Profile"
+              component={ProfileScreen}
+              options={{
+                title: 'Mon Profil',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Showcase"
+              component={ShowcaseScreen}
+              options={{
+                title: 'Vitrine Numérique',
+                headerShown: false,
               }}
             />
             <Stack.Screen

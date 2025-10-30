@@ -13,10 +13,12 @@ import {
   Platform,
   RefreshControl,
   Dimensions,
+  Image,
 } from 'react-native';
 import { productService } from '../services/api';
 import { Product } from '../types';
 import Navigation from '../components/Navigation';
+import ImageUpload from '../components/ImageUpload';
 
 interface ProductWithDetails extends Product {
   category?: string;
@@ -41,11 +43,13 @@ export default function ProductsScreen() {
   const [selectedCategory, setSelectedCategory] = useState('Tous');
   const [priceRange, setPriceRange] = useState<'all' | 'budget' | 'mid' | 'premium'>('all');
 
+  const [editingProduct, setEditingProduct] = useState<ProductWithDetails | null>(null);
   const [newProductForm, setNewProductForm] = useState({
     name: '',
     description: '',
     price: '',
     stock: '',
+    images: [] as string[],
     category: 'Logiciel',
   });
 
@@ -65,7 +69,8 @@ export default function ProductsScreen() {
     try {
       setLoading(true);
       const response = await productService.getAll();
-      const productsWithDetails = response.data.map((p: Product, index: number) => ({
+      const productsData = response.data.data || response.data;
+      const productsWithDetails = productsData.map((p: Product, index: number) => ({
         ...p,
         category: categories[Math.floor(Math.random() * (categories.length - 1)) + 1],
         emoji: emojis[index % emojis.length],
@@ -114,28 +119,36 @@ export default function ProductsScreen() {
     setFilteredProducts(filtered);
   };
 
-  const handleCreateProduct = () => {
+  const handleCreateProduct = async () => {
     if (!newProductForm.name.trim() || !newProductForm.price.trim()) {
       Alert.alert('Erreur', 'Le nom et le prix sont obligatoires');
       return;
     }
 
-    const newProduct: ProductWithDetails = {
-      id: Date.now(),
-      name: newProductForm.name,
-      description: newProductForm.description,
-      price: parseFloat(newProductForm.price) || 0,
-      stock: parseInt(newProductForm.stock) || 0,
-      category: newProductForm.category,
-      emoji: emojis[Math.floor(Math.random() * emojis.length)],
-      rating: 4.5,
-      sales: 0,
-    };
+    try {
+      const productData = {
+        name: newProductForm.name,
+        description: newProductForm.description,
+        price: parseFloat(newProductForm.price) || 0,
+        stock: parseInt(newProductForm.stock) || 0,
+        images: newProductForm.images,
+      };
 
-    setProducts([...products, newProduct]);
-    handleResetProductForm();
-    setNewProductModalVisible(false);
-    Alert.alert('Succès', `Produit ${newProduct.name} créé avec succès`);
+      if (editingProduct) {
+        await productService.update(editingProduct.id as number, productData as any);
+        Alert.alert('Succès', `Produit ${productData.name} modifié avec succès`);
+      } else {
+        await productService.create(productData as any);
+        Alert.alert('Succès', `Produit ${productData.name} créé avec succès`);
+      }
+
+      handleResetProductForm();
+      setNewProductModalVisible(false);
+      loadProducts();
+    } catch (error) {
+      console.error('Error saving product:', error);
+      Alert.alert('Erreur', 'Impossible de sauvegarder le produit');
+    }
   };
 
   const handleResetProductForm = () => {
@@ -144,8 +157,53 @@ export default function ProductsScreen() {
       description: '',
       price: '',
       stock: '',
+      images: [],
       category: 'Logiciel',
     });
+    setEditingProduct(null);
+  };
+
+  const handleEditProduct = (product: ProductWithDetails) => {
+    const images = (product as any).images || [];
+    setEditingProduct(product);
+    setNewProductForm({
+      name: product.name,
+      description: product.description || '',
+      price: product.price.toString(),
+      stock: product.stock.toString(),
+      images: Array.isArray(images) ? images : [],
+      category: product.category || 'Logiciel',
+    });
+    setModalVisible(false);
+    setNewProductModalVisible(true);
+  };
+
+  const handleDeleteProduct = async (product: ProductWithDetails) => {
+    const confirmDelete = () => {
+      productService.delete(product.id as number).then(() => {
+        setModalVisible(false);
+        loadProducts();
+        Alert.alert('Succès', 'Produit supprimé avec succès');
+      }).catch((error) => {
+        console.error('Error deleting product:', error);
+        Alert.alert('Erreur', 'Impossible de supprimer le produit');
+      });
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) {
+        confirmDelete();
+      }
+    } else {
+      Alert.alert(
+        'Confirmer',
+        'Êtes-vous sûr de vouloir supprimer ce produit ?',
+        [
+          { text: 'Annuler', style: 'cancel' },
+          { text: 'Supprimer', onPress: confirmDelete, style: 'destructive' },
+        ]
+      );
+    }
   };
 
   const onRefresh = () => {
@@ -179,40 +237,47 @@ export default function ProductsScreen() {
     outOfStock: products.filter((p) => p.stock === 0).length,
   };
 
-  const renderProductCard = ({ item }: { item: ProductWithDetails }) => (
-    <TouchableOpacity
-      style={styles.productCard}
-      onPress={() => openProductDetails(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.productCardHeader}>
-        <View style={styles.productInfo}>
-          <Text style={styles.productName} numberOfLines={2}>
-            {item.name}
-          </Text>
-          {item.category && (
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryText}>{item.category}</Text>
-            </View>
-          )}
-        </View>
-        <View
-          style={[
-            styles.stockBadge,
-            { backgroundColor: `${getStockColor(item.stock)}20` },
-          ]}
-        >
-          <Text style={[styles.stockBadgeText, { color: getStockColor(item.stock) }]}>
-            {item.stock > 0 ? item.stock : '0'}
-          </Text>
-        </View>
-      </View>
+  const renderProductCard = ({ item }: { item: ProductWithDetails }) => {
+    const images = (item as any).images || [];
+    const firstImage = Array.isArray(images) && images.length > 0 ? images[0] : null;
 
-      {item.description && (
-        <Text style={styles.productDescription} numberOfLines={2}>
-          {item.description}
-        </Text>
-      )}
+    return (
+      <TouchableOpacity
+        style={styles.productCard}
+        onPress={() => openProductDetails(item)}
+        activeOpacity={0.7}
+      >
+        {firstImage && (
+          <Image source={{ uri: firstImage }} style={styles.productImage} />
+        )}
+        <View style={styles.productCardHeader}>
+          <View style={styles.productInfo}>
+            <Text style={styles.productName} numberOfLines={2}>
+              {item.name}
+            </Text>
+            {item.category && (
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryText}>{item.category}</Text>
+              </View>
+            )}
+          </View>
+          <View
+            style={[
+              styles.stockBadge,
+              { backgroundColor: `${getStockColor(item.stock)}20` },
+            ]}
+          >
+            <Text style={[styles.stockBadgeText, { color: getStockColor(item.stock) }]}>
+              {item.stock > 0 ? item.stock : '0'}
+            </Text>
+          </View>
+        </View>
+
+        {item.description && (
+          <Text style={styles.productDescription} numberOfLines={2}>
+            {item.description}
+          </Text>
+        )}
 
       <View style={styles.productFooter}>
         <View>
@@ -231,7 +296,7 @@ export default function ProductsScreen() {
         </View>
       </View>
 
-      <View style={styles.statusBar}>
+        <View style={styles.statusBar}>
         <View
           style={[
             styles.statusIndicator,
@@ -239,8 +304,9 @@ export default function ProductsScreen() {
           ]}
         />
       </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (
@@ -467,19 +533,13 @@ export default function ProductsScreen() {
                 <View style={styles.modalActions}>
                   <TouchableOpacity
                     style={styles.actionButton}
-                    onPress={() => {
-                      setModalVisible(false);
-                      Alert.alert('À venir', 'Édition de produit en développement');
-                    }}
+                    onPress={() => handleEditProduct(selectedProduct)}
                   >
                     <Text style={styles.actionButtonText}>Éditer</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.actionButton, styles.actionButtonDanger]}
-                    onPress={() => {
-                      setModalVisible(false);
-                      Alert.alert('À venir', 'Suppression en développement');
-                    }}
+                    onPress={() => handleDeleteProduct(selectedProduct)}
                   >
                     <Text style={styles.actionButtonTextDanger}>Supprimer</Text>
                   </TouchableOpacity>
@@ -500,8 +560,10 @@ export default function ProductsScreen() {
         <View style={styles.newModalContainer}>
           <View style={styles.newModalContent}>
             <View style={styles.newModalHeader}>
-              <Text style={styles.newModalTitle}>Nouveau Produit</Text>
-              <TouchableOpacity onPress={() => setNewProductModalVisible(false)}>
+              <Text style={styles.newModalTitle}>
+                {editingProduct ? 'Modifier le Produit' : 'Nouveau Produit'}
+              </Text>
+              <TouchableOpacity onPress={() => { setNewProductModalVisible(false); handleResetProductForm(); }}>
                 <Text style={styles.closeButtonNew}>×</Text>
               </TouchableOpacity>
             </View>
@@ -594,6 +656,14 @@ export default function ProductsScreen() {
                   placeholderTextColor="#8E8E93"
                 />
               </View>
+
+              {/* Images */}
+              <ImageUpload
+                label="Images du produit"
+                value={newProductForm.images}
+                onChange={(urls) => setNewProductForm({ ...newProductForm, images: urls as string[] })}
+                multiple={true}
+              />
             </ScrollView>
 
             <View style={styles.newModalFooter}>
@@ -610,7 +680,9 @@ export default function ProductsScreen() {
                 style={[styles.button, styles.buttonPrimary]}
                 onPress={handleCreateProduct}
               >
-                <Text style={styles.buttonPrimaryText}>Créer</Text>
+                <Text style={styles.buttonPrimaryText}>
+                  {editingProduct ? 'Modifier' : 'Créer'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -779,6 +851,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 3,
     elevation: 2,
+  },
+  productImage: {
+    width: '100%',
+    height: 150,
+    resizeMode: 'cover',
   },
   productCardHeader: {
     flexDirection: 'row',

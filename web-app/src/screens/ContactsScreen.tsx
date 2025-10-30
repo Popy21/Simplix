@@ -10,10 +10,12 @@ import {
   Alert,
   RefreshControl,
   Platform,
+  Image,
 } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { customerService, companyService, activitiesService } from '../services/api';
+import { contactService, companyService, activitiesService } from '../services/api';
 import {
   UsersIcon,
   BuildingIcon,
@@ -26,6 +28,56 @@ import {
 } from '../components/Icons';
 import Navigation from '../components/Navigation';
 import { useAuth } from '../context/AuthContext';
+import ImageUpload from '../components/ImageUpload';
+
+// Mapping département (2 premiers chiffres du code postal) vers région
+const departmentToRegion: { [key: string]: string } = {
+  '01': 'Auvergne-Rhône-Alpes', '03': 'Auvergne-Rhône-Alpes', '07': 'Auvergne-Rhône-Alpes', '15': 'Auvergne-Rhône-Alpes',
+  '26': 'Auvergne-Rhône-Alpes', '38': 'Auvergne-Rhône-Alpes', '42': 'Auvergne-Rhône-Alpes', '43': 'Auvergne-Rhône-Alpes',
+  '63': 'Auvergne-Rhône-Alpes', '69': 'Auvergne-Rhône-Alpes', '73': 'Auvergne-Rhône-Alpes', '74': 'Auvergne-Rhône-Alpes',
+  '21': 'Bourgogne-Franche-Comté', '25': 'Bourgogne-Franche-Comté', '39': 'Bourgogne-Franche-Comté', '58': 'Bourgogne-Franche-Comté',
+  '70': 'Bourgogne-Franche-Comté', '71': 'Bourgogne-Franche-Comté', '89': 'Bourgogne-Franche-Comté', '90': 'Bourgogne-Franche-Comté',
+  '22': 'Bretagne', '29': 'Bretagne', '35': 'Bretagne', '56': 'Bretagne',
+  '18': 'Centre-Val de Loire', '28': 'Centre-Val de Loire', '36': 'Centre-Val de Loire', '37': 'Centre-Val de Loire',
+  '41': 'Centre-Val de Loire', '45': 'Centre-Val de Loire',
+  '08': 'Grand Est', '10': 'Grand Est', '51': 'Grand Est', '52': 'Grand Est', '54': 'Grand Est', '55': 'Grand Est',
+  '57': 'Grand Est', '67': 'Grand Est', '68': 'Grand Est', '88': 'Grand Est',
+  '02': 'Hauts-de-France', '59': 'Hauts-de-France', '60': 'Hauts-de-France', '62': 'Hauts-de-France', '80': 'Hauts-de-France',
+  '75': 'Île-de-France', '77': 'Île-de-France', '78': 'Île-de-France', '91': 'Île-de-France', '92': 'Île-de-France',
+  '93': 'Île-de-France', '94': 'Île-de-France', '95': 'Île-de-France',
+  '14': 'Normandie', '27': 'Normandie', '50': 'Normandie', '61': 'Normandie', '76': 'Normandie',
+  '16': 'Nouvelle-Aquitaine', '17': 'Nouvelle-Aquitaine', '19': 'Nouvelle-Aquitaine', '23': 'Nouvelle-Aquitaine',
+  '24': 'Nouvelle-Aquitaine', '33': 'Nouvelle-Aquitaine', '40': 'Nouvelle-Aquitaine', '47': 'Nouvelle-Aquitaine',
+  '64': 'Nouvelle-Aquitaine', '79': 'Nouvelle-Aquitaine', '86': 'Nouvelle-Aquitaine', '87': 'Nouvelle-Aquitaine',
+  '09': 'Occitanie', '11': 'Occitanie', '12': 'Occitanie', '30': 'Occitanie', '31': 'Occitanie', '32': 'Occitanie',
+  '34': 'Occitanie', '46': 'Occitanie', '48': 'Occitanie', '65': 'Occitanie', '66': 'Occitanie', '81': 'Occitanie', '82': 'Occitanie',
+  '44': 'Pays de la Loire', '49': 'Pays de la Loire', '53': 'Pays de la Loire', '72': 'Pays de la Loire', '85': 'Pays de la Loire',
+  '04': 'Provence-Alpes-Côte d\'Azur', '05': 'Provence-Alpes-Côte d\'Azur', '06': 'Provence-Alpes-Côte d\'Azur',
+  '13': 'Provence-Alpes-Côte d\'Azur', '83': 'Provence-Alpes-Côte d\'Azur', '84': 'Provence-Alpes-Côte d\'Azur',
+  '20': 'Corse', '2A': 'Corse', '2B': 'Corse',
+  '971': 'Guadeloupe', '972': 'Martinique', '973': 'Guyane', '974': 'La Réunion', '976': 'Mayotte',
+};
+
+const frenchRegions = [
+  'Auvergne-Rhône-Alpes',
+  'Bourgogne-Franche-Comté',
+  'Bretagne',
+  'Centre-Val de Loire',
+  'Corse',
+  'Grand Est',
+  'Guadeloupe',
+  'Guyane',
+  'Hauts-de-France',
+  'Île-de-France',
+  'La Réunion',
+  'Martinique',
+  'Mayotte',
+  'Normandie',
+  'Nouvelle-Aquitaine',
+  'Occitanie',
+  'Pays de la Loire',
+  'Provence-Alpes-Côte d\'Azur',
+];
 
 type ContactsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Contacts'>;
@@ -33,10 +85,20 @@ type ContactsScreenProps = {
 
 interface Contact {
   id: string;
-  name: string;
-  email: string;
-  phone: string;
-  company: string;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  avatar_url?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  title?: string;
+  company_id?: string;
+  company_name?: string;
+  company_logo?: string;
+  type?: string;
+  linkedin_url?: string;
+  twitter_url?: string;
   created_at: string;
   updated_at: string;
 }
@@ -44,11 +106,12 @@ interface Contact {
 interface Company {
   id: string;
   name: string;
-  industry: string;
-  website: string;
-  phone: string;
-  email: string;
-  address: any;
+  logo_url?: string;
+  industry?: string;
+  website?: string;
+  phone?: string;
+  email?: string;
+  address?: any;
   created_at: string;
   updated_at: string;
 }
@@ -80,10 +143,14 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
   const [newContactModalVisible, setNewContactModalVisible] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [contactForm, setContactForm] = useState({
-    name: '',
+    first_name: '',
+    last_name: '',
+    avatar_url: '',
     email: '',
     phone: '',
-    company: '',
+    mobile: '',
+    title: '',
+    company_id: '',
   });
   const [companyModalVisible, setCompanyModalVisible] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -91,11 +158,19 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [companyForm, setCompanyForm] = useState({
     name: '',
+    logo_url: '',
     industry: '',
     website: '',
     phone: '',
     email: '',
-    address: '',
+    address: {
+      street_number: '',
+      street: '',
+      city: '',
+      state: '',
+      postal_code: '',
+      country: 'France',
+    },
   });
   const [activityModalVisible, setActivityModalVisible] = useState(false);
   const [activityForm, setActivityForm] = useState({
@@ -123,10 +198,10 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
   const fetchData = async () => {
     try {
       const [contactsRes, companiesRes] = await Promise.all([
-        customerService.getAll(),
+        contactService.getAll(),
         companyService.getAll(),
       ]);
-      setContacts(contactsRes.data);
+      setContacts(contactsRes.data.data || contactsRes.data);
       setCompanies(companiesRes.data);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -142,9 +217,11 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
       if (searchQuery) {
         filtered = filtered.filter(
           (c) =>
-            c.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.first_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.last_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             c.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            c.company?.toLowerCase().includes(searchQuery.toLowerCase())
+            c.company_name?.toLowerCase().includes(searchQuery.toLowerCase())
         );
       }
       setFilteredContacts(filtered);
@@ -179,15 +256,15 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
   };
 
   const handleCreateContact = async () => {
-    if (!contactForm.name.trim() || !contactForm.email.trim()) {
-      Platform.OS === 'web' ? alert('Le nom et l\'email sont obligatoires') : Alert.alert('Erreur', 'Le nom et l\'email sont obligatoires');
+    if (!contactForm.first_name.trim() && !contactForm.last_name.trim()) {
+      Platform.OS === 'web' ? alert('Le prénom ou le nom est obligatoire') : Alert.alert('Erreur', 'Le prénom ou le nom est obligatoire');
       return;
     }
     try {
       if (editingContact) {
-        await customerService.update(parseInt(editingContact.id), contactForm);
+        await contactService.update(editingContact.id, contactForm);
       } else {
-        await customerService.create(contactForm as any);
+        await contactService.create(contactForm);
       }
       setNewContactModalVisible(false);
       resetContactForm();
@@ -200,10 +277,14 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
   const handleEditContact = (contact: Contact) => {
     setEditingContact(contact);
     setContactForm({
-      name: contact.name,
+      first_name: contact.first_name || '',
+      last_name: contact.last_name || '',
+      avatar_url: contact.avatar_url || '',
       email: contact.email || '',
       phone: contact.phone || '',
-      company: contact.company || '',
+      mobile: contact.mobile || '',
+      title: contact.title || '',
+      company_id: contact.company_id || '',
     });
     setContactModalVisible(false);
     setNewContactModalVisible(true);
@@ -211,7 +292,7 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
 
   const handleDeleteContact = async (contact: Contact) => {
     const confirmDelete = () => {
-      customerService.delete(parseInt(contact.id)).then(() => {
+      contactService.delete(contact.id).then(() => {
         setContactModalVisible(false);
         fetchData();
       });
@@ -227,7 +308,7 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
   };
 
   const resetContactForm = () => {
-    setContactForm({ name: '', email: '', phone: '', company: '' });
+    setContactForm({ first_name: '', last_name: '', avatar_url: '', email: '', phone: '', mobile: '', title: '', company_id: '' });
     setEditingContact(null);
   };
 
@@ -259,11 +340,21 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
     setEditingCompany(company);
     setCompanyForm({
       name: company.name,
+      logo_url: company.logo_url || '',
       industry: company.industry || '',
       website: company.website || '',
       phone: company.phone || '',
       email: company.email || '',
-      address: typeof company.address === 'string' ? company.address : JSON.stringify(company.address || ''),
+      address: typeof company.address === 'object' && company.address !== null
+        ? company.address
+        : {
+            street_number: '',
+            street: '',
+            city: '',
+            state: '',
+            postal_code: '',
+            country: 'France',
+          },
     });
     setCompanyModalVisible(false);
     setNewCompanyModalVisible(true);
@@ -287,8 +378,47 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
   };
 
   const resetCompanyForm = () => {
-    setCompanyForm({ name: '', industry: '', website: '', phone: '', email: '', address: '' });
+    setCompanyForm({
+      name: '',
+      logo_url: '',
+      industry: '',
+      website: '',
+      phone: '',
+      email: '',
+      address: {
+        street_number: '',
+        street: '',
+        city: '',
+        state: '',
+        postal_code: '',
+        country: 'France',
+      },
+    });
     setEditingCompany(null);
+  };
+
+  // Auto-detect region based on postal code
+  const handlePostalCodeChange = (text: string) => {
+    setCompanyForm({
+      ...companyForm,
+      address: { ...companyForm.address, postal_code: text }
+    });
+
+    // Try to detect region from postal code
+    if (text.length >= 2) {
+      const departmentCode = text.substring(0, 2);
+      const region = departmentToRegion[departmentCode];
+      if (region && region !== companyForm.address.state) {
+        setCompanyForm({
+          ...companyForm,
+          address: {
+            ...companyForm.address,
+            postal_code: text,
+            state: region
+          }
+        });
+      }
+    }
   };
 
   const handleCreateActivity = async () => {
@@ -400,12 +530,17 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
             filteredContacts.map((contact) => (
               <TouchableOpacity key={contact.id} style={styles.card} onPress={() => openContactDetails(contact)}>
                 <View style={styles.cardHeader}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{contact.name.charAt(0).toUpperCase()}</Text>
-                  </View>
+                  {contact.avatar_url ? (
+                    <Image source={{ uri: contact.avatar_url }} style={styles.avatar} />
+                  ) : (
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{(contact.full_name || contact.first_name || contact.last_name || 'U').charAt(0).toUpperCase()}</Text>
+                    </View>
+                  )}
                   <View style={styles.cardInfo}>
-                    <Text style={styles.cardName}>{contact.name}</Text>
-                    {contact.company && <Text style={styles.cardCompany}>{contact.company}</Text>}
+                    <Text style={styles.cardName}>{contact.full_name || `${contact.first_name || ''} ${contact.last_name || ''}`.trim()}</Text>
+                    {contact.title && <Text style={styles.cardCompany}>{contact.title}</Text>}
+                    {contact.company_name && <Text style={styles.cardCompany}>{contact.company_name}</Text>}
                     {contact.email && <Text style={styles.cardMetaText} numberOfLines={1}>{contact.email}</Text>}
                   </View>
                 </View>
@@ -422,9 +557,13 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
             filteredCompanies.map((company) => (
               <TouchableOpacity key={company.id} style={styles.card} onPress={() => openCompanyDetails(company)}>
                 <View style={styles.cardHeader}>
-                  <View style={[styles.avatar, { backgroundColor: '#34C759' }]}>
-                    <BuildingIcon size={24} color="#FFFFFF" />
-                  </View>
+                  {company.logo_url ? (
+                    <Image source={{ uri: company.logo_url }} style={styles.avatar} />
+                  ) : (
+                    <View style={[styles.avatar, { backgroundColor: '#34C759' }]}>
+                      <BuildingIcon size={24} color="#FFFFFF" />
+                    </View>
+                  )}
                   <View style={styles.cardInfo}>
                     <Text style={styles.cardName}>{company.name}</Text>
                     {company.industry && <Text style={styles.cardCompany}>{company.industry}</Text>}
@@ -450,14 +589,20 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
               <>
                 <View style={styles.modalHeader}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.modalTitle}>{selectedContact.name}</Text>
-                    {selectedContact.company && <Text style={styles.modalSubtitle}>{selectedContact.company}</Text>}
+                    <Text style={styles.modalTitle}>{selectedContact.full_name || `${selectedContact.first_name || ''} ${selectedContact.last_name || ''}`.trim()}</Text>
+                    {selectedContact.title && <Text style={styles.modalSubtitle}>{selectedContact.title}</Text>}
+                    {selectedContact.company_name && <Text style={styles.modalSubtitle}>{selectedContact.company_name}</Text>}
                   </View>
                   <TouchableOpacity onPress={() => setContactModalVisible(false)}>
                     <Text style={styles.closeButton}>✕</Text>
                   </TouchableOpacity>
                 </View>
                 <ScrollView style={styles.modalBody}>
+                  {selectedContact.avatar_url && (
+                    <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+                      <Image source={{ uri: selectedContact.avatar_url }} style={{ width: 100, height: 100, borderRadius: 50 }} />
+                    </View>
+                  )}
                   <View style={styles.modalSection}>
                     <Text style={styles.sectionTitle}>INFORMATIONS</Text>
                     {selectedContact.email && (
@@ -584,20 +729,34 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
             </View>
             <ScrollView style={styles.modalBody}>
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Nom *</Text>
-                <TextInput style={styles.input} placeholder="Nom du contact" value={contactForm.name} onChangeText={(text) => setContactForm({ ...contactForm, name: text })} placeholderTextColor="#8E8E93" />
+                <Text style={styles.formLabel}>Prénom *</Text>
+                <TextInput style={styles.input} placeholder="Prénom" value={contactForm.first_name} onChangeText={(text) => setContactForm({ ...contactForm, first_name: text })} placeholderTextColor="#8E8E93" />
               </View>
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Email *</Text>
+                <Text style={styles.formLabel}>Nom</Text>
+                <TextInput style={styles.input} placeholder="Nom de famille" value={contactForm.last_name} onChangeText={(text) => setContactForm({ ...contactForm, last_name: text })} placeholderTextColor="#8E8E93" />
+              </View>
+              <ImageUpload
+                label="Avatar"
+                value={contactForm.avatar_url}
+                onChange={(url) => setContactForm({ ...contactForm, avatar_url: url as string })}
+                multiple={false}
+              />
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Titre/Poste</Text>
+                <TextInput style={styles.input} placeholder="Directeur Commercial" value={contactForm.title} onChangeText={(text) => setContactForm({ ...contactForm, title: text })} placeholderTextColor="#8E8E93" />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Email</Text>
                 <TextInput style={styles.input} placeholder="email@example.com" value={contactForm.email} onChangeText={(text) => setContactForm({ ...contactForm, email: text })} keyboardType="email-address" placeholderTextColor="#8E8E93" />
               </View>
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Téléphone</Text>
-                <TextInput style={styles.input} placeholder="+33 6 XX XX XX XX" value={contactForm.phone} onChangeText={(text) => setContactForm({ ...contactForm, phone: text })} keyboardType="phone-pad" placeholderTextColor="#8E8E93" />
+                <TextInput style={styles.input} placeholder="+33 1 XX XX XX XX" value={contactForm.phone} onChangeText={(text) => setContactForm({ ...contactForm, phone: text })} keyboardType="phone-pad" placeholderTextColor="#8E8E93" />
               </View>
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Entreprise</Text>
-                <TextInput style={styles.input} placeholder="Nom de l'entreprise" value={contactForm.company} onChangeText={(text) => setContactForm({ ...contactForm, company: text })} placeholderTextColor="#8E8E93" />
+                <Text style={styles.formLabel}>Mobile</Text>
+                <TextInput style={styles.input} placeholder="+33 6 XX XX XX XX" value={contactForm.mobile} onChangeText={(text) => setContactForm({ ...contactForm, mobile: text })} keyboardType="phone-pad" placeholderTextColor="#8E8E93" />
               </View>
             </ScrollView>
             <View style={styles.modalFooter}>
@@ -627,6 +786,12 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
                 <Text style={styles.formLabel}>Nom *</Text>
                 <TextInput style={styles.input} placeholder="Nom de l'entreprise" value={companyForm.name} onChangeText={(text) => setCompanyForm({ ...companyForm, name: text })} placeholderTextColor="#8E8E93" />
               </View>
+              <ImageUpload
+                label="Logo"
+                value={companyForm.logo_url}
+                onChange={(url) => setCompanyForm({ ...companyForm, logo_url: url as string })}
+                multiple={false}
+              />
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Secteur</Text>
                 <TextInput style={styles.input} placeholder="ex: Technologie" value={companyForm.industry} onChangeText={(text) => setCompanyForm({ ...companyForm, industry: text })} placeholderTextColor="#8E8E93" />
@@ -643,9 +808,98 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
                 <Text style={styles.formLabel}>Téléphone</Text>
                 <TextInput style={styles.input} placeholder="+33 1 XX XX XX XX" value={companyForm.phone} onChangeText={(text) => setCompanyForm({ ...companyForm, phone: text })} keyboardType="phone-pad" placeholderTextColor="#8E8E93" />
               </View>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Adresse</Text>
-                <TextInput style={[styles.input, styles.textArea]} placeholder="Adresse complète" value={companyForm.address} onChangeText={(text) => setCompanyForm({ ...companyForm, address: text })} placeholderTextColor="#8E8E93" multiline numberOfLines={3} />
+              {/* Adresse détaillée */}
+              <View style={styles.addressSection}>
+                <Text style={styles.sectionTitle}>📍 Adresse</Text>
+
+                <View style={styles.formRow}>
+                  <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+                    <Text style={styles.formLabel}>N°</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="123"
+                      value={companyForm.address.street_number}
+                      onChangeText={(text) => setCompanyForm({
+                        ...companyForm,
+                        address: { ...companyForm.address, street_number: text }
+                      })}
+                      placeholderTextColor="#8E8E93"
+                    />
+                  </View>
+                  <View style={[styles.formGroup, { flex: 3 }]}>
+                    <Text style={styles.formLabel}>Nom de la voie</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Rue de la République"
+                      value={companyForm.address.street}
+                      onChangeText={(text) => setCompanyForm({
+                        ...companyForm,
+                        address: { ...companyForm.address, street: text }
+                      })}
+                      placeholderTextColor="#8E8E93"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formRow}>
+                  <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+                    <Text style={styles.formLabel}>Code Postal</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="75001"
+                      value={companyForm.address.postal_code}
+                      onChangeText={handlePostalCodeChange}
+                      keyboardType="number-pad"
+                      placeholderTextColor="#8E8E93"
+                    />
+                  </View>
+                  <View style={[styles.formGroup, { flex: 2 }]}>
+                    <Text style={styles.formLabel}>Ville</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Paris"
+                      value={companyForm.address.city}
+                      onChangeText={(text) => setCompanyForm({
+                        ...companyForm,
+                        address: { ...companyForm.address, city: text }
+                      })}
+                      placeholderTextColor="#8E8E93"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Région</Text>
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      selectedValue={companyForm.address.state}
+                      onValueChange={(itemValue) => setCompanyForm({
+                        ...companyForm,
+                        address: { ...companyForm.address, state: itemValue }
+                      })}
+                      style={styles.picker}
+                    >
+                      <Picker.Item label="Sélectionnez une région..." value="" />
+                      {frenchRegions.map((region) => (
+                        <Picker.Item key={region} label={region} value={region} />
+                      ))}
+                    </Picker>
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Pays</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="France"
+                    value={companyForm.address.country}
+                    onChangeText={(text) => setCompanyForm({
+                      ...companyForm,
+                      address: { ...companyForm.address, country: text }
+                    })}
+                    placeholderTextColor="#8E8E93"
+                  />
+                </View>
               </View>
             </ScrollView>
             <View style={styles.modalFooter}>
@@ -777,6 +1031,35 @@ const styles = StyleSheet.create({
   formLabel: { fontSize: 15, fontWeight: '600', color: '#000000', marginBottom: 8 },
   input: { borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, color: '#000000' },
   textArea: { textAlignVertical: 'top', paddingTop: 10, height: 100 },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  picker: {
+    fontSize: 16,
+    color: '#000000',
+    height: Platform.OS === 'web' ? 44 : undefined,
+  },
+  addressSection: {
+    backgroundColor: '#F9F9F9',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000000',
+    marginBottom: 16,
+  },
+  formRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
   activityTypeSelect: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   activityTypeButton: { flex: 1, minWidth: '48%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E5E5EA', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#FFFFFF', gap: 6 },
   activityTypeButtonActive: { borderColor: '#007AFF', backgroundColor: '#007AFF10' },

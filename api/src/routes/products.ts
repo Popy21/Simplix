@@ -48,6 +48,7 @@ router.get('/',
       }
     });
   } catch (err: any) {
+    console.error('Error fetching products:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -79,11 +80,11 @@ router.get('/:id',
 });
 
 // Create product
-router.post('/', 
-  authenticateToken, 
-  requireOrganization, 
+router.post('/',
+  authenticateToken,
+  requireOrganization,
   async (req: AuthRequest, res: Response) => {
-  const { name, description, price, stock } = req.body;
+  const { name, description, price, stock, images } = req.body;
   const orgId = getOrgIdFromRequest(req);
 
   if (!name || price === undefined) {
@@ -93,10 +94,10 @@ router.post('/',
 
   try {
     const result = await db.query(
-      `INSERT INTO products (organization_id, name, description, price, stock, created_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())
+      `INSERT INTO products (organization_id, name, description, price, stock, images, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
        RETURNING *`,
-      [orgId, name, description, price, stock || 0]
+      [orgId, name, description, price, stock || 0, images || []]
     );
 
     res.status(201).json(result.rows[0]);
@@ -106,21 +107,21 @@ router.post('/',
 });
 
 // Update product
-router.put('/:id', 
-  authenticateToken, 
-  requireOrganization, 
+router.put('/:id',
+  authenticateToken,
+  requireOrganization,
   async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const { name, description, price, stock } = req.body;
+  const { name, description, price, stock, images } = req.body;
   const orgId = getOrgIdFromRequest(req);
 
   try {
     const result = await db.query(
-      `UPDATE products 
-       SET name = $1, description = $2, price = $3, stock = $4, updated_at = NOW()
-       WHERE id = $5 AND organization_id = $6 AND deleted_at IS NULL
+      `UPDATE products
+       SET name = $1, description = $2, price = $3, stock = $4, images = $5, updated_at = NOW()
+       WHERE id = $6 AND organization_id = $7 AND deleted_at IS NULL
        RETURNING *`,
-      [name, description, price, stock, id, orgId]
+      [name, description, price, stock, images, id, orgId]
     );
 
     if (result.rows.length === 0) {

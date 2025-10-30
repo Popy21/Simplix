@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ChartIcon,
   TrendingUpIcon,
@@ -11,6 +12,7 @@ import {
   FileTextIcon,
   PackageIcon,
   DollarIcon,
+  UserIcon,
 } from './Icons';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -20,15 +22,44 @@ const navigationItems = [
   { name: 'Pipeline', label: 'Pipeline', icon: TrendingUpIcon },
   { name: 'Tasks', label: 'Tâches', icon: CheckCircleIcon },
   { name: 'Contacts', label: 'Contacts', icon: UsersIcon },
-  { name: 'Invoices', label: 'Factures', icon: FileTextIcon },
-  { name: 'Customers', label: 'Clients', icon: UsersIcon },
   { name: 'Products', label: 'Produits', icon: PackageIcon },
   { name: 'Sales', label: 'Ventes', icon: DollarIcon },
+  { name: 'Profile', label: 'Mon Profil', icon: UserIcon },
 ];
 
 export default function Navigation() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute();
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Déconnexion',
+      'Êtes-vous sûr de vouloir vous déconnecter ?',
+      [
+        {
+          text: 'Annuler',
+          style: 'cancel',
+        },
+        {
+          text: 'Déconnexion',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem('token');
+              await AsyncStorage.removeItem('userId');
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+              });
+            } catch (error) {
+              console.error('Error logging out:', error);
+              Alert.alert('Erreur', 'Impossible de se déconnecter');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -51,6 +82,14 @@ export default function Navigation() {
             </TouchableOpacity>
           );
         })}
+
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={handleLogout}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.logoutText}>Déconnexion</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -68,6 +107,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     gap: 8,
+    alignItems: 'center',
   },
   navItem: {
     flexDirection: 'row',
@@ -89,5 +129,17 @@ const styles = StyleSheet.create({
   },
   navLabelActive: {
     color: '#007AFF',
+  },
+  logoutButton: {
+    marginLeft: 'auto',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#FF3B30',
+    borderRadius: 8,
+  },
+  logoutText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

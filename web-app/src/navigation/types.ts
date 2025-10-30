@@ -11,13 +11,15 @@ export type RootStackParamList = {
   Contacts: undefined;
   Analytics: undefined;
   Invoices: undefined;
-  Customers: undefined;
   Products: undefined;
   Sales: undefined;
   Suppliers: undefined;
   Expenses: undefined;
   Pilotage: undefined;
   Templates: undefined;
+  Showcase: undefined;
   TestAll: undefined;
   ChangePassword: undefined;
+  Customers: undefined;
+  Profile: undefined;
 };

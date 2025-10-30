@@ -15,7 +15,6 @@ import {
   Animated,
   Image,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { FileTextIcon, EditIcon, TrashIcon, CheckCircleIcon } from '../components/Icons';
@@ -33,10 +32,7 @@ interface InvoiceTemplate {
   logo_url?: string;
   // Informations légales obligatoires selon la loi française
   company_name?: string;
-  company_street?: string;
-  company_postal_code?: string;
-  company_city?: string;
-  company_country?: string;
+  company_address?: string;
   company_phone?: string;
   company_email?: string;
   company_siret?: string;
@@ -98,7 +94,6 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const [previewMode, setPreviewMode] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [activeEditField, setActiveEditField] = useState<string | null>(null);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
@@ -107,10 +102,7 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
   const [companyProfileModalVisible, setCompanyProfileModalVisible] = useState(false);
   const [companyProfileData, setCompanyProfileData] = useState<any>({
     company_name: '',
-    company_street: '',
-    company_postal_code: '',
-    company_city: '',
-    company_country: 'France',
+    company_address: '',
     company_siret: '',
     company_phone: '',
     company_email: '',
@@ -130,17 +122,13 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
     footer_text: 'Merci pour votre confiance. Cette facture est à régler selon les conditions de paiement indiquées ci-dessus.',
   });
   const sidebarAnim = useRef(new Animated.Value(0)).current;
-  const [blinkNameHint, setBlinkNameHint] = useState(false);
 
   // Form fields
   const [formData, setFormData] = useState<Partial<InvoiceTemplate>>({
     name: '',
     is_default: false,
     company_name: '',
-    company_street: '',
-    company_postal_code: '',
-    company_city: '',
-    company_country: 'France',
+    company_address: '',
     company_phone: '',
     company_email: '',
     company_siret: '',
@@ -269,10 +257,7 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
       is_default: false,
       // Préremplir avec le profil entreprise si disponible
       company_name: companyProfile?.company_name || '',
-      company_street: companyProfile?.company_street || '',
-      company_postal_code: companyProfile?.company_postal_code || '',
-      company_city: companyProfile?.company_city || '',
-      company_country: companyProfile?.company_country || 'France',
+      company_address: companyProfile?.company_address || '',
       company_phone: companyProfile?.company_phone || '',
       company_email: companyProfile?.company_email || '',
       company_siret: companyProfile?.company_siret || '',
@@ -290,15 +275,15 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
       invoice_number_prefix: companyProfile?.invoice_number_prefix || '',
       footer_text: companyProfile?.footer_text || 'Merci pour votre confiance. Cette facture est à régler selon les conditions de paiement indiquées ci-dessus.',
       payment_terms: companyProfile?.payment_terms || 'Paiement à réception de facture par virement bancaire. Date d\'échéance : 30 jours fin de mois à compter de la date d\'émission. Escompte pour paiement anticipé : néant.',
-      // Couleurs et style par défaut - palette moderne et élégante
-      primary_color: '#1E293B',
-      secondary_color: '#475569',
-      text_color: '#0F172A',
-      secondary_text_color: '#64748B',
-      table_header_color: '#1E293B',
-      border_color: '#E2E8F0',
-      header_background_color: '#F8FAFC',
-      total_color: '#0F766E',
+      // Couleurs et style par défaut
+      primary_color: '#2563EB',
+      secondary_color: '#1E40AF',
+      text_color: '#1F2937',
+      secondary_text_color: '#6B7280',
+      table_header_color: '#2563EB',
+      border_color: '#E5E7EB',
+      header_background_color: '#F3F4F6',
+      total_color: '#059669',
       template_layout: 'professional',
       font_family: 'System',
       header_text: '',
@@ -307,9 +292,9 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
       client_label: 'Client',
       client_name_placeholder: 'Nom ou raison sociale du client',
       client_address_placeholder: 'Adresse complète de facturation',
-      table_header_description: 'Désignation',
-      table_header_quantity: 'Qté',
-      table_header_unit_price: 'Prix U. HT',
+      table_header_description: 'Désignation des biens ou services',
+      table_header_quantity: 'Quantité',
+      table_header_unit_price: 'Prix unitaire HT',
       table_header_total: 'Total HT',
       sample_item_description: 'Prestation de service / Livraison de bien',
       subtotal_label: 'Total HT',
@@ -328,16 +313,6 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
 
   const openEditModal = (template: InvoiceTemplate) => {
     setEditMode(true);
-    setPreviewMode(false);
-    setSidebarVisible(false);
-    setActiveEditField(null);
-    setFormData(template);
-    setModalVisible(true);
-  };
-
-  const openPreviewModal = (template: InvoiceTemplate) => {
-    setEditMode(false);
-    setPreviewMode(true);
     setSidebarVisible(false);
     setActiveEditField(null);
     setFormData(template);
@@ -347,10 +322,6 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
   const validateForm = (): boolean => {
     if (!formData.name?.trim()) {
       Alert.alert('Erreur', 'Le nom du template est obligatoire');
-      // Déclencher le clignotement et ouvrir la sidebar
-      setBlinkNameHint(true);
-      setSidebarVisible(true);
-      setTimeout(() => setBlinkNameHint(false), 3000);
       return false;
     }
     if (!formData.company_name?.trim()) {
@@ -365,25 +336,16 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
       Alert.alert('Erreur', 'Le SIRET doit contenir exactement 14 chiffres');
       return false;
     }
-    if (!formData.company_street?.trim()) {
-      Alert.alert('Erreur', 'La rue de l\'entreprise est obligatoire');
-      return false;
-    }
-    if (!formData.company_postal_code?.trim()) {
-      Alert.alert('Erreur', 'Le code postal est obligatoire');
-      return false;
-    }
-    if (!formData.company_city?.trim()) {
-      Alert.alert('Erreur', 'La ville est obligatoire');
+    if (!formData.company_address?.trim()) {
+      Alert.alert('Erreur', 'L\'adresse de l\'entreprise est obligatoire');
       return false;
     }
     if (!formData.company_legal_form?.trim()) {
       Alert.alert('Erreur', 'La forme juridique est obligatoire');
       return false;
     }
-    // RCS est optionnel - juste un warning si absent
     if (!formData.company_rcs?.trim()) {
-      console.warn('RCS non renseigné - recommandé pour la conformité légale');
+      Alert.alert('Attention', 'Le RCS est fortement recommandé (ex: "RCS Paris 123 456 789")');
     }
     return true;
   };
@@ -461,16 +423,8 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
       Alert.alert('Erreur', 'Le SIRET doit contenir exactement 14 chiffres');
       return;
     }
-    if (!companyProfileData.company_street?.trim()) {
-      Alert.alert('Erreur', 'La rue est obligatoire');
-      return;
-    }
-    if (!companyProfileData.company_postal_code?.trim()) {
-      Alert.alert('Erreur', 'Le code postal est obligatoire');
-      return;
-    }
-    if (!companyProfileData.company_city?.trim()) {
-      Alert.alert('Erreur', 'La ville est obligatoire');
+    if (!companyProfileData.company_address?.trim()) {
+      Alert.alert('Erreur', 'L\'adresse de l\'entreprise est obligatoire');
       return;
     }
 
@@ -495,50 +449,35 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
 
   const handleLogoUpload = async () => {
     try {
-      if (Platform.OS === 'web') {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.onchange = async (e: any) => {
-          const file = e.target.files[0];
-          if (file) {
-            try {
-              const uploadResponse = await uploadService.uploadImage(file);
-              setFormData({ ...formData, logo_url: uploadResponse.data.url });
-              Alert.alert('Succès', 'Logo importé avec succès');
-            } catch (error) {
-              console.error('Error uploading logo:', error);
-              Alert.alert('Erreur', 'Impossible d\'importer le logo');
-            }
-          }
-        };
-        input.click();
-      } else {
-        const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (permissionResult.granted === false) {
-          Alert.alert('Permission requise', 'Vous devez autoriser l\'accès à la galerie pour importer un logo');
-          return;
-        }
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.8,
-        });
-        if (!result.canceled && result.assets[0]) {
-          const asset = result.assets[0];
-          const fileName = asset.uri.split('/').pop() || 'logo.jpg';
-          const fileType = asset.uri.match(/\.(jpg|jpeg|png|gif)$/i)?.[0] || '.jpg';
-          const formDataUpload = new FormData();
-          formDataUpload.append('image', {
-            uri: asset.uri,
-            type: `image/${fileType.replace('.', '')}`,
-            name: fileName,
-          } as any);
-          const uploadResponse = await uploadService.uploadImage(formDataUpload as any);
-          setFormData({ ...formData, logo_url: uploadResponse.data.url });
-          Alert.alert('Succès', 'Logo importé avec succès');
-        }
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission requise', 'Vous devez autoriser l\'accès à la galerie pour importer un logo');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const fileName = asset.uri.split('/').pop() || 'logo.jpg';
+        const fileType = asset.uri.match(/\.(jpg|jpeg|png|gif)$/i)?.[0] || '.jpg';
+
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', {
+          uri: asset.uri,
+          type: `image/${fileType.replace('.', '')}`,
+          name: fileName,
+        } as any);
+
+        const uploadResponse = await uploadService.uploadImage(formDataUpload);
+        setFormData({ ...formData, logo_url: uploadResponse.data.url });
+        Alert.alert('Succès', 'Logo importé avec succès');
       }
     } catch (error) {
       console.error('Error uploading logo:', error);
@@ -548,50 +487,35 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
 
   const handleCompanyLogoUpload = async () => {
     try {
-      if (Platform.OS === 'web') {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.onchange = async (e: any) => {
-          const file = e.target.files[0];
-          if (file) {
-            try {
-              const uploadResponse = await uploadService.uploadImage(file);
-              setCompanyProfileData({ ...companyProfileData, logo_url: uploadResponse.data.url });
-              Alert.alert('Succès', 'Logo importé avec succès');
-            } catch (error) {
-              console.error('Error uploading logo:', error);
-              Alert.alert('Erreur', 'Impossible d\'importer le logo');
-            }
-          }
-        };
-        input.click();
-      } else {
-        const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (permissionResult.granted === false) {
-          Alert.alert('Permission requise', 'Vous devez autoriser l\'accès à la galerie pour importer un logo');
-          return;
-        }
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.8,
-        });
-        if (!result.canceled && result.assets[0]) {
-          const asset = result.assets[0];
-          const fileName = asset.uri.split('/').pop() || 'logo.jpg';
-          const fileType = asset.uri.match(/\.(jpg|jpeg|png|gif)$/i)?.[0] || '.jpg';
-          const formDataUpload = new FormData();
-          formDataUpload.append('image', {
-            uri: asset.uri,
-            type: `image/${fileType.replace('.', '')}`,
-            name: fileName,
-          } as any);
-          const uploadResponse = await uploadService.uploadImage(formDataUpload as any);
-          setCompanyProfileData({ ...companyProfileData, logo_url: uploadResponse.data.url });
-          Alert.alert('Succès', 'Logo importé avec succès');
-        }
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission requise', 'Vous devez autoriser l\'accès à la galerie pour importer un logo');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const fileName = asset.uri.split('/').pop() || 'logo.jpg';
+        const fileType = asset.uri.match(/\.(jpg|jpeg|png|gif)$/i)?.[0] || '.jpg';
+
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', {
+          uri: asset.uri,
+          type: `image/${fileType.replace('.', '')}`,
+          name: fileName,
+        } as any);
+
+        const uploadResponse = await uploadService.uploadImage(formDataUpload);
+        setCompanyProfileData({ ...companyProfileData, logo_url: uploadResponse.data.url });
+        Alert.alert('Succès', 'Logo importé avec succès');
       }
     } catch (error) {
       console.error('Error uploading logo:', error);
@@ -608,15 +532,6 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
     const isEditing = editingInline === field;
     const value = formData[field] as string || '';
 
-    // En mode preview, afficher uniquement le texte sans possibilité d'édition
-    if (previewMode) {
-      return (
-        <Text style={style}>
-          {value || placeholder}
-        </Text>
-      );
-    }
-
     return (
       <TouchableOpacity
         onPress={() => setEditingInline(field as string)}
@@ -632,6 +547,7 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
           onFocus={() => setEditingInline(field as string)}
           onBlur={() => setEditingInline(null)}
           multiline={multiline}
+          numberOfLines={multiline ? 3 : 1}
         />
       </TouchableOpacity>
     );
@@ -681,18 +597,15 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
       <Animated.View style={[styles.sidebar, { width: sidebarWidth }]}>
         <ScrollView style={styles.sidebarScroll} showsVerticalScrollIndicator={false}>
           {/* Template Name */}
-          <View style={[styles.sidebarSection, blinkNameHint && styles.blinkingSection]}>
-            <Text style={styles.sidebarSectionTitle}>Nom du template *</Text>
+          <View style={styles.sidebarSection}>
+            <Text style={styles.sidebarSectionTitle}>Nom du template</Text>
             <TextInput
-              style={[styles.sidebarInput, blinkNameHint && styles.blinkingInput]}
+              style={styles.sidebarInput}
               value={formData.name}
               onChangeText={(text) => setFormData({ ...formData, name: text })}
               placeholder="Nom du template"
               placeholderTextColor="#9CA3AF"
             />
-            {blinkNameHint && (
-              <Text style={styles.requiredFieldHint}>⚠️ Ce champ est obligatoire</Text>
-            )}
             <View style={styles.switchRow}>
               <Text style={styles.switchLabel}>Définir comme défaut</Text>
               <Switch
@@ -938,21 +851,14 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
     return (
       <View style={styles.fullscreenPreview}>
         <View style={styles.previewToolbar}>
-          <View style={{ position: 'relative' }}>
-            <TouchableOpacity
-              style={styles.toolbarButton}
-              onPress={() => setSidebarVisible(!sidebarVisible)}
-            >
-              <Text style={styles.toolbarButtonText}>
-                {sidebarVisible ? '◀ Masquer' : '▶ Options'}
-              </Text>
-            </TouchableOpacity>
-            {!sidebarVisible && !formData.name && !editMode && (
-              <View style={styles.nameHintArrow}>
-                <Text style={styles.nameHintText}>← Cliquez ici pour entrer un nom</Text>
-              </View>
-            )}
-          </View>
+          <TouchableOpacity
+            style={styles.toolbarButton}
+            onPress={() => setSidebarVisible(!sidebarVisible)}
+          >
+            <Text style={styles.toolbarButtonText}>
+              {sidebarVisible ? '◀ Masquer' : '▶ Options'}
+            </Text>
+          </TouchableOpacity>
           <View style={styles.previewHints}>
             <Text style={styles.previewHint}>💡 Cliquez sur n'importe quel texte pour le modifier</Text>
             {!editMode && (
@@ -965,9 +871,6 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
 
         <ScrollView style={styles.previewScroll} contentContainerStyle={styles.previewScrollContent}>
           <View style={[styles.invoicePreview, { borderColor: formData.border_color || '#E5E7EB' }]}>
-            {/* Barre décorative latérale */}
-            <View style={[styles.decorativeSidebar, { backgroundColor: formData.primary_color }]} />
-
             {/* Header */}
             {formData.show_header && (
               <View style={[styles.invoiceHeader, { backgroundColor: formData.header_background_color || '#F3F4F6' }]}>
@@ -979,13 +882,16 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
                   ])}
                   <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
                     <Text style={[styles.invoiceNumberLabel, { color: formData.text_color || '#1F2937' }]}>
-                      Facture N°{' '}
+                      Facture N°
                     </Text>
-                    {renderEditableText('invoice_number_prefix', '2025-001', [
+                    {renderEditableText('invoice_number_prefix', '2025', [
                       styles.invoiceNumber,
                       { color: formData.text_color || '#1F2937' },
                       editingInline === 'invoice_number_prefix' && styles.highlightedElement
                     ])}
+                    <Text style={[styles.invoiceNumber, { color: formData.text_color || '#1F2937' }]}>
+                      -001
+                    </Text>
                   </View>
                   <Text style={[styles.invoiceDate, { color: formData.secondary_text_color || '#6B7280' }]}>
                     Date d'émission : {new Date().toLocaleDateString('fr-FR')}
@@ -1001,10 +907,7 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
                     activeOpacity={0.7}
                   >
                     {formData.logo_url ? (
-                      <Image
-                        source={{ uri: formData.logo_url.startsWith('http') ? formData.logo_url : `http://localhost:3000${formData.logo_url}` }}
-                        style={styles.logoImage}
-                      />
+                      <Image source={{ uri: formData.logo_url }} style={styles.logoImage} />
                     ) : (
                       <>
                         <Text style={styles.logoText}>📷</Text>
@@ -1019,130 +922,79 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
 
             {/* Company & Client Info */}
             <View style={styles.invoiceSection}>
-              {/* Company Info */}
               <View style={styles.companyInfo}>
                 {renderEditableText('company_name', 'Nom de votre entreprise', [
                   styles.companyName,
                   { color: formData.text_color || '#1F2937' },
                   editingInline === 'company_name' && styles.highlightedElement
                 ])}
-
-                {/* Adresse */}
-                <View style={{ marginTop: 8, marginBottom: 12 }}>
-                  {renderEditableText('company_street', 'Rue', [
+                {renderEditableText('company_address', 'Adresse de votre entreprise', [
+                  styles.companyDetails,
+                  { color: formData.secondary_text_color || '#6B7280' },
+                  editingInline === 'company_address' && styles.highlightedElement
+                ], true)}
+                <View style={{ flexDirection: 'row' }}>
+                  <Text style={[styles.companyDetails, { color: formData.secondary_text_color || '#6B7280' }]}>
+                    SIRET :
+                  </Text>
+                  {renderEditableText('company_siret', '00000000000000', [
                     styles.companyDetails,
                     { color: formData.secondary_text_color || '#6B7280' },
-                    editingInline === 'company_street' && styles.highlightedElement
-                  ])}
-                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 2 }}>
-                    {renderEditableText('company_postal_code', 'CP', [
-                      styles.companyDetails,
-                      { color: formData.secondary_text_color || '#6B7280', flex: 0 },
-                      editingInline === 'company_postal_code' && styles.highlightedElement
-                    ])}
-                    {renderEditableText('company_city', 'Ville', [
-                      styles.companyDetails,
-                      { color: formData.secondary_text_color || '#6B7280', flex: 1 },
-                      editingInline === 'company_city' && styles.highlightedElement
-                    ])}
-                  </View>
-                  {renderEditableText('company_country', 'Pays', [
-                    styles.companyDetails,
-                    { color: formData.secondary_text_color || '#6B7280', marginTop: 2 },
-                    editingInline === 'company_country' && styles.highlightedElement
+                    editingInline === 'company_siret' && styles.highlightedElement
                   ])}
                 </View>
-
-                {/* Informations légales */}
-                <View style={{ borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingTop: 12 }}>
-                  <View style={{ flexDirection: 'row', marginBottom: 4 }}>
-                    <Text style={[styles.companyDetailsLabel, { color: formData.secondary_text_color || '#6B7280' }]}>
-                      SIRET :
+                {formData.company_rcs && renderEditableText('company_rcs', 'RCS', [
+                  styles.companyDetails,
+                  { color: formData.secondary_text_color || '#6B7280' },
+                  editingInline === 'company_rcs' && styles.highlightedElement
+                ])}
+                {formData.company_capital && (
+                  <View style={{ flexDirection: 'row' }}>
+                    <Text style={[styles.companyDetails, { color: formData.secondary_text_color || '#6B7280' }]}>
+                      Capital social :
                     </Text>
-                    {renderEditableText('company_siret', '00000000000000', [
+                    {renderEditableText('company_capital', '10 000€', [
                       styles.companyDetails,
                       { color: formData.secondary_text_color || '#6B7280' },
-                      editingInline === 'company_siret' && styles.highlightedElement
+                      editingInline === 'company_capital' && styles.highlightedElement
                     ])}
                   </View>
-                  {formData.company_rcs && (
-                    <View style={{ marginBottom: 4 }}>
-                      {renderEditableText('company_rcs', 'RCS PARIS 123456789', [
-                        styles.companyDetails,
-                        { color: formData.secondary_text_color || '#6B7280' },
-                        editingInline === 'company_rcs' && styles.highlightedElement
-                      ])}
-                    </View>
-                  )}
-                  {formData.company_capital && (
-                    <View style={{ flexDirection: 'row', marginBottom: 4 }}>
-                      <Text style={[styles.companyDetailsLabel, { color: formData.secondary_text_color || '#6B7280' }]}>
-                        Capital :
-                      </Text>
-                      {renderEditableText('company_capital', '10 000 €', [
-                        styles.companyDetails,
-                        { color: formData.secondary_text_color || '#6B7280' },
-                        editingInline === 'company_capital' && styles.highlightedElement
-                      ])}
-                    </View>
-                  )}
-                  {!formData.is_micro_entreprise && formData.company_tva && (
-                    <View style={{ flexDirection: 'row', marginBottom: 4 }}>
-                      <Text style={[styles.companyDetailsLabel, { color: formData.secondary_text_color || '#6B7280' }]}>
-                        N° TVA :
-                      </Text>
-                      {renderEditableText('company_tva', 'FR00000000000', [
-                        styles.companyDetails,
-                        { color: formData.secondary_text_color || '#6B7280' },
-                        editingInline === 'company_tva' && styles.highlightedElement
-                      ])}
-                    </View>
-                  )}
-                  {formData.is_micro_entreprise && (
-                    <Text style={[styles.companyDetails, { color: formData.secondary_text_color || '#6B7280', fontStyle: 'italic', fontSize: 11 }]}>
-                      TVA non applicable, art. 293 B du CGI
+                )}
+                {!formData.is_micro_entreprise && formData.company_tva && (
+                  <View style={{ flexDirection: 'row' }}>
+                    <Text style={[styles.companyDetails, { color: formData.secondary_text_color || '#6B7280' }]}>
+                      TVA :
                     </Text>
-                  )}
-                </View>
+                    {renderEditableText('company_tva', 'FR00000000000', [
+                      styles.companyDetails,
+                      { color: formData.secondary_text_color || '#6B7280' },
+                      editingInline === 'company_tva' && styles.highlightedElement
+                    ])}
+                  </View>
+                )}
+                {formData.is_micro_entreprise && (
+                  <Text style={[styles.companyDetails, { color: formData.secondary_text_color || '#6B7280', fontStyle: 'italic' }]}>
+                    TVA non applicable, art. 293 B du CGI
+                  </Text>
+                )}
               </View>
 
-              {/* Client Info - Placeholder */}
-              <View style={styles.clientInfoPlaceholder}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.clientSectionLabel, { color: formData.primary_color }]}>
-                      FACTURÉ À
-                    </Text>
-                    <Text style={[styles.clientPlaceholderText, { color: formData.text_color || '#1F2937', marginTop: 8 }]}>
-                      Votre client
-                    </Text>
-                    <View style={{ marginTop: 8 }}>
-                      <Text style={[styles.clientDetailsPlaceholder, { color: formData.secondary_text_color || '#6B7280' }]}>
-                        Nom du contact
-                      </Text>
-                      <Text style={[styles.clientDetailsPlaceholder, { color: formData.secondary_text_color || '#6B7280' }]}>
-                        Adresse
-                      </Text>
-                      <Text style={[styles.clientDetailsPlaceholder, { color: formData.secondary_text_color || '#6B7280' }]}>
-                        Code Postal + Ville
-                      </Text>
-                      <Text style={[styles.clientDetailsPlaceholder, { color: formData.secondary_text_color || '#6B7280', marginTop: 4 }]}>
-                        Numéro de téléphone
-                      </Text>
-                      <Text style={[styles.clientDetailsPlaceholder, { color: formData.secondary_text_color || '#6B7280' }]}>
-                        E-mail
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Client Logo Placeholder - Aligned Right */}
-                  <View style={styles.clientLogoPlaceholder}>
-                    <Text style={styles.clientLogoText}>🏢</Text>
-                    <Text style={[styles.clientLogoTextSmall, { color: formData.secondary_text_color || '#6B7280' }]}>
-                      Logo client
-                    </Text>
-                  </View>
-                </View>
+              <View style={styles.clientInfo}>
+                {renderEditableText('client_label', 'Client', [
+                  styles.clientLabel,
+                  { color: formData.primary_color },
+                  editingInline === 'client_label' && styles.highlightedElement
+                ])}
+                {renderEditableText('client_name_placeholder', 'Nom du client', [
+                  styles.clientName,
+                  { color: formData.text_color || '#1F2937' },
+                  editingInline === 'client_name_placeholder' && styles.highlightedElement
+                ])}
+                {renderEditableText('client_address_placeholder', 'Adresse du client', [
+                  styles.clientAddress,
+                  { color: formData.secondary_text_color || '#6B7280' },
+                  editingInline === 'client_address_placeholder' && styles.highlightedElement
+                ], true)}
               </View>
             </View>
 
@@ -1220,50 +1072,44 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
             </View>
 
             {/* Payment Terms */}
-            {formData.show_payment_terms && (
-              <View style={styles.paymentTermsSection}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                  <Text style={[styles.sectionTitle, { marginBottom: 0, color: formData.primary_color }]}>
-                    Conditions de paiement
-                  </Text>
-                  <View style={styles.legalWarningBadge}>
-                    <Text style={styles.legalWarningText}>⚖️ Contraintes légales</Text>
-                  </View>
-                </View>
-                {renderEditableText('payment_terms', 'Paiement à réception de facture par virement bancaire. Date d\'échéance : 30 jours fin de mois à compter de la date d\'émission. Escompte pour paiement anticipé : néant.', [
-                  styles.paymentTermsEditableText,
+            {formData.show_payment_terms && formData.payment_terms && (
+              <View style={styles.invoiceSection}>
+                <Text style={[styles.sectionTitle, { color: formData.primary_color }]}>
+                  Conditions de paiement
+                </Text>
+                {renderEditableText('payment_terms', 'Paiement à réception', [
+                  styles.sectionText,
                   { color: formData.text_color || '#1F2937' },
                   editingInline === 'payment_terms' && styles.highlightedElement
                 ], true)}
-                <Text style={styles.legalWarningFootnote}>
-                  ⚠️ Les délais de paiement sont réglementés : 30 jours maximum pour les transactions commerciales (ou 45 jours fin de mois selon accord). Les pénalités de retard et l'indemnité forfaitaire de 40€ sont obligatoires.
-                </Text>
               </View>
             )}
 
             {/* Bank Details */}
-            {formData.show_bank_details && (
+            {formData.show_bank_details && formData.bank_iban && (
               <View style={styles.invoiceSection}>
                 <Text style={[styles.sectionTitle, { color: formData.primary_color }]}>
                   Coordonnées bancaires
                 </Text>
                 <View style={{ flexDirection: 'row' }}>
                   <Text style={[styles.sectionText, { color: formData.text_color || '#1F2937' }]}>IBAN : </Text>
-                  {renderEditableText('bank_iban', 'FR76 1234 5678 9012 3456 7890 123', [
+                  {renderEditableText('bank_iban', 'FR00 0000 0000 0000', [
                     styles.sectionText,
                     { color: formData.text_color || '#1F2937' },
                     editingInline === 'bank_iban' && styles.highlightedElement
                   ])}
                 </View>
-                <View style={{ flexDirection: 'row' }}>
-                  <Text style={[styles.sectionText, { color: formData.text_color || '#1F2937' }]}>BIC : </Text>
-                  {renderEditableText('bank_bic', 'BNPAFRPPXXX', [
-                    styles.sectionText,
-                    { color: formData.text_color || '#1F2937' },
-                    editingInline === 'bank_bic' && styles.highlightedElement
-                  ])}
-                </View>
-                {renderEditableText('bank_name', 'Nom de votre banque', [
+                {formData.bank_bic && (
+                  <View style={{ flexDirection: 'row' }}>
+                    <Text style={[styles.sectionText, { color: formData.text_color || '#1F2937' }]}>BIC : </Text>
+                    {renderEditableText('bank_bic', 'BNPAFRPP', [
+                      styles.sectionText,
+                      { color: formData.text_color || '#1F2937' },
+                      editingInline === 'bank_bic' && styles.highlightedElement
+                    ])}
+                  </View>
+                )}
+                {formData.bank_name && renderEditableText('bank_name', 'Nom de la banque', [
                   styles.sectionText,
                   { color: formData.text_color || '#1F2937' },
                   editingInline === 'bank_name' && styles.highlightedElement
@@ -1277,12 +1123,12 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
                 <Text style={[styles.legalTitle, { color: formData.text_color || '#1F2937' }]}>
                   Mentions légales
                 </Text>
-                {renderEditableText('late_payment_penalty', 'En cas de retard de paiement, une pénalité de retard de 3 fois le taux d\'intérêt légal sera exigible le jour suivant la date de paiement figurant sur la facture. Cette pénalité est calculée sur le montant TTC de la somme restant due et court à compter de la date d\'échéance du prix.', [
+                {formData.late_payment_penalty && renderEditableText('late_payment_penalty', 'Pénalités de retard', [
                   styles.legalText,
                   { color: formData.secondary_text_color || '#6B7280' },
                   editingInline === 'late_payment_penalty' && styles.highlightedElement
                 ], true)}
-                {renderEditableText('recovery_indemnity', 'En sus des pénalités de retard, toute somme non payée à sa date d\'exigibilité produira de plein droit le paiement d\'une indemnité forfaitaire de 40 euros due au titre des frais de recouvrement (Art. L441-6 du Code de commerce et D. 441-5).', [
+                {formData.recovery_indemnity && renderEditableText('recovery_indemnity', 'Indemnité de recouvrement', [
                   styles.legalText,
                   { color: formData.secondary_text_color || '#6B7280' },
                   editingInline === 'recovery_indemnity' && styles.highlightedElement
@@ -1291,15 +1137,13 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
             )}
 
             {/* Footer */}
-            {formData.show_footer && (
+            {formData.show_footer && formData.footer_text && (
               <View style={styles.invoiceFooter}>
-                <View style={{ width: '100%' }}>
-                  {renderEditableText('footer_text', 'Merci pour votre confiance. Cette facture est à régler selon les conditions de paiement indiquées ci-dessus.', [
-                    styles.footerText,
-                    { color: formData.secondary_text_color || '#6B7280' },
-                    editingInline === 'footer_text' && styles.highlightedElement
-                  ], true)}
-                </View>
+                {renderEditableText('footer_text', 'Merci pour votre confiance', [
+                  styles.footerText,
+                  { color: formData.secondary_text_color || '#6B7280' },
+                  editingInline === 'footer_text' && styles.highlightedElement
+                ])}
               </View>
             )}
           </View>
@@ -1337,12 +1181,6 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
             <View style={styles.templateActions}>
               <TouchableOpacity
                 style={styles.actionButton}
-                onPress={() => openPreviewModal(template)}
-              >
-                <Text style={styles.actionIcon}>👁️</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionButton}
                 onPress={() => openEditModal(template)}
               >
                 <EditIcon size={20} color="#007AFF" />
@@ -1366,20 +1204,17 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
               <Text style={styles.modalCloseButton}>✕ Fermer</Text>
             </TouchableOpacity>
             <Text style={styles.modalTitle}>
-              {previewMode ? 'Aperçu du template' : editMode ? 'Modifier le template' : 'Nouveau template'}
+              {editMode ? 'Modifier le template' : 'Nouveau template'}
             </Text>
-            {!previewMode && (
-              <TouchableOpacity onPress={handleSave} disabled={loading}>
-                <Text style={[styles.modalSaveButton, loading && styles.modalSaveButtonDisabled]}>
-                  💾 Enregistrer
-                </Text>
-              </TouchableOpacity>
-            )}
-            {previewMode && <View style={{ width: 100 }} />}
+            <TouchableOpacity onPress={handleSave} disabled={loading}>
+              <Text style={[styles.modalSaveButton, loading && styles.modalSaveButtonDisabled]}>
+                💾 Enregistrer
+              </Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.editorContainer}>
-            {!previewMode && renderSidebar()}
+            {renderSidebar()}
             {renderFullscreenPreview()}
           </View>
         </View>
@@ -1417,70 +1252,25 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Rue *</Text>
+              <Text style={styles.inputLabel}>Adresse complète *</Text>
               <TextInput
-                style={styles.input}
-                value={companyProfileData.company_street}
-                onChangeText={(text) => setCompanyProfileData({ ...companyProfileData, company_street: text })}
-                placeholder="Ex: 123 Rue de la République"
-              />
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.inputLabel}>Code Postal *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={companyProfileData.company_postal_code}
-                  onChangeText={(text) => setCompanyProfileData({ ...companyProfileData, company_postal_code: text })}
-                  placeholder="75001"
-                  keyboardType="numeric"
-                  maxLength={5}
-                />
-              </View>
-
-              <View style={[styles.inputGroup, { flex: 2 }]}>
-                <Text style={styles.inputLabel}>Ville *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={companyProfileData.company_city}
-                  onChangeText={(text) => setCompanyProfileData({ ...companyProfileData, company_city: text })}
-                  placeholder="Paris"
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Pays</Text>
-              <TextInput
-                style={styles.input}
-                value={companyProfileData.company_country}
-                onChangeText={(text) => setCompanyProfileData({ ...companyProfileData, company_country: text })}
-                placeholder="France"
+                style={[styles.input, { height: 80 }]}
+                value={companyProfileData.company_address}
+                onChangeText={(text) => setCompanyProfileData({ ...companyProfileData, company_address: text })}
+                placeholder="Ex: 123 Rue de la République, 75001 Paris"
+                multiline
+                numberOfLines={3}
               />
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Forme juridique</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={companyProfileData.company_legal_form}
-                  onValueChange={(value) => setCompanyProfileData({ ...companyProfileData, company_legal_form: value })}
-                  style={styles.picker}
-                >
-                  <Picker.Item label="SARL (Société à Responsabilité Limitée)" value="SARL" />
-                  <Picker.Item label="SAS (Société par Actions Simplifiée)" value="SAS" />
-                  <Picker.Item label="SASU (SAS Unipersonnelle)" value="SASU" />
-                  <Picker.Item label="EURL (Entreprise Unipersonnelle à Responsabilité Limitée)" value="EURL" />
-                  <Picker.Item label="SA (Société Anonyme)" value="SA" />
-                  <Picker.Item label="SNC (Société en Nom Collectif)" value="SNC" />
-                  <Picker.Item label="Auto-entrepreneur / Micro-entreprise" value="Auto-entrepreneur" />
-                  <Picker.Item label="EI (Entreprise Individuelle)" value="EI" />
-                  <Picker.Item label="EIRL (Entreprise Individuelle à Responsabilité Limitée)" value="EIRL" />
-                  <Picker.Item label="Association" value="Association" />
-                  <Picker.Item label="Autre" value="Autre" />
-                </Picker>
-              </View>
+              <TextInput
+                style={styles.input}
+                value={companyProfileData.company_legal_form}
+                onChangeText={(text) => setCompanyProfileData({ ...companyProfileData, company_legal_form: text })}
+                placeholder="Ex: SARL, SAS, EURL, Auto-entrepreneur"
+              />
             </View>
 
             <View style={styles.inputGroup}>
@@ -1507,6 +1297,16 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
             </View>
 
             <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>N° TVA Intracommunautaire</Text>
+              <TextInput
+                style={styles.input}
+                value={companyProfileData.company_tva}
+                onChangeText={(text) => setCompanyProfileData({ ...companyProfileData, company_tva: text })}
+                placeholder="Ex: FR 12 345678901"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>RCS (Registre du Commerce)</Text>
               <TextInput
                 style={styles.input}
@@ -1527,24 +1327,12 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
             </View>
 
             <View style={[styles.inputGroup, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-              <Text style={styles.inputLabel}>TVA applicable</Text>
+              <Text style={styles.inputLabel}>Micro-entreprise (TVA non applicable)</Text>
               <Switch
-                value={!companyProfileData.is_micro_entreprise}
-                onValueChange={(value) => setCompanyProfileData({ ...companyProfileData, is_micro_entreprise: !value })}
+                value={companyProfileData.is_micro_entreprise}
+                onValueChange={(value) => setCompanyProfileData({ ...companyProfileData, is_micro_entreprise: value })}
               />
             </View>
-
-            {!companyProfileData.is_micro_entreprise && (
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>N° TVA Intracommunautaire</Text>
-                <TextInput
-                  style={styles.input}
-                  value={companyProfileData.company_tva}
-                  onChangeText={(text) => setCompanyProfileData({ ...companyProfileData, company_tva: text })}
-                  placeholder="Ex: FR 12 345678901"
-                />
-              </View>
-            )}
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Logo (optionnel)</Text>
@@ -1776,24 +1564,6 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginBottom: 12,
   },
-  blinkingSection: {
-    backgroundColor: '#FEF3C7',
-    borderWidth: 2,
-    borderColor: '#F59E0B',
-    borderRadius: 8,
-  },
-  blinkingInput: {
-    borderColor: '#F59E0B',
-    borderWidth: 2,
-    backgroundColor: '#FFFBEB',
-  },
-  requiredFieldHint: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#D97706',
-    marginTop: -8,
-    marginBottom: 8,
-  },
   sidebarInputMultiline: {
     minHeight: 70,
     textAlignVertical: 'top',
@@ -1901,30 +1671,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  nameHintArrow: {
-    position: 'absolute',
-    left: '105%',
-    top: '50%',
-    transform: [{ translateY: -10 }],
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#FCD34D',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    zIndex: 1000,
-  },
-  nameHintText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#92400E',
-    whiteSpace: 'nowrap',
-  },
   previewHint: {
     fontSize: 13,
     color: '#6B7280',
@@ -1939,78 +1685,56 @@ const styles = StyleSheet.create({
   },
   invoicePreview: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 56,
-    paddingLeft: 64,
+    borderRadius: 12,
+    padding: 48,
     borderWidth: 1,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 12,
-    width: Math.min(screenWidth - 80, 850),
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+    width: Math.min(screenWidth - 80, 800),
     minHeight: screenHeight - 200,
-    position: 'relative',
-  },
-  decorativeSidebar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 6,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
   },
   invoiceHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    padding: 28,
-    borderRadius: 12,
-    marginBottom: 40,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 2,
-    elevation: 1,
+    padding: 20,
+    borderRadius: 8,
+    marginBottom: 32,
   },
   invoiceHeaderLeft: {
     flex: 1,
   },
   invoiceTitle: {
-    fontSize: 40,
-    fontWeight: '900',
-    marginBottom: 16,
-    letterSpacing: -0.5,
+    fontSize: 32,
+    fontWeight: '800',
+    marginBottom: 12,
   },
   invoiceNumberLabel: {
-    fontSize: 15,
-    fontWeight: '500',
-    marginRight: 6,
-    letterSpacing: 0.3,
+    fontSize: 16,
+    fontWeight: '600',
+    marginRight: 4,
   },
   invoiceNumber: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
-    marginBottom: 8,
-    letterSpacing: 0.5,
+    marginBottom: 6,
   },
   invoiceDate: {
-    fontSize: 14,
-    marginBottom: 4,
-    lineHeight: 20,
+    fontSize: 13,
+    marginBottom: 3,
   },
   logoPlaceholder: {
-    width: 140,
-    height: 140,
-    backgroundColor: '#FAFAFA',
-    borderRadius: 12,
+    width: 120,
+    height: 120,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: '#D1D5DB',
     borderStyle: 'dashed',
   },
   logoImage: {
@@ -2026,143 +1750,65 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   invoiceSection: {
-    marginBottom: 40,
+    marginBottom: 32,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 32,
-  },
-  invoiceSectionSingle: {
-    marginBottom: 40,
   },
   companyInfo: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
-    padding: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
   },
   companyName: {
-    fontSize: 20,
-    fontWeight: '800',
-    marginBottom: 12,
-    letterSpacing: -0.2,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
   },
   companyDetails: {
-    fontSize: 13,
-    marginBottom: 2,
+    fontSize: 14,
+    marginBottom: 3,
     lineHeight: 20,
-  },
-  companyDetailsLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginRight: 6,
-    minWidth: 80,
-  },
-  clientInfoPlaceholder: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-    padding: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  clientSectionLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    marginBottom: 14,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-  clientPlaceholderText: {
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  clientDetailsPlaceholder: {
-    fontSize: 13,
-    lineHeight: 20,
-    marginBottom: 2,
-  },
-  clientLogoPlaceholder: {
-    width: 80,
-    height: 80,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    borderStyle: 'dashed',
-    marginLeft: 12,
-  },
-  clientLogoText: {
-    fontSize: 28,
-  },
-  clientLogoTextSmall: {
-    fontSize: 10,
-    fontWeight: '600',
-    marginTop: 4,
   },
   clientInfo: {
     flex: 1,
     alignItems: 'flex-end',
-    backgroundColor: '#F9FAFB',
-    padding: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
   },
   clientLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    marginBottom: 14,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 12,
   },
   clientName: {
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 10,
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 6,
   },
   clientAddress: {
-    fontSize: 13,
+    fontSize: 14,
     textAlign: 'right',
     lineHeight: 20,
   },
   invoiceTable: {
-    marginBottom: 40,
-    borderRadius: 12,
+    marginBottom: 32,
+    borderRadius: 8,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
   tableHeader: {
     flexDirection: 'row',
-    padding: 16,
+    padding: 14,
   },
   tableHeaderText: {
     color: '#fff',
-    fontWeight: '800',
+    fontWeight: '700',
     fontSize: 13,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
   },
   tableRow: {
     flexDirection: 'row',
-    padding: 16,
+    padding: 14,
     backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
   },
   tableCell: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
   },
   tableColDescription: {
     flex: 3,
@@ -2181,132 +1827,70 @@ const styles = StyleSheet.create({
   },
   totalsSection: {
     alignSelf: 'flex-end',
-    minWidth: 340,
-    marginBottom: 40,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
-    borderRadius: 12,
-    overflow: 'hidden',
+    minWidth: 300,
+    marginBottom: 32,
   },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    backgroundColor: '#FAFAFA',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
   totalLabel: {
     fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: 0.2,
+    fontWeight: '500',
   },
   totalValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    fontSize: 15,
+    fontWeight: '600',
   },
   grandTotalRow: {
-    marginTop: 0,
-    paddingVertical: 18,
-    borderRadius: 0,
-    borderTopWidth: 2,
-    borderTopColor: '#E5E7EB',
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 8,
   },
   grandTotalLabel: {
-    fontSize: 19,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+    fontSize: 18,
+    fontWeight: '800',
   },
   grandTotalValue: {
-    fontSize: 24,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+    fontSize: 20,
+    fontWeight: '800',
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    marginBottom: 14,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 10,
   },
   sectionText: {
     fontSize: 14,
-    lineHeight: 22,
-  },
-  paymentTermsSection: {
-    marginBottom: 32,
-    backgroundColor: '#FFFBF0',
-    padding: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#FCD34D',
-    borderLeftWidth: 4,
-  },
-  paymentTermsEditableText: {
-    fontSize: 14,
-    lineHeight: 24,
-    marginBottom: 12,
-    flexWrap: 'wrap',
-  },
-  legalWarningBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#FCD34D',
-  },
-  legalWarningText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#92400E',
-    letterSpacing: 0.3,
-  },
-  legalWarningFootnote: {
-    fontSize: 11,
-    lineHeight: 16,
-    color: '#92400E',
-    fontStyle: 'italic',
-    backgroundColor: '#FEF3C7',
-    padding: 10,
-    borderRadius: 6,
-    marginTop: 8,
+    lineHeight: 20,
   },
   legalSection: {
-    borderTopWidth: 2,
-    marginTop: 24,
-    backgroundColor: '#FAFAFA',
-    padding: 20,
-    borderRadius: 10,
+    borderTopWidth: 1,
+    paddingTop: 20,
+    marginTop: 20,
   },
   legalTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    marginBottom: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 10,
   },
   legalText: {
     fontSize: 12,
-    lineHeight: 20,
-    marginBottom: 12,
-    paddingBottom: 4,
+    lineHeight: 18,
+    marginBottom: 6,
   },
   invoiceFooter: {
-    marginTop: 40,
-    paddingTop: 24,
-    paddingBottom: 0,
+    marginTop: 32,
+    paddingTop: 20,
     alignItems: 'center',
-    borderTopWidth: 2,
+    borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
   },
   footerText: {
-    fontSize: 13,
-    fontWeight: '500',
-    letterSpacing: 0.2,
+    fontSize: 14,
     fontStyle: 'italic',
-    textAlign: 'center',
-    width: '100%',
   },
   inlineEditable: {
     borderRadius: 4,
@@ -2395,17 +1979,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#6B7280',
-  },
-  pickerContainer: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  picker: {
-    height: 50,
-    fontSize: 14,
-    color: '#111827',
   },
 });

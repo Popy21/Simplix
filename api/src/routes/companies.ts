@@ -17,6 +17,7 @@ router.get('/', authenticateToken, requireOrganization, async (req: AuthRequest,
         name,
         industry,
         website,
+        logo_url,
         phone,
         email,
         address,
@@ -46,6 +47,7 @@ router.get('/:id', authenticateToken, requireOrganization, async (req: AuthReque
         name,
         industry,
         website,
+        logo_url,
         phone,
         email,
         address,
@@ -70,7 +72,7 @@ router.get('/:id', authenticateToken, requireOrganization, async (req: AuthReque
 // Create company
 router.post('/', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {
-    const { name, industry, website, phone, email, address } = req.body;
+    const { name, industry, website, logo_url, phone, email, address } = req.body;
     const orgId = getOrgIdFromRequest(req);
 
     if (!name) {
@@ -78,15 +80,26 @@ router.post('/', authenticateToken, requireOrganization, async (req: AuthRequest
       return;
     }
 
+    // Parse address if it's a string
+    let addressData = address;
+    if (typeof address === 'string' && address) {
+      try {
+        addressData = JSON.parse(address);
+      } catch (e) {
+        addressData = { street: address };
+      }
+    }
+
     const result = await pool.query(
-      `INSERT INTO companies (organization_id, name, industry, website, phone, email, address)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO companies (organization_id, name, industry, website, logo_url, phone, email, address)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [orgId, name, industry, website, phone, email, address || null]
+      [orgId, name, industry, website, logo_url, phone, email, addressData ? JSON.stringify(addressData) : null]
     );
 
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
+    console.error('Error creating company:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -95,16 +108,27 @@ router.post('/', authenticateToken, requireOrganization, async (req: AuthRequest
 router.put('/:id', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, industry, website, phone, email, address } = req.body;
+    const { name, industry, website, logo_url, phone, email, address } = req.body;
     const orgId = getOrgIdFromRequest(req);
+
+    // Parse address if it's a string
+    let addressData = address;
+    if (typeof address === 'string' && address) {
+      try {
+        addressData = JSON.parse(address);
+      } catch (e) {
+        // If it's not valid JSON, treat it as a simple string address
+        addressData = { street: address };
+      }
+    }
 
     const result = await pool.query(
       `UPDATE companies
-       SET name = $1, industry = $2, website = $3, phone = $4, email = $5,
-           address = $6, updated_at = NOW()
-       WHERE id = $7 AND organization_id = $8 AND deleted_at IS NULL
+       SET name = $1, industry = $2, website = $3, logo_url = $4, phone = $5, email = $6,
+           address = $7, updated_at = NOW()
+       WHERE id = $8 AND organization_id = $9 AND deleted_at IS NULL
        RETURNING *`,
-      [name, industry, website, phone, email, address, id, orgId]
+      [name, industry, website, logo_url, phone, email, addressData ? JSON.stringify(addressData) : null, id, orgId]
     );
 
     if (result.rows.length === 0) {
@@ -114,6 +138,7 @@ router.put('/:id', authenticateToken, requireOrganization, async (req: AuthReque
 
     res.json(result.rows[0]);
   } catch (err: any) {
+    console.error('Error updating company:', err);
     res.status(500).json({ error: err.message });
   }
 });

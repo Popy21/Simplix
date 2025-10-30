@@ -1,10 +1,16 @@
 import { Router, Response } from 'express';
+import Stripe from 'stripe';
 import { pool } from '../database/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { requireOrganization } from '../middleware/multiTenancy';
 import { getOrgIdFromRequest } from '../utils/multiTenancyHelper';
 
 const router = Router();
+
+// Initialize Stripe
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+  apiVersion: '2025-10-29.clover',
+});
 
 /**
  * GET /api/payments
@@ -469,6 +475,147 @@ router.post('/process-apple-pay', authenticateToken, requireOrganization, async 
   } finally {
     client.release();
   }
+});
+
+/**
+ * POST /api/payments/stripe/create-payment-intent
+ * Create a Stripe Payment Intent for an invoice
+ */
+router.post('/stripe/create-payment-intent', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+    const { invoice_id, amount, currency = 'eur' } = req.body;
+
+    if (!invoice_id || !amount) {
+      return res.status(400).json({ error: 'invoice_id and amount are required' });
+    }
+
+    // Verify invoice belongs to organization
+    const invoiceResult = await pool.query(
+      'SELECT * FROM invoices WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL',
+      [invoice_id, orgId]
+    );
+
+    if (invoiceResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Facture non trouvée' });
+    }
+
+    const invoice = invoiceResult.rows[0];
+
+    // Create a PaymentIntent with Stripe
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(parseFloat(amount) * 100), // Convert to cents
+      currency,
+      automatic_payment_methods: {
+        enabled: true,
+      },
+      metadata: {
+        invoice_id: invoice_id.toString(),
+        invoice_number: invoice.invoice_number,
+        organization_id: orgId.toString(),
+        user_id: req.user?.id?.toString() || '',
+      },
+    });
+
+    res.json({
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
+    });
+  } catch (error: any) {
+    console.error('Error creating Stripe payment intent:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/payments/stripe/webhook
+ * Handle Stripe webhook events
+ */
+router.post('/stripe/webhook', async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+
+  if (!sig || typeof sig !== 'string') {
+    return res.status(400).send('Missing stripe-signature header');
+  }
+
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET || ''
+    );
+  } catch (err: any) {
+    console.error('Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Handle the event
+  switch (event.type) {
+    case 'payment_intent.succeeded':
+      const paymentIntent = event.data.object as Stripe.PaymentIntent;
+      console.log('PaymentIntent was successful!', paymentIntent.id);
+
+      // Create payment record in database
+      try {
+        const invoiceId = paymentIntent.metadata.invoice_id;
+        const amount = paymentIntent.amount / 100; // Convert from cents
+        const userId = paymentIntent.metadata.user_id;
+
+        await pool.query(`
+          INSERT INTO payments (
+            invoice_id, payment_date, amount, payment_method,
+            transaction_id, notes, created_by
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [
+          invoiceId,
+          new Date().toISOString().split('T')[0],
+          amount,
+          'stripe',
+          paymentIntent.id,
+          'Stripe payment - Payment Intent ID: ' + paymentIntent.id,
+          userId || null
+        ]);
+
+        // Update invoice status if fully paid
+        const invoiceResult = await pool.query(`
+          SELECT
+            i.*,
+            (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE invoice_id = $1) as total_paid
+          FROM invoices i
+          WHERE id = $1
+        `, [invoiceId]);
+
+        if (invoiceResult.rows.length > 0) {
+          const invoice = invoiceResult.rows[0];
+          const totalPaid = parseFloat(invoice.total_paid);
+          const balanceDue = parseFloat(invoice.total_amount) - totalPaid;
+
+          if (balanceDue <= 0.01) {
+            await pool.query(`
+              UPDATE invoices
+              SET status = 'paid', updated_at = NOW()
+              WHERE id = $1
+            `, [invoiceId]);
+          }
+        }
+
+        console.log('Payment recorded in database for invoice:', invoiceId);
+      } catch (error) {
+        console.error('Error recording payment in database:', error);
+      }
+      break;
+
+    case 'payment_intent.payment_failed':
+      console.log('Payment failed:', event.data.object);
+      break;
+
+    default:
+      console.log(`Unhandled event type ${event.type}`);
+  }
+
+  res.json({ received: true });
 });
 
 /**
