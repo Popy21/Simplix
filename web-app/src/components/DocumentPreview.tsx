@@ -37,6 +37,12 @@ export default function DocumentPreview({ template, document, compact = false }:
 
   const layoutStyles = getLayoutStyles(template.template_layout || 'professional');
 
+  // Convertir le logo_url en URL absolue si c'est un chemin relatif
+  let logoUrl = template.logo_url || template.template_logo_url || '';
+  if (logoUrl && !logoUrl.startsWith('http')) {
+    logoUrl = `http://localhost:3000${logoUrl}`;
+  }
+
   return (
     <View style={[
       styles.documentPreview,
@@ -59,9 +65,9 @@ export default function DocumentPreview({ template, document, compact = false }:
       ]}>
         {template.show_logo && (
           <View style={styles.logoContainer}>
-            {(template.logo_url || template.template_logo_url) ? (
+            {logoUrl ? (
               <Image
-                source={{ uri: template.logo_url || template.template_logo_url }}
+                source={{ uri: logoUrl }}
                 style={styles.logo}
               />
             ) : (

@@ -150,7 +150,7 @@ router.get('/quotes/:id/download', async (req: Request, res: Response) => {
       ? documentData.footer_text.replace(/facture/gi, 'devis').replace(/Facture/g, 'Devis')
       : 'Merci pour votre confiance. Ce devis est valable 30 jours à compter de sa date d\'émission.';
 
-    const html = generateDocumentHTML({ ...documentData, footer_text: quoteFooterText }, itemsResult.rows, 'DEVIS');
+    const html = generateDocumentHTML({ ...documentData, footer_text: quoteFooterText, quote_id: id }, itemsResult.rows, 'DEVIS');
 
     // Lancer Puppeteer pour générer le PDF
     browser = await puppeteer.launch({
@@ -441,7 +441,7 @@ router.get('/quotes/:id/pdf', async (req: Request, res: Response) => {
       ? documentData.footer_text.replace(/facture/gi, 'devis').replace(/Facture/g, 'Devis')
       : 'Merci pour votre confiance. Ce devis est valable 30 jours à compter de sa date d\'émission.';
 
-    const html = generateDocumentHTML({ ...documentData, footer_text: quoteFooterText }, itemsResult.rows, 'DEVIS');
+    const html = generateDocumentHTML({ ...documentData, footer_text: quoteFooterText, quote_id: id }, itemsResult.rows, 'DEVIS');
 
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
@@ -853,6 +853,68 @@ function generateDocumentHTML(document: any, items: any[], type: string): string
       margin-bottom: 2px;
     }
 
+    .payment-buttons {
+      margin-top: 12px;
+      padding: 12px;
+      background: linear-gradient(135deg, #f9f9f9 0%, #f5f5f5 100%);
+      border-radius: 6px;
+      border: 1px solid #e8e8e8;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .payment-buttons-title {
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: #000;
+      font-size: 10pt;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 0.3pt;
+    }
+
+    .payment-buttons-container {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .payment-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 9pt;
+      font-weight: 600;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      min-width: 150px;
+    }
+
+    .payment-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+    .stripe-btn {
+      background: linear-gradient(135deg, #635BFF 0%, #5348E8 100%);
+      color: white;
+      border: 2px solid #5348E8;
+    }
+
+    .applepay-btn {
+      background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+      color: white;
+      border: 2px solid #000000;
+    }
+
+    .payment-btn svg {
+      flex-shrink: 0;
+    }
+
     @media print {
       @page {
         margin: 12mm 15mm;
@@ -869,12 +931,17 @@ function generateDocumentHTML(document: any, items: any[], type: string): string
         page-break-after: avoid;
       }
 
-      .header, .document-info, table, .totals, .payment-info, .legal-mentions {
+      .header, .document-info, table, .totals, .payment-info, .payment-buttons, .legal-mentions {
         page-break-inside: avoid;
       }
 
       tbody tr:nth-child(even) {
         background: #fafafa !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .payment-btn {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
@@ -969,6 +1036,28 @@ function generateDocumentHTML(document: any, items: any[], type: string): string
         ${document.bank_iban ? `<div class="payment-detail">IBAN: ${document.bank_iban}</div>` : ''}
         ${document.bank_bic ? `<div class="payment-detail">BIC: ${document.bank_bic}</div>` : ''}
         ${!document.bank_name && !document.bank_iban && !document.bank_bic ? `<div class="payment-detail" style="font-style: italic; color: #666;">À configurer dans les paramètres de votre profil d'entreprise</div>` : ''}
+      </div>
+    ` : ''}
+
+    <!-- Payment Buttons for Quotes -->
+    ${!isInvoice ? `
+      <div class="payment-buttons">
+        <div class="payment-buttons-title">Payer ce devis en ligne</div>
+        <div class="payment-buttons-container">
+          <a href="http://localhost:3000/pay/stripe/${document.quote_id || document.id || ''}" class="payment-btn stripe-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="24" height="24" rx="4" fill="white"/>
+              <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.591-7.305z" fill="#635BFF"/>
+            </svg>
+            <span>Payer par Carte</span>
+          </a>
+          <a href="http://localhost:3000/pay/applepay/${document.quote_id || document.id || ''}" class="payment-btn applepay-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M17.05 11.13c-.04-3.49 2.84-5.17 2.97-5.25-1.62-2.37-4.14-2.69-5.04-2.73-2.15-.22-4.19 1.27-5.28 1.27-1.09 0-2.77-1.24-4.55-1.21-2.34.04-4.5 1.36-5.71 3.46-2.43 4.22-.62 10.48 1.75 13.9 1.16 1.68 2.54 3.56 4.35 3.49 1.77-.07 2.44-1.14 4.58-1.14 2.14 0 2.75 1.14 4.58 1.1 1.89-.03 3.08-1.69 4.23-3.38 1.33-1.95 1.88-3.84 1.91-3.94-.04-.02-3.67-1.41-3.71-5.57zM14.28 4.7c.96-1.16 1.61-2.77 1.43-4.38-1.38.06-3.05.92-4.04 2.08-.89 1.03-1.67 2.68-1.46 4.26 1.55.12 3.13-.79 4.07-1.96z" fill="white"/>
+            </svg>
+            <span>Apple Pay</span>
+          </a>
+        </div>
       </div>
     ` : ''}
 

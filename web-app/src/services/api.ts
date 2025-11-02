@@ -108,6 +108,7 @@ export const customerService = {
   create: (customer: Customer) => api.post<Customer>('/customers', customer),
   update: (id: number, customer: Customer) => api.put<Customer>(`/customers/${id}`, customer),
   delete: (id: number) => api.delete(`/customers/${id}`),
+  getHistory: (id: number) => api.get(`/customers/${id}/history`),
 };
 
 // Company API
@@ -370,6 +371,15 @@ export const analyticsService = {
   getQuotesConversion: () => api.get('/analytics/quotes-conversion'),
   getRecentActivity: (limit: number = 20) => api.get(`/analytics/recent-activity?limit=${limit}`),
   getLowStock: (threshold: number = 10) => api.get(`/analytics/low-stock?threshold=${threshold}`),
+  getPendingQuotes: () => api.get('/analytics/pending-quotes'),
+  getTasksToday: () => api.get('/analytics/tasks-today'),
+  getTopCustomersEnhanced: (limit: number = 5) => api.get(`/analytics/top-customers-enhanced?limit=${limit}`),
+  getConversionFunnel: () => api.get('/analytics/conversion-funnel'),
+  getActivitySummary: () => api.get('/analytics/activity-summary'),
+  getForecasting: () => api.get('/analytics/forecasting'),
+  getQuickStats: () => api.get('/analytics/quick-stats'),
+  getLeadScores: (limit: number = 5) => api.get(`/analytics/lead-scores?limit=${limit}`),
+  getPipelineStages: () => api.get('/analytics/pipeline-stages'),
 };
 
 // Search API
@@ -426,6 +436,8 @@ export const notificationsService = {
   markAllAsRead: (userId: number) => api.patch(`/notifications/user/${userId}/read-all`),
   delete: (id: number) => api.delete(`/notifications/${id}`),
   getUnreadCount: (userId: number) => api.get(`/notifications/user/${userId}/unread-count`),
+  getContextual: () => api.get('/notifications/contextual'),
+  getContextualCount: () => api.get('/notifications/contextual/count'),
 };
 
 // Tasks API

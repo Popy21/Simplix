@@ -25,6 +25,7 @@ import {
   EditIcon,
   TrashIcon,
   PlusIcon,
+  FileTextIcon,
 } from '../components/Icons';
 import Navigation from '../components/Navigation';
 import { useAuth } from '../context/AuthContext';
@@ -140,6 +141,10 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
   const [contactModalVisible, setContactModalVisible] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [contactActivities, setContactActivities] = useState<Activity[]>([]);
+  const [contactHistoryTab, setContactHistoryTab] = useState<'activities' | 'quotes' | 'invoices' | 'payments'>('activities');
+  const [contactQuotes, setContactQuotes] = useState<any[]>([]);
+  const [contactInvoices, setContactInvoices] = useState<any[]>([]);
+  const [contactPayments, setContactPayments] = useState<any[]>([]);
   const [newContactModalVisible, setNewContactModalVisible] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [contactForm, setContactForm] = useState({
@@ -247,11 +252,20 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
   const openContactDetails = async (contact: Contact) => {
     setSelectedContact(contact);
     setContactModalVisible(true);
+    setContactHistoryTab('activities');
+
     try {
-      const res = await activitiesService.getByContact(contact.id);
-      setContactActivities(res.data);
+      const [activitiesRes, historyRes] = await Promise.all([
+        activitiesService.getByContact(contact.id),
+        customerService.getHistory(contact.id),
+      ]);
+
+      setContactActivities(activitiesRes.data);
+      setContactQuotes(historyRes.data.quotes || []);
+      setContactInvoices(historyRes.data.invoices || []);
+      setContactPayments(historyRes.data.payments || []);
     } catch (error) {
-      console.error('Error fetching activities:', error);
+      console.error('Error fetching contact details:', error);
     }
   };
 
@@ -528,23 +542,47 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
         {viewMode === 'contacts' ? (
           filteredContacts.length > 0 ? (
             filteredContacts.map((contact) => (
-              <TouchableOpacity key={contact.id} style={styles.card} onPress={() => openContactDetails(contact)}>
-                <View style={styles.cardHeader}>
-                  {contact.avatar_url ? (
-                    <Image source={{ uri: contact.avatar_url }} style={styles.avatar} />
-                  ) : (
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{(contact.full_name || contact.first_name || contact.last_name || 'U').charAt(0).toUpperCase()}</Text>
+              <View key={contact.id} style={styles.cardWrapper}>
+                <TouchableOpacity style={styles.card} onPress={() => openContactDetails(contact)}>
+                  <View style={styles.cardHeader}>
+                    {contact.avatar_url ? (
+                      <Image source={{ uri: contact.avatar_url }} style={styles.avatar} />
+                    ) : (
+                      <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>{(contact.full_name || contact.first_name || contact.last_name || 'U').charAt(0).toUpperCase()}</Text>
+                      </View>
+                    )}
+                    <View style={styles.cardInfo}>
+                      <Text style={styles.cardName}>{contact.full_name || `${contact.first_name || ''} ${contact.last_name || ''}`.trim()}</Text>
+                      {contact.title && <Text style={styles.cardCompany}>{contact.title}</Text>}
+                      {contact.company_name && <Text style={styles.cardCompany}>{contact.company_name}</Text>}
+                      {contact.email && <Text style={styles.cardMetaText} numberOfLines={1}>{contact.email}</Text>}
                     </View>
-                  )}
-                  <View style={styles.cardInfo}>
-                    <Text style={styles.cardName}>{contact.full_name || `${contact.first_name || ''} ${contact.last_name || ''}`.trim()}</Text>
-                    {contact.title && <Text style={styles.cardCompany}>{contact.title}</Text>}
-                    {contact.company_name && <Text style={styles.cardCompany}>{contact.company_name}</Text>}
-                    {contact.email && <Text style={styles.cardMetaText} numberOfLines={1}>{contact.email}</Text>}
                   </View>
+                </TouchableOpacity>
+                <View style={styles.cardQuickActions}>
+                  {contact.phone && (
+                    <TouchableOpacity style={styles.quickAction} onPress={() => Platform.OS === 'web' ? window.open(`tel:${contact.phone}`) : null}>
+                      <PhoneIcon size={16} color="#007AFF" />
+                    </TouchableOpacity>
+                  )}
+                  {contact.email && (
+                    <TouchableOpacity style={styles.quickAction} onPress={() => Platform.OS === 'web' ? window.open(`mailto:${contact.email}`) : null}>
+                      <MailIcon size={16} color="#007AFF" />
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={styles.quickAction}
+                    onPress={() => navigation.navigate('Invoices', {
+                      action: 'createQuote',
+                      customerId: contact.id,
+                      customerType: 'contact'
+                    })}
+                  >
+                    <FileTextIcon size={16} color="#007AFF" />
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
+              </View>
             ))
           ) : (
             <View style={styles.emptyState}>
@@ -618,26 +656,178 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
                       </View>
                     )}
                   </View>
+                  {/* Onglets d'historique */}
+                  <View style={styles.historyTabs}>
+                    <TouchableOpacity
+                      style={[styles.historyTab, contactHistoryTab === 'activities' && styles.historyTabActive]}
+                      onPress={() => setContactHistoryTab('activities')}
+                    >
+                      <Text style={[styles.historyTabText, contactHistoryTab === 'activities' && styles.historyTabTextActive]}>
+                        Activités
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.historyTab, contactHistoryTab === 'quotes' && styles.historyTabActive]}
+                      onPress={() => setContactHistoryTab('quotes')}
+                    >
+                      <Text style={[styles.historyTabText, contactHistoryTab === 'quotes' && styles.historyTabTextActive]}>
+                        Devis ({contactQuotes.length})
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.historyTab, contactHistoryTab === 'invoices' && styles.historyTabActive]}
+                      onPress={() => setContactHistoryTab('invoices')}
+                    >
+                      <Text style={[styles.historyTabText, contactHistoryTab === 'invoices' && styles.historyTabTextActive]}>
+                        Factures ({contactInvoices.length})
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.historyTab, contactHistoryTab === 'payments' && styles.historyTabActive]}
+                      onPress={() => setContactHistoryTab('payments')}
+                    >
+                      <Text style={[styles.historyTabText, contactHistoryTab === 'payments' && styles.historyTabTextActive]}>
+                        Paiements ({contactPayments.length})
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Contenu des onglets */}
                   <View style={styles.modalSection}>
-                    <Text style={styles.sectionTitle}>ACTIVITÉS RÉCENTES</Text>
-                    {contactActivities.length > 0 ? (
-                      contactActivities.map((activity) => (
-                        <View key={activity.id} style={styles.activityCard}>
-                          <Text style={styles.activityIcon}>{activityConfig[activity.type].icon}</Text>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.activityDescription}>{activity.description}</Text>
-                            <Text style={styles.activityDate}>
-                              {new Date(activity.created_at).toLocaleDateString('fr-FR')}
-                            </Text>
-                          </View>
-                        </View>
-                      ))
-                    ) : (
-                      <Text style={styles.emptyText}>Aucune activité</Text>
+                    {contactHistoryTab === 'activities' && (
+                      <>
+                        {contactActivities.length > 0 ? (
+                          contactActivities.map((activity) => (
+                            <View key={activity.id} style={styles.activityCard}>
+                              <Text style={styles.activityIcon}>{activityConfig[activity.type].icon}</Text>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.activityDescription}>{activity.description}</Text>
+                                <Text style={styles.activityDate}>
+                                  {new Date(activity.created_at).toLocaleDateString('fr-FR')}
+                                </Text>
+                              </View>
+                            </View>
+                          ))
+                        ) : (
+                          <Text style={styles.emptyText}>Aucune activité</Text>
+                        )}
+                      </>
+                    )}
+
+                    {contactHistoryTab === 'quotes' && (
+                      <>
+                        {contactQuotes.length > 0 ? (
+                          contactQuotes.map((quote) => (
+                            <TouchableOpacity
+                              key={quote.id}
+                              style={styles.historyItem}
+                              onPress={() => {
+                                setContactModalVisible(false);
+                                navigation.navigate('Invoices', { quoteId: quote.id });
+                              }}
+                            >
+                              <View style={styles.historyItemLeft}>
+                                <Text style={styles.historyItemTitle}>{quote.quote_number}</Text>
+                                <Text style={styles.historyItemDate}>
+                                  {new Date(quote.created_at).toLocaleDateString('fr-FR')}
+                                </Text>
+                              </View>
+                              <View style={styles.historyItemRight}>
+                                <Text style={styles.historyItemAmount}>
+                                  {parseFloat(quote.total_amount).toFixed(2)} €
+                                </Text>
+                                <View style={[styles.historyStatusBadge, { backgroundColor: quote.status === 'sent' ? '#FF9500' : '#8E8E93' }]}>
+                                  <Text style={styles.historyStatusText}>
+                                    {quote.status === 'sent' ? 'Envoyé' : quote.status === 'accepted' ? 'Accepté' : 'Brouillon'}
+                                  </Text>
+                                </View>
+                              </View>
+                            </TouchableOpacity>
+                          ))
+                        ) : (
+                          <Text style={styles.emptyText}>Aucun devis</Text>
+                        )}
+                      </>
+                    )}
+
+                    {contactHistoryTab === 'invoices' && (
+                      <>
+                        {contactInvoices.length > 0 ? (
+                          contactInvoices.map((invoice) => (
+                            <TouchableOpacity
+                              key={invoice.id}
+                              style={styles.historyItem}
+                              onPress={() => {
+                                setContactModalVisible(false);
+                                navigation.navigate('Invoices', { invoiceId: invoice.id });
+                              }}
+                            >
+                              <View style={styles.historyItemLeft}>
+                                <Text style={styles.historyItemTitle}>{invoice.invoice_number}</Text>
+                                <Text style={styles.historyItemDate}>
+                                  Échéance: {new Date(invoice.due_date).toLocaleDateString('fr-FR')}
+                                </Text>
+                              </View>
+                              <View style={styles.historyItemRight}>
+                                <Text style={styles.historyItemAmount}>
+                                  {parseFloat(invoice.total_amount).toFixed(2)} €
+                                </Text>
+                                <View style={[styles.historyStatusBadge, { backgroundColor: invoice.status === 'paid' ? '#34C759' : '#FF3B30' }]}>
+                                  <Text style={styles.historyStatusText}>
+                                    {invoice.status === 'paid' ? 'Payée' : 'En attente'}
+                                  </Text>
+                                </View>
+                              </View>
+                            </TouchableOpacity>
+                          ))
+                        ) : (
+                          <Text style={styles.emptyText}>Aucune facture</Text>
+                        )}
+                      </>
+                    )}
+
+                    {contactHistoryTab === 'payments' && (
+                      <>
+                        {contactPayments.length > 0 ? (
+                          contactPayments.map((payment) => (
+                            <View key={payment.id} style={styles.historyItem}>
+                              <View style={styles.historyItemLeft}>
+                                <Text style={styles.historyItemTitle}>
+                                  Paiement - {payment.invoice_number}
+                                </Text>
+                                <Text style={styles.historyItemDate}>
+                                  {new Date(payment.payment_date).toLocaleDateString('fr-FR')}
+                                </Text>
+                              </View>
+                              <View style={styles.historyItemRight}>
+                                <Text style={[styles.historyItemAmount, { color: '#34C759' }]}>
+                                  +{parseFloat(payment.amount).toFixed(2)} €
+                                </Text>
+                                <Text style={styles.historyPaymentMethod}>
+                                  {payment.payment_method === 'stripe' ? 'Carte' : payment.payment_method}
+                                </Text>
+                              </View>
+                            </View>
+                          ))
+                        ) : (
+                          <Text style={styles.emptyText}>Aucun paiement</Text>
+                        )}
+                      </>
                     )}
                   </View>
                 </ScrollView>
                 <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.actionButtonPrimary} onPress={() => {
+                    setContactModalVisible(false);
+                    navigation.navigate('Invoices', {
+                      action: 'createQuote',
+                      customerId: selectedContact.id,
+                      customerType: 'contact'
+                    });
+                  }}>
+                    <FileTextIcon size={16} color="#FFFFFF" />
+                    <Text style={styles.actionButtonPrimaryText}>Créer Devis</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => handleEditContact(selectedContact)}>
                     <EditIcon size={16} color="#007AFF" />
                     <Text style={styles.actionButtonSecondaryText}>Modifier</Text>
@@ -703,6 +893,17 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
                   </View>
                 </ScrollView>
                 <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.actionButtonPrimary} onPress={() => {
+                    setCompanyModalVisible(false);
+                    navigation.navigate('Invoices', {
+                      action: 'createQuote',
+                      customerId: selectedCompany.id,
+                      customerType: 'company'
+                    });
+                  }}>
+                    <FileTextIcon size={16} color="#FFFFFF" />
+                    <Text style={styles.actionButtonPrimaryText}>Créer Devis</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => handleEditCompany(selectedCompany)}>
                     <EditIcon size={16} color="#007AFF" />
                     <Text style={styles.actionButtonSecondaryText}>Modifier</Text>
@@ -1065,4 +1266,105 @@ const styles = StyleSheet.create({
   activityTypeButtonActive: { borderColor: '#007AFF', backgroundColor: '#007AFF10' },
   activityTypeIcon: { fontSize: 18 },
   activityTypeLabel: { fontSize: 14, fontWeight: '600', color: '#000000' },
+  historyTabs: {
+    flexDirection: 'row',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 10,
+    padding: 4,
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  historyTab: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  historyTabActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  historyTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  historyTabTextActive: {
+    color: '#007AFF',
+  },
+  historyItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  historyItemLeft: {
+    flex: 1,
+  },
+  historyItemRight: {
+    alignItems: 'flex-end',
+  },
+  historyItemTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 4,
+  },
+  historyItemDate: {
+    fontSize: 13,
+    color: '#8E8E93',
+  },
+  historyItemAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    marginBottom: 4,
+  },
+  historyStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  historyStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  historyPaymentMethod: {
+    fontSize: 12,
+    color: '#8E8E93',
+    fontWeight: '500',
+  },
+  cardWrapper: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  cardQuickActions: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: [{ translateY: -18 }],
+    flexDirection: 'row',
+    gap: 8,
+  },
+  quickAction: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F2F2F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
 });

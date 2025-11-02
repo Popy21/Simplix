@@ -51,6 +51,26 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
     fetchProducts();
   }, [activeTab]);
 
+  useEffect(() => {
+    // Gérer la navigation depuis d'autres écrans
+    const params = (navigation as any).getState()?.routes?.find((r: any) => r.name === 'Invoices')?.params;
+    if (params?.action === 'createQuote' && params?.customerId) {
+      const customerType = params.customerType || 'contact';
+      const customerId = params.customerId;
+
+      // Trouver le client dans la liste
+      setTimeout(async () => {
+        const clientsList = customerType === 'contact' ? contacts : companies;
+        const client = clientsList.find((c: any) => c.id === customerId);
+
+        if (client) {
+          handleClientSelect({ ...client, type: customerType });
+          setCreateModalVisible(true);
+        }
+      }, 500);
+    }
+  }, [navigation, contacts, companies]);
+
   const checkTemplates = async () => {
     try {
       const res = await templatesService.getAll();
@@ -613,8 +633,10 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'paid': return '#34C759';
+      case 'accepted': return '#34C759';
       case 'sent': return '#007AFF';
       case 'overdue': return '#FF3B30';
+      case 'rejected': return '#FF3B30';
       case 'draft': return '#8E8E93';
       default: return '#8E8E93';
     }
@@ -708,24 +730,72 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
                 <View style={styles.modalHeader}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.modalTitle}>{activeTab === 'quotes' ? (selectedItem.quote_number || 'Devis') : (selectedItem.invoice_number || 'Facture')}</Text>
-                    <Text style={styles.modalSubtitle}>{selectedItem.customer_name}</Text>
+                    <TouchableOpacity onPress={() => {
+                      if (selectedItem.customer_id) {
+                        setDetailModalVisible(false);
+                        navigation.navigate('Contacts', { customerId: selectedItem.customer_id });
+                      }
+                    }}>
+                      <Text style={styles.modalSubtitle}>
+                        {selectedItem.customer_name || 'Client'}
+                        {selectedItem.company ? ` - ${selectedItem.company}` : ''} →
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                   <TouchableOpacity onPress={() => setDetailModalVisible(false)}>
                     <Text style={styles.closeButton}>✕</Text>
                   </TouchableOpacity>
                 </View>
                 <ScrollView style={styles.modalBody}>
+                  {/* Logo du client ou de l'entreprise si disponible */}
+                  {(selectedItem.customer_logo_url || selectedItem.template_logo_url || selectedItem.logo_url) && (
+                    <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                      <Image
+                        source={{ uri: selectedItem.customer_logo_url || selectedItem.template_logo_url || selectedItem.logo_url }}
+                        style={{ width: 120, height: 60, resizeMode: 'contain' }}
+                      />
+                      <Text style={{ fontSize: 10, color: '#8E8E93', marginTop: 5 }}>
+                        {selectedItem.customer_logo_url ? 'Logo du client' : 'Logo de votre entreprise'}
+                      </Text>
+                    </View>
+                  )}
+
                   <View style={styles.modalSection}>
                     <Text style={styles.sectionTitle}>DÉTAILS</Text>
-                    <View style={styles.infoRow}><Text style={styles.infoLabel}>Montant HT</Text><Text style={styles.infoValue}>{(selectedItem.total_ht || 0).toFixed(2)} €</Text></View>
-                    <View style={styles.infoRow}><Text style={styles.infoLabel}>TVA</Text><Text style={styles.infoValue}>{((selectedItem.total_ttc || 0) - (selectedItem.total_ht || 0)).toFixed(2)} €</Text></View>
-                    <View style={styles.infoRow}><Text style={styles.infoLabel}>Total TTC</Text><Text style={styles.infoValue}>{(selectedItem.total_ttc || 0).toFixed(2)} €</Text></View>
+                    {activeTab === 'quotes' ? (
+                      <>
+                        <View style={styles.infoRow}><Text style={styles.infoLabel}>Montant HT</Text><Text style={styles.infoValue}>{parseFloat(selectedItem.subtotal || 0).toFixed(2)} €</Text></View>
+                        <View style={styles.infoRow}><Text style={styles.infoLabel}>TVA ({(parseFloat(selectedItem.tax_rate || 0) * 100).toFixed(0)}%)</Text><Text style={styles.infoValue}>{parseFloat(selectedItem.tax_amount || 0).toFixed(2)} €</Text></View>
+                        <View style={styles.infoRow}><Text style={styles.infoLabel}>Total TTC</Text><Text style={[styles.infoValue, { fontWeight: 'bold', fontSize: 18 }]}>{parseFloat(selectedItem.total_amount || 0).toFixed(2)} €</Text></View>
+                      </>
+                    ) : (
+                      <>
+                        <View style={styles.infoRow}><Text style={styles.infoLabel}>Montant HT</Text><Text style={styles.infoValue}>{parseFloat(selectedItem.total_ht || selectedItem.subtotal || 0).toFixed(2)} €</Text></View>
+                        <View style={styles.infoRow}><Text style={styles.infoLabel}>TVA</Text><Text style={styles.infoValue}>{(parseFloat(selectedItem.total_ttc || selectedItem.total_amount || 0) - parseFloat(selectedItem.total_ht || selectedItem.subtotal || 0)).toFixed(2)} €</Text></View>
+                        <View style={styles.infoRow}><Text style={styles.infoLabel}>Total TTC</Text><Text style={[styles.infoValue, { fontWeight: 'bold', fontSize: 18 }]}>{parseFloat(selectedItem.total_ttc || selectedItem.total_amount || 0).toFixed(2)} €</Text></View>
+                      </>
+                    )}
+                    {selectedItem.title && (
+                      <View style={[styles.infoRow, { marginTop: 15, borderTopWidth: 1, borderTopColor: '#E5E5EA', paddingTop: 15 }]}>
+                        <Text style={styles.infoLabel}>Description</Text>
+                        <Text style={[styles.infoValue, { flex: 1, textAlign: 'right' }]}>{selectedItem.title}</Text>
+                      </View>
+                    )}
                   </View>
                 </ScrollView>
                 <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={styles.actionButtonSecondary}
+                    onPress={() => setDetailModalVisible(false)}
+                  >
+                    <Text style={styles.actionButtonSecondaryText}>
+                      {activeTab === 'quotes' ? 'Fermer le devis' : 'Fermer la facture'}
+                    </Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity style={styles.actionButtonPDF} onPress={handleDownloadPDF}>
                     <FileTextIcon size={16} color="#FFFFFF" />
-                    <Text style={styles.actionButtonPrimaryText}>Télécharger PDF</Text>
+                    <Text style={styles.actionButtonPrimaryText}>PDF</Text>
                   </TouchableOpacity>
                   {activeTab === 'quotes' ? (
                     <>
@@ -733,7 +803,7 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
                         <MailIcon size={16} color="#FFFFFF" />
                         <Text style={styles.actionButtonPrimaryText}>Envoyer</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.actionButtonPrimary} onPress={() => { setPaymentModalVisible(true); setPaymentAmount((selectedItem.total_ttc || 0).toString()); }}>
+                      <TouchableOpacity style={styles.actionButtonPrimary} onPress={() => { setPaymentModalVisible(true); setPaymentAmount((selectedItem.total_amount || selectedItem.total_ttc || 0).toString()); }}>
                         <DollarIcon size={16} color="#FFFFFF" />
                         <Text style={styles.actionButtonPrimaryText}>Payer</Text>
                       </TouchableOpacity>
@@ -744,7 +814,7 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
                         <MailIcon size={16} color="#007AFF" />
                         <Text style={styles.actionButtonSecondaryText}>Relancer</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.actionButtonPrimary} onPress={() => { setPaymentModalVisible(true); setPaymentAmount((selectedItem.total_ttc || 0).toString()); }}>
+                      <TouchableOpacity style={styles.actionButtonPrimary} onPress={() => { setPaymentModalVisible(true); setPaymentAmount((selectedItem.total_ttc || selectedItem.total_amount || 0).toString()); }}>
                         <DollarIcon size={16} color="#FFFFFF" />
                         <Text style={styles.actionButtonPrimaryText}>Payer</Text>
                       </TouchableOpacity>

@@ -104,6 +104,7 @@ app.use('/api/pipeline', pipelineRouter);
 app.use('/api/campaigns', campaignsRouter);
 app.use('/api/invoices', invoicesRouter);
 app.use('/api/payments', paymentsRouter);
+app.use('/pay', paymentsRouter); // Payment pages for quotes (Stripe, Apple Pay)
 app.use('/api/deals', dealsRouter);
 app.use('/api/leads', leadsRouter);
 app.use('/api/activities', activitiesRouter);

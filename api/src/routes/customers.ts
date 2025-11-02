@@ -221,4 +221,47 @@ router.delete('/:id',
   }
 });
 
+// Get customer history (quotes, invoices, payments)
+router.get('/:id/history', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Get quotes
+    const quotesResult = await pool.query(`
+      SELECT q.id, q.quote_number, q.total_amount, q.status, q.created_at
+      FROM quotes q
+      WHERE q.customer_id = $1
+      ORDER BY q.created_at DESC
+      LIMIT 50
+    `, [id]);
+
+    // Get invoices
+    const invoicesResult = await pool.query(`
+      SELECT i.id, i.invoice_number, i.total_amount, i.status, i.created_at, i.due_date
+      FROM invoices i
+      WHERE i.customer_id = $1
+      ORDER BY i.created_at DESC
+      LIMIT 50
+    `, [id]);
+
+    // Get payments
+    const paymentsResult = await pool.query(`
+      SELECT p.id, p.amount, p.payment_date, p.payment_method, p.transaction_id, i.invoice_number
+      FROM payments p
+      LEFT JOIN invoices i ON p.invoice_id = i.id
+      WHERE i.customer_id = $1
+      ORDER BY p.payment_date DESC
+      LIMIT 50
+    `, [id]);
+
+    res.json({
+      quotes: quotesResult.rows,
+      invoices: invoicesResult.rows,
+      payments: paymentsResult.rows,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, View, TouchableOpacity } from 'react-native';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import LogMonitor from './src/components/LogMonitor';
+import GlobalSearch from './src/components/GlobalSearch';
 
 // Auth Screens
 import LoginScreen from './src/screens/LoginScreen';
@@ -30,11 +31,21 @@ import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 
 import { RootStackParamList } from './src/navigation/types';
+import { SearchIcon } from './src/components/Icons';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+// Icône de recherche simple
+const SearchIconSimple = ({ size = 22, color = '#007AFF' }) => (
+  <View style={{ width: size, height: size }}>
+    <SearchIcon size={size} color={color} />
+  </View>
+);
+
 function Navigation() {
   const { isAuthenticated, isLoading } = useAuth();
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [navigationRef, setNavigationRef] = useState<any>(null);
 
   if (isLoading) {
     return (
@@ -45,7 +56,7 @@ function Navigation() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={setNavigationRef}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: {
@@ -56,6 +67,14 @@ function Navigation() {
             fontWeight: '600',
             fontSize: 17,
           },
+          headerRight: () => isAuthenticated ? (
+            <TouchableOpacity
+              onPress={() => setSearchVisible(true)}
+              style={{ marginRight: 8, padding: 4 }}
+            >
+              <SearchIconSimple size={22} color="#007AFF" />
+            </TouchableOpacity>
+          ) : null,
         }}
       >
         {!isAuthenticated ? (
@@ -230,6 +249,13 @@ function Navigation() {
         )}
       </Stack.Navigator>
       <StatusBar style="dark" />
+      {isAuthenticated && navigationRef && (
+        <GlobalSearch
+          visible={searchVisible}
+          onClose={() => setSearchVisible(false)}
+          navigation={navigationRef}
+        />
+      )}
     </NavigationContainer>
   );
 }

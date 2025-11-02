@@ -11,16 +11,41 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     SELECT
       q.*,
       c.name as customer_name,
+      c.email as customer_email,
+      c.address as customer_address,
+      c.phone as customer_phone,
+      c.company as company,
+      c.logo_url as customer_logo_url,
       t.id as template_id,
       t.name as template_name,
       t.logo_url as template_logo_url,
       t.primary_color as template_primary_color,
+      t.secondary_color as template_secondary_color,
+      t.template_layout as template_layout,
       t.company_name as template_company_name,
       t.company_address as template_company_address,
       t.company_phone as template_company_phone,
       t.company_email as template_company_email,
       t.company_siret as template_company_siret,
-      t.company_tva as template_company_tva
+      t.company_tva as template_company_tva,
+      t.show_logo as template_show_logo,
+      t.show_footer as template_show_footer,
+      t.show_legal_mentions as template_show_legal_mentions,
+      t.invoice_number_prefix as template_invoice_number_prefix,
+      t.header_background_color as template_header_background_color,
+      t.table_header_color as template_table_header_color,
+      t.border_color as template_border_color,
+      t.footer_text as template_footer_text,
+      t.font_family as template_font_family,
+      t.client_label as template_client_label,
+      t.subtotal_label as template_subtotal_label,
+      t.vat_label as template_vat_label,
+      t.total_label as template_total_label,
+      t.total_color as template_total_color,
+      t.table_header_description as template_table_header_description,
+      t.table_header_quantity as template_table_header_quantity,
+      t.table_header_unit_price as template_table_header_unit_price,
+      t.table_header_total as template_table_header_total
     FROM quotes q
     LEFT JOIN customers c ON q.customer_id = c.id
     LEFT JOIN invoice_templates t ON q.template_id = t.id
@@ -29,7 +54,22 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 
   try {
     const result = await db.query(query, []);
-    res.json(result.rows);
+
+    // Récupérer les items pour chaque devis
+    const quotesWithItems = await Promise.all(
+      result.rows.map(async (quote) => {
+        const itemsResult = await db.query(
+          `SELECT qi.*, p.name as product_name
+           FROM quote_items qi
+           LEFT JOIN products p ON qi.product_id = p.id
+           WHERE qi.quote_id = $1`,
+          [quote.id]
+        );
+        return { ...quote, items: itemsResult.rows };
+      })
+    );
+
+    res.json(quotesWithItems);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -46,6 +86,8 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
         c.name as customer_name,
         c.email as customer_email,
         c.company as customer_company,
+        c.company as company,
+        c.logo_url as customer_logo_url,
         t.id as template_id,
         t.name as template_name,
         t.logo_url as template_logo_url,

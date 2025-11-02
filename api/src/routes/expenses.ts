@@ -3,8 +3,42 @@ import { pool as db } from '../database/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { requireOrganization } from '../middleware/multiTenancy';
 import { getOrgIdFromRequest } from '../utils/multiTenancyHelper';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 const router = express.Router();
+
+// Configuration de multer pour l'upload de fichiers
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads/receipts');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, 'receipt-' + uniqueSuffix + path.extname(file.originalname));
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|pdf/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only images (JPEG, PNG) and PDF files are allowed'));
+    }
+  },
+});
 
 const parsePagination = (query: any) => {
   const page = Math.max(1, parseInt(query.page as string, 10) || 1);
@@ -432,15 +466,15 @@ router.get(
 
       const summary = await db.query(
         `SELECT
-            COUNT(*) FILTER (WHERE deleted_at IS NULL) AS total_expenses,
-            COALESCE(SUM(amount), 0) FILTER (WHERE deleted_at IS NULL) AS total_amount,
-            COALESCE(SUM(amount - tax_amount), 0) FILTER (WHERE deleted_at IS NULL) AS total_ht,
-            COUNT(*) FILTER (WHERE status = 'submitted' AND deleted_at IS NULL) AS pending_approval,
-            COUNT(*) FILTER (WHERE payment_status = 'unpaid' AND deleted_at IS NULL) AS unpaid,
-            COUNT(*) FILTER (WHERE payment_status = 'paid' AND deleted_at IS NULL) AS paid,
-            COALESCE(SUM(amount), 0) FILTER (WHERE payment_status = 'paid' AND deleted_at IS NULL) AS paid_amount
+            COUNT(*) AS total_expenses,
+            COALESCE(SUM(amount), 0) AS total_amount,
+            COALESCE(SUM(amount - tax_amount), 0) AS total_ht,
+            COUNT(CASE WHEN status = 'submitted' THEN 1 END) AS pending_approval,
+            COUNT(CASE WHEN payment_status = 'unpaid' THEN 1 END) AS unpaid,
+            COUNT(CASE WHEN payment_status = 'paid' THEN 1 END) AS paid,
+            COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN amount ELSE 0 END), 0) AS paid_amount
          FROM expenses
-         WHERE organization_id = $1`,
+         WHERE organization_id = $1 AND deleted_at IS NULL`,
         [orgId]
       );
 
@@ -448,6 +482,35 @@ router.get(
     } catch (error: any) {
       console.error('Error fetching expense summary:', error);
       res.status(500).json({ error: 'Failed to fetch expense summary' });
+    }
+  }
+);
+
+// Upload receipt image
+router.post(
+  '/upload-receipt',
+  authenticateToken,
+  requireOrganization,
+  upload.single('receipt'),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ error: 'No file uploaded' });
+        return;
+      }
+
+      const fileUrl = `/uploads/receipts/${req.file.filename}`;
+
+      res.json({
+        success: true,
+        fileUrl,
+        filename: req.file.filename,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+      });
+    } catch (error: any) {
+      console.error('Error uploading receipt:', error);
+      res.status(500).json({ error: 'Failed to upload receipt' });
     }
   }
 );

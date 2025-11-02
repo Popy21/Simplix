@@ -17,6 +17,7 @@ import { expenseService, supplierService } from '../services/api';
 import { Expense, Supplier } from '../types';
 import { DollarIcon, FileTextIcon, CalendarIcon } from '../components/Icons';
 import Navigation from '../components/Navigation';
+import ReceiptScanner from '../components/ReceiptScanner';
 
 type ExpenseFilters = {
   status?: string;
@@ -118,6 +119,17 @@ const ExpensesScreen = () => {
     loadExpenses();
     loadSummary();
   };
+
+  const handleScanData = useCallback((extractedData: any) => {
+    setForm((prev) => ({
+      ...prev,
+      ...(extractedData.amount && { amount: extractedData.amount }),
+      ...(extractedData.tax_amount && { tax_amount: extractedData.tax_amount }),
+      ...(extractedData.date && { expense_date: extractedData.date }),
+      ...(extractedData.description && { description: extractedData.description }),
+      ...(extractedData.reference && { reference: extractedData.reference }),
+    }));
+  }, []);
 
   const handleCreateExpense = async () => {
     if (!form.amount || Number(form.amount) <= 0) {
@@ -308,6 +320,8 @@ const ExpensesScreen = () => {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Nouvelle dépense</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
+              <ReceiptScanner onDataExtracted={handleScanData} />
+
               <Text style={styles.modalLabel}>Fournisseur</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.modalChipRow}>
                 {suppliers.map((supplier) => (

@@ -15,9 +15,13 @@ router.get('/', async (req: Request, res: Response) => {
   const searchTerm = `%${q}%`;
   const results: any = {
     customers: [],
+    contacts: [],
+    companies: [],
     products: [],
     sales: [],
     quotes: [],
+    invoices: [],
+    tasks: [],
     users: [],
   };
 
@@ -28,6 +32,24 @@ router.get('/', async (req: Request, res: Response) => {
       [searchTerm]
     );
     results.customers = customersResult.rows;
+
+    // Search contacts
+    const contactsResult = await db.query(
+      `SELECT c.*, comp.name as company_name
+       FROM contacts c
+       LEFT JOIN companies comp ON c.company_id = comp.id
+       WHERE c.first_name LIKE $1 OR c.last_name LIKE $1 OR c.email LIKE $1 OR c.phone LIKE $1
+       LIMIT 10`,
+      [searchTerm]
+    );
+    results.contacts = contactsResult.rows;
+
+    // Search companies
+    const companiesResult = await db.query(
+      `SELECT * FROM companies WHERE name LIKE $1 OR industry LIKE $1 LIMIT 10`,
+      [searchTerm]
+    );
+    results.companies = companiesResult.rows;
 
     // Search products
     const productsResult = await db.query(
@@ -40,10 +62,28 @@ router.get('/', async (req: Request, res: Response) => {
     const quotesResult = await db.query(
       `SELECT q.*, c.name as customer_name FROM quotes q
        LEFT JOIN customers c ON q.customer_id = c.id
-       WHERE q.title LIKE $1 OR q.description LIKE $1 LIMIT 10`,
+       WHERE q.title LIKE $1 OR q.description LIKE $1 OR q.quote_number LIKE $1 LIMIT 10`,
       [searchTerm]
     );
     results.quotes = quotesResult.rows;
+
+    // Search invoices
+    const invoicesResult = await db.query(
+      `SELECT i.*, c.name as customer_name FROM invoices i
+       LEFT JOIN customers c ON i.customer_id = c.id
+       WHERE i.invoice_number LIKE $1 OR i.title LIKE $1 LIMIT 10`,
+      [searchTerm]
+    );
+    results.invoices = invoicesResult.rows;
+
+    // Search tasks
+    const tasksResult = await db.query(
+      `SELECT t.*, c.name as contact_name FROM tasks t
+       LEFT JOIN contacts c ON t.contact_id = c.id
+       WHERE t.title LIKE $1 OR t.description LIKE $1 LIMIT 10`,
+      [searchTerm]
+    );
+    results.tasks = tasksResult.rows;
 
     // Search users
     const usersResult = await db.query(
