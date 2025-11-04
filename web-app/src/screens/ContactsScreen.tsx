@@ -15,7 +15,7 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { contactService, companyService, activitiesService } from '../services/api';
+import { contactService, companyService, activitiesService, customerService } from '../services/api';
 import {
   UsersIcon,
   BuildingIcon,

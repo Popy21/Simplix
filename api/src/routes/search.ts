@@ -78,7 +78,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Search tasks
     const tasksResult = await db.query(
-      `SELECT t.*, c.name as contact_name FROM tasks t
+      `SELECT t.*, c.full_name as contact_name FROM tasks t
        LEFT JOIN contacts c ON t.contact_id = c.id
        WHERE t.title LIKE $1 OR t.description LIKE $1 LIMIT 10`,
       [searchTerm]
@@ -87,7 +87,9 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Search users
     const usersResult = await db.query(
-      `SELECT id, name, email, role FROM users WHERE name LIKE $1 OR email LIKE $1 LIMIT 10`,
+      `SELECT id, first_name || ' ' || last_name as name, email
+       FROM users
+       WHERE first_name LIKE $1 OR last_name LIKE $1 OR email LIKE $1 LIMIT 10`,
       [searchTerm]
     );
     results.users = usersResult.rows;

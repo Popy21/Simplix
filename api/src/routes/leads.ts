@@ -68,6 +68,113 @@ function calculateLeadScore(leadData: any): number {
 }
 
 /**
+ * GET /api/leads
+ * Récupérer tous les leads avec pagination et filtres
+ */
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = '00000000-0000-0000-0000-000000000001';
+    const { status, source, min_score, max_score, page = 1, limit = 50 } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page as string));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string)));
+    const offset = (pageNum - 1) * limitNum;
+
+    let filters = ['c.organization_id = $1', 'c.deleted_at IS NULL'];
+    const params: any[] = [orgId];
+    let paramCount = 2;
+
+    if (status) {
+      filters.push(`c.type = $${paramCount}`);
+      params.push(status);
+      paramCount++;
+    }
+
+    if (source) {
+      filters.push(`c.source = $${paramCount}`);
+      params.push(source);
+      paramCount++;
+    }
+
+    if (min_score) {
+      filters.push(`c.score >= $${paramCount}`);
+      params.push(parseInt(min_score as string));
+      paramCount++;
+    }
+
+    if (max_score) {
+      filters.push(`c.score <= $${paramCount}`);
+      params.push(parseInt(max_score as string));
+      paramCount++;
+    }
+
+    const result = await db.query(
+      `SELECT
+        c.*,
+        co.name as company_name,
+        u.first_name || ' ' || u.last_name as owner_name,
+        (SELECT COUNT(*) FROM activities WHERE contact_id = c.id AND organization_id = $1) as activity_count,
+        (SELECT COUNT(*) FROM deals WHERE contact_id = c.id AND organization_id = $1) as deal_count,
+        (SELECT MAX(created_at) FROM activities WHERE contact_id = c.id AND organization_id = $1) as last_activity
+      FROM contacts c
+      LEFT JOIN companies co ON c.company_id = co.id
+      LEFT JOIN users u ON c.owner_id = u.id
+      WHERE ${filters.join(' AND ')}
+      ORDER BY c.score DESC, c.created_at DESC
+      LIMIT $${paramCount} OFFSET $${paramCount + 1}`,
+      [...params, limitNum, offset]
+    );
+
+    // Count total
+    const countResult = await db.query(
+      `SELECT COUNT(*) as total FROM contacts c WHERE ${filters.join(' AND ')}`,
+      params
+    );
+
+    res.json({
+      data: result.rows,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: parseInt(countResult.rows[0].total),
+        pages: Math.ceil(parseInt(countResult.rows[0].total) / limitNum)
+      }
+    });
+  } catch (err: any) {
+    console.error('Error fetching leads:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/leads/stats/by-source
+ * Statistiques par source
+ */
+router.get('/stats/by-source', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = '00000000-0000-0000-0000-000000000001';
+
+    const result = await db.query(
+      `SELECT
+        source,
+        COUNT(*) as count,
+        AVG(score) as avg_score,
+        COUNT(*) FILTER (WHERE score >= 70) as hot_count
+      FROM contacts
+      WHERE organization_id = $1 AND deleted_at IS NULL
+      GROUP BY source
+      ORDER BY count DESC`,
+      [orgId]
+    );
+
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('Error fetching stats by source:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/leads/score
  * Recalculer les scores de tous les leads
  */
@@ -118,7 +225,7 @@ router.post('/score', authenticateToken, async (req: AuthRequest, res: Response)
 
     // Log the scoring action
     await db.query(
-      `INSERT INTO audit_logs (organization_id, user_id, action, entity_type, entity_id, changes)
+      `INSERT INTO audit_logs (organization_id, user_id, action, entity_type, entity_id, new_values)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [orgId, userId, 'SCORE_RECALCULATE', 'contacts', null, JSON.stringify({ updated_count: updatedCount })]
     );

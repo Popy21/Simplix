@@ -210,6 +210,80 @@ router.put('/:id', authenticateToken, requireOrganization, async (req: AuthReque
   }
 });
 
+// Get deleted contacts
+router.get('/deleted/list', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+    const { page = '1', limit = '50' } = req.query;
+    const pageNum = Math.max(1, parseInt(page as string) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 50));
+    const offset = (pageNum - 1) * limitNum;
+
+    const query = `
+      SELECT
+        c.id,
+        c.first_name,
+        c.last_name,
+        c.full_name,
+        c.email,
+        c.phone,
+        c.company_id,
+        co.name as company_name,
+        c.deleted_at,
+        c.created_at
+      FROM contacts c
+      LEFT JOIN companies co ON c.company_id = co.id
+      WHERE c.organization_id = $1 AND c.deleted_at IS NOT NULL
+      ORDER BY c.deleted_at DESC
+      LIMIT $2 OFFSET $3
+    `;
+
+    const result = await pool.query(query, [orgId, limitNum, offset]);
+
+    const countResult = await pool.query(
+      'SELECT COUNT(*) as total FROM contacts WHERE organization_id = $1 AND deleted_at IS NOT NULL',
+      [orgId]
+    );
+
+    res.json({
+      data: result.rows,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: parseInt(countResult.rows[0].total),
+        pages: Math.ceil(parseInt(countResult.rows[0].total) / limitNum)
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Restore deleted contact
+router.patch('/:id/restore', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const orgId = getOrgIdFromRequest(req);
+
+    const result = await pool.query(
+      `UPDATE contacts
+       SET deleted_at = NULL
+       WHERE id = $1 AND organization_id = $2 AND deleted_at IS NOT NULL
+       RETURNING id`,
+      [id, orgId]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Deleted contact not found' });
+      return;
+    }
+
+    res.json({ message: 'Contact restored successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Delete contact (soft delete)
 router.delete('/:id', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {

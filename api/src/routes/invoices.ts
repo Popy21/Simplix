@@ -79,6 +79,33 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 });
 
 /**
+ * GET /api/invoices/overdue
+ * Récupérer toutes les factures en retard
+ */
+router.get('/overdue', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const query = `
+      SELECT
+        i.*,
+        c.name as customer_name,
+        c.email as customer_email,
+        c.company as customer_company
+      FROM invoices i
+      LEFT JOIN customers c ON i.customer_id = c.id
+      WHERE i.due_date < NOW()
+      AND i.status NOT IN ('paid', 'cancelled')
+      ORDER BY i.due_date ASC
+    `;
+
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (error: any) {
+    console.error('Erreur lors de la récupération des factures en retard:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/invoices/stats
  * Statistiques des factures
  */

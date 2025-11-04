@@ -725,15 +725,12 @@ router.get('/', authenticateToken, requireOrganization, async (req: AuthRequest,
         p.*,
         i.invoice_number,
         i.total_amount as invoice_total,
-        c.first_name || ' ' || COALESCE(c.last_name, '') as customer_name,
-        co.name as customer_company,
-        u.first_name || ' ' || COALESCE(u.last_name, '') as created_by_name
+        cust.name as customer_name,
+        cust.company as customer_company
       FROM payments p
       JOIN invoices i ON p.invoice_id = i.id
-      LEFT JOIN contacts c ON i.customer_id = c.id
-      LEFT JOIN companies co ON c.company_id = co.id
-      LEFT JOIN users u ON p.created_by = u.id
-      WHERE i.organization_id = $1
+      LEFT JOIN customers cust ON i.customer_id = cust.id
+      WHERE cust.organization_id = $1
     `;
 
     const params: any[] = [orgId];

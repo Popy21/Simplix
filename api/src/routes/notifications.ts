@@ -158,6 +158,20 @@ router.get('/user/:userId', async (req: Request, res: Response) => {
   }
 });
 
+// Get unread notifications
+router.get('/unread', async (req: Request, res: Response) => {
+  try {
+    const result = await db.query(`
+      SELECT * FROM notifications
+      WHERE read = false
+      ORDER BY created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get notification by ID
 router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;

@@ -36,6 +36,54 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// Get today's tasks
+router.get('/today', async (req: Request, res: Response) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const result = await db.query(
+      `SELECT t.*,
+              u.first_name || ' ' || u.last_name as assigned_to_name
+       FROM tasks t
+       LEFT JOIN users u ON t.assigned_to = u.id
+       WHERE t.deleted_at IS NULL
+       AND t.due_date >= $1
+       AND t.due_date < $2
+       ORDER BY t.due_date ASC, t.priority DESC`,
+      [today, tomorrow]
+    );
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get overdue tasks
+router.get('/overdue', async (req: Request, res: Response) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const result = await db.query(
+      `SELECT t.*,
+              u.first_name || ' ' || u.last_name as assigned_to_name
+       FROM tasks t
+       LEFT JOIN users u ON t.assigned_to = u.id
+       WHERE t.deleted_at IS NULL
+       AND t.due_date < $1
+       AND t.status NOT IN ('done', 'completed')
+       ORDER BY t.due_date ASC`,
+      [today]
+    );
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get task by ID
 router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;

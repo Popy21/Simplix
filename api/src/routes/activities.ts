@@ -78,6 +78,75 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 });
 
 /**
+ * GET /api/activities/upcoming
+ * Récupérer les activités à venir (schedulées dans le futur)
+ */
+router.get('/upcoming', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = '00000000-0000-0000-0000-000000000001';
+    const { limit = 50 } = req.query;
+
+    const result = await db.query(
+      `SELECT
+        a.*,
+        c.first_name || ' ' || c.last_name as contact_name,
+        d.title as deal_title,
+        u.first_name || ' ' || u.last_name as created_by_name
+      FROM activities a
+      LEFT JOIN contacts c ON a.contact_id = c.id
+      LEFT JOIN deals d ON a.deal_id = d.id
+      LEFT JOIN users u ON a.created_by = u.id
+      WHERE a.organization_id = $1
+        AND a.scheduled_at IS NOT NULL
+        AND a.scheduled_at > NOW()
+        AND a.completed_at IS NULL
+      ORDER BY a.scheduled_at ASC
+      LIMIT $2`,
+      [orgId, parseInt(limit as string)]
+    );
+
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('Error fetching upcoming activities:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/activities/overdue
+ * Récupérer les activités en retard (scheduled_at dans le passé mais pas complétées)
+ */
+router.get('/overdue', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = '00000000-0000-0000-0000-000000000001';
+
+    const result = await db.query(
+      `SELECT
+        a.*,
+        c.first_name || ' ' || c.last_name as contact_name,
+        d.title as deal_title,
+        u.first_name || ' ' || u.last_name as created_by_name,
+        EXTRACT(DAY FROM (NOW() - a.scheduled_at)) as days_overdue
+      FROM activities a
+      LEFT JOIN contacts c ON a.contact_id = c.id
+      LEFT JOIN deals d ON a.deal_id = d.id
+      LEFT JOIN users u ON a.created_by = u.id
+      WHERE a.organization_id = $1
+        AND a.scheduled_at IS NOT NULL
+        AND a.scheduled_at < NOW()
+        AND a.completed_at IS NULL
+      ORDER BY a.scheduled_at ASC`,
+      [orgId]
+    );
+
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('Error fetching overdue activities:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/activities/:id
  * Récupérer une activité spécifique
  */

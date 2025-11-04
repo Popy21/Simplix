@@ -46,6 +46,88 @@ const parsePagination = (query: any) => {
   return { page, limit, offset: (page - 1) * limit };
 };
 
+// Expenses by category
+router.get(
+  '/by-category',
+  authenticateToken,
+  requireOrganization,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const orgId = getOrgIdFromRequest(req);
+      const { from, to } = req.query;
+
+      let dateFilter = '';
+      const params: any[] = [orgId];
+      let paramCount = 2;
+
+      if (from) {
+        dateFilter += ` AND e.expense_date >= $${paramCount}`;
+        params.push(from);
+        paramCount++;
+      }
+
+      if (to) {
+        dateFilter += ` AND e.expense_date <= $${paramCount}`;
+        params.push(to);
+        paramCount++;
+      }
+
+      const result = await db.query(
+        `SELECT
+          ec.id as category_id,
+          ec.name as category_name,
+          COUNT(e.id) as expense_count,
+          COALESCE(SUM(e.amount), 0) as total_amount
+         FROM expense_categories ec
+         LEFT JOIN expenses e ON e.category_id = ec.id
+           AND e.organization_id = $1
+           AND e.deleted_at IS NULL
+           ${dateFilter}
+         WHERE ec.organization_id = $1
+         GROUP BY ec.id, ec.name
+         ORDER BY total_amount DESC`,
+        params
+      );
+
+      res.json(result.rows);
+    } catch (error: any) {
+      console.error('Error fetching expenses by category:', error);
+      res.status(500).json({ error: 'Failed to fetch expenses by category' });
+    }
+  }
+);
+
+// Expense summary
+router.get(
+  '/stats/summary',
+  authenticateToken,
+  requireOrganization,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const orgId = getOrgIdFromRequest(req);
+
+      const summary = await db.query(
+        `SELECT
+            COUNT(*) AS total_expenses,
+            COALESCE(SUM(amount), 0) AS total_amount,
+            COALESCE(SUM(amount - tax_amount), 0) AS total_ht,
+            COUNT(CASE WHEN status = 'submitted' THEN 1 END) AS pending_approval,
+            COUNT(CASE WHEN payment_status = 'unpaid' THEN 1 END) AS unpaid,
+            COUNT(CASE WHEN payment_status = 'paid' THEN 1 END) AS paid,
+            COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN amount ELSE 0 END), 0) AS paid_amount
+         FROM expenses
+         WHERE organization_id = $1 AND deleted_at IS NULL`,
+        [orgId]
+      );
+
+      res.json(summary.rows[0]);
+    } catch (error: any) {
+      console.error('Error fetching expense summary:', error);
+      res.status(500).json({ error: 'Failed to fetch expense summary' });
+    }
+  }
+);
+
 // List expenses with filters
 router.get(
   '/',
@@ -451,37 +533,6 @@ router.delete(
     } catch (error: any) {
       console.error('Error deleting expense:', error);
       res.status(500).json({ error: 'Failed to delete expense' });
-    }
-  }
-);
-
-// Expense summary
-router.get(
-  '/stats/summary',
-  authenticateToken,
-  requireOrganization,
-  async (req: AuthRequest, res: Response) => {
-    try {
-      const orgId = getOrgIdFromRequest(req);
-
-      const summary = await db.query(
-        `SELECT
-            COUNT(*) AS total_expenses,
-            COALESCE(SUM(amount), 0) AS total_amount,
-            COALESCE(SUM(amount - tax_amount), 0) AS total_ht,
-            COUNT(CASE WHEN status = 'submitted' THEN 1 END) AS pending_approval,
-            COUNT(CASE WHEN payment_status = 'unpaid' THEN 1 END) AS unpaid,
-            COUNT(CASE WHEN payment_status = 'paid' THEN 1 END) AS paid,
-            COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN amount ELSE 0 END), 0) AS paid_amount
-         FROM expenses
-         WHERE organization_id = $1 AND deleted_at IS NULL`,
-        [orgId]
-      );
-
-      res.json(summary.rows[0]);
-    } catch (error: any) {
-      console.error('Error fetching expense summary:', error);
-      res.status(500).json({ error: 'Failed to fetch expense summary' });
     }
   }
 );

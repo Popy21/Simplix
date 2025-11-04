@@ -29,6 +29,253 @@ const getDateRange = (period: string) => {
   return { startDate, endDate: now };
 };
 
+// GET /api/dashboard - Main dashboard endpoint with all stats
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const period = (req.query.period as string) || 'month';
+    const { startDate, endDate } = getDateRange(period);
+
+    // Quick stats
+    const quickStats = await db.query(`
+      SELECT
+        (SELECT COUNT(*) FROM invoices WHERE invoice_date >= $1 AND invoice_date <= $2) as total_invoices,
+        (SELECT COUNT(*) FROM quotes WHERE created_at >= $1 AND created_at <= $2) as total_quotes,
+        (SELECT COUNT(DISTINCT customer_id) FROM invoices WHERE invoice_date >= $1 AND invoice_date <= $2) as active_customers,
+        (SELECT COALESCE(SUM(total_amount), 0) FROM invoices WHERE invoice_date >= $1 AND invoice_date <= $2 AND status = 'paid') as total_revenue,
+        (SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE expense_date >= $1 AND expense_date <= $2) as total_expenses
+    `, [startDate, endDate]);
+
+    const stats = quickStats.rows[0];
+    const profit = parseFloat(stats.total_revenue) - parseFloat(stats.total_expenses);
+
+    // Recent activity (last 10 items)
+    const recentActivity = await db.query(`
+      (SELECT 'invoice' as type, id, created_at, invoice_number as reference FROM invoices ORDER BY created_at DESC LIMIT 5)
+      UNION ALL
+      (SELECT 'quote' as type, id, created_at, quote_number as reference FROM quotes ORDER BY created_at DESC LIMIT 5)
+      ORDER BY created_at DESC
+      LIMIT 10
+    `);
+
+    // Pending quotes count
+    const pendingQuotes = await db.query(`
+      SELECT COUNT(*) as count FROM quotes
+      WHERE status IN ('draft', 'sent') AND created_at >= $1 AND created_at <= $2
+    `, [startDate, endDate]);
+
+    // Overdue invoices
+    const overdueInvoices = await db.query(`
+      SELECT COUNT(*) as count FROM invoices
+      WHERE status NOT IN ('paid', 'cancelled') AND due_date < CURRENT_DATE
+    `);
+
+    res.json({
+      period,
+      dateRange: { startDate, endDate },
+      quickStats: {
+        totalInvoices: parseInt(stats.total_invoices),
+        totalQuotes: parseInt(stats.total_quotes),
+        activeCustomers: parseInt(stats.active_customers),
+        totalRevenue: parseFloat(stats.total_revenue),
+        totalExpenses: parseFloat(stats.total_expenses),
+        profit,
+      },
+      pendingQuotes: parseInt(pendingQuotes.rows[0].count),
+      overdueInvoices: parseInt(overdueInvoices.rows[0].count),
+      recentActivity: recentActivity.rows,
+    });
+  } catch (error: any) {
+    console.error('Error fetching dashboard:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/dashboard/sales-by-period
+router.get('/sales-by-period', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const period = (req.query.period as string) || 'month';
+
+    let dateFormat = 'YYYY-MM-DD';
+    let dateInterval = '1 day';
+
+    if (period === 'year') {
+      dateFormat = 'YYYY-MM';
+      dateInterval = '1 month';
+    } else if (period === 'quarter') {
+      dateFormat = 'YYYY-WW';
+      dateInterval = '1 week';
+    }
+
+    const { startDate, endDate } = getDateRange(period);
+
+    const sales = await db.query(`
+      SELECT
+        TO_CHAR(invoice_date, $3) as period,
+        COUNT(*) as count,
+        COALESCE(SUM(total_amount), 0) as total
+      FROM invoices
+      WHERE invoice_date >= $1 AND invoice_date <= $2 AND status = 'paid'
+      GROUP BY TO_CHAR(invoice_date, $3)
+      ORDER BY period ASC
+    `, [startDate, endDate, dateFormat]);
+
+    res.json({
+      period,
+      data: sales.rows.map(row => ({
+        period: row.period,
+        count: parseInt(row.count),
+        total: parseFloat(row.total),
+      })),
+    });
+  } catch (error: any) {
+    console.error('Error fetching sales by period:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/dashboard/top-customers
+router.get('/top-customers', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 5;
+    const { startDate, endDate } = getDateRange((req.query.period as string) || 'month');
+
+    const topCustomers = await db.query(`
+      SELECT
+        c.id,
+        c.name,
+        c.email,
+        c.company,
+        COUNT(i.id) as invoice_count,
+        COALESCE(SUM(i.total_amount), 0) as total_spent
+      FROM customers c
+      JOIN invoices i ON i.customer_id = c.id
+      WHERE i.invoice_date >= $1 AND i.invoice_date <= $2 AND i.status = 'paid'
+      GROUP BY c.id, c.name, c.email, c.company
+      ORDER BY total_spent DESC
+      LIMIT $3
+    `, [startDate, endDate, limit]);
+
+    res.json(topCustomers.rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      company: row.company,
+      invoiceCount: parseInt(row.invoice_count),
+      totalSpent: parseFloat(row.total_spent),
+    })));
+  } catch (error: any) {
+    console.error('Error fetching top customers:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/dashboard/top-products
+router.get('/top-products', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 5;
+    const { startDate, endDate } = getDateRange((req.query.period as string) || 'month');
+
+    const topProducts = await db.query(`
+      SELECT
+        p.id,
+        p.name,
+        p.price,
+        COUNT(ii.id) as times_sold,
+        COALESCE(SUM(ii.quantity), 0) as total_quantity,
+        COALESCE(SUM(ii.total_price), 0) as total_revenue
+      FROM products p
+      JOIN invoice_items ii ON ii.product_id = p.id
+      JOIN invoices i ON i.id = ii.invoice_id
+      WHERE i.invoice_date >= $1 AND i.invoice_date <= $2 AND i.status = 'paid'
+      GROUP BY p.id, p.name, p.price
+      ORDER BY total_revenue DESC
+      LIMIT $3
+    `, [startDate, endDate, limit]);
+
+    res.json(topProducts.rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      unitPrice: parseFloat(row.price),
+      timesSold: parseInt(row.times_sold),
+      totalQuantity: parseInt(row.total_quantity),
+      totalRevenue: parseFloat(row.total_revenue),
+    })));
+  } catch (error: any) {
+    console.error('Error fetching top products:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/dashboard/recent-activity
+router.get('/recent-activity', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 10;
+
+    const activity = await db.query(`
+      SELECT * FROM (
+        SELECT
+          'invoice' as type,
+          i.id,
+          i.invoice_number as reference,
+          i.total_amount as amount,
+          i.status,
+          i.created_at,
+          c.name as customer_name
+        FROM invoices i
+        LEFT JOIN customers c ON c.id = i.customer_id
+        ORDER BY i.created_at DESC
+        LIMIT $1
+      ) invoices
+      UNION ALL
+      SELECT * FROM (
+        SELECT
+          'quote' as type,
+          q.id,
+          q.quote_number as reference,
+          q.total_amount as amount,
+          q.status,
+          q.created_at,
+          NULL as customer_name
+        FROM quotes q
+        ORDER BY q.created_at DESC
+        LIMIT $1
+      ) quotes
+      ORDER BY created_at DESC
+      LIMIT $1
+    `, [limit]);
+
+    res.json(activity.rows);
+  } catch (error: any) {
+    console.error('Error fetching recent activity:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/dashboard/quick-stats
+router.get('/quick-stats', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const stats = await db.query(`
+      SELECT
+        (SELECT COUNT(*) FROM invoices WHERE status IN ('sent', 'pending')) as pending_invoices,
+        (SELECT COUNT(*) FROM invoices WHERE status NOT IN ('paid', 'cancelled') AND due_date < CURRENT_DATE) as overdue_invoices,
+        (SELECT COUNT(*) FROM quotes WHERE status = 'draft') as draft_quotes,
+        (SELECT COUNT(*) FROM products WHERE stock <= 10) as low_stock_products,
+        (SELECT COALESCE(SUM(total_amount), 0) FROM invoices WHERE status NOT IN ('paid', 'cancelled')) as outstanding_amount
+    `);
+
+    res.json({
+      pendingInvoices: parseInt(stats.rows[0].pending_invoices),
+      overdueInvoices: parseInt(stats.rows[0].overdue_invoices),
+      draftQuotes: parseInt(stats.rows[0].draft_quotes),
+      lowStockProducts: parseInt(stats.rows[0].low_stock_products),
+      outstandingAmount: parseFloat(stats.rows[0].outstanding_amount),
+    });
+  } catch (error: any) {
+    console.error('Error fetching quick stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/dashboard/kpis
 router.get('/kpis', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

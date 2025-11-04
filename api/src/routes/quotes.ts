@@ -75,6 +75,35 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Get quote statistics
+router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const statsQuery = `
+      SELECT
+        COUNT(*) as total_quotes,
+        COUNT(*) FILTER (WHERE status = 'draft') as draft_count,
+        COUNT(*) FILTER (WHERE status = 'sent') as sent_count,
+        COUNT(*) FILTER (WHERE status = 'accepted') as accepted_count,
+        COUNT(*) FILTER (WHERE status = 'rejected') as rejected_count,
+        COALESCE(SUM(total_amount), 0) as total_amount,
+        COALESCE(SUM(total_amount) FILTER (WHERE status = 'accepted'), 0) as accepted_amount,
+        COALESCE(SUM(total_amount) FILTER (WHERE status = 'sent'), 0) as pending_amount,
+        COALESCE(AVG(total_amount), 0) as average_amount,
+        ROUND(
+          (COUNT(*) FILTER (WHERE status = 'accepted')::numeric /
+           NULLIF(COUNT(*) FILTER (WHERE status IN ('accepted', 'rejected')), 0)) * 100,
+          2
+        ) as acceptance_rate
+      FROM quotes
+    `;
+
+    const result = await db.query(statsQuery);
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get quote by ID with items
 router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

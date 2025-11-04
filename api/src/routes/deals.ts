@@ -21,9 +21,9 @@ router.get('/',
     const orgId = getOrgIdFromRequest(req);
 
     let query = `
-      SELECT 
+      SELECT
         d.*,
-        c.name as contact_name,
+        c.full_name as contact_name,
         c.email as contact_email,
         co.name as company_name,
         p.name as pipeline_name,
@@ -83,12 +83,165 @@ router.get('/',
       paramCount++;
     }
 
-    query += ` ORDER BY d.close_date ASC, d.created_at DESC`;
+    query += ` ORDER BY d.expected_close_date ASC, d.created_at DESC`;
 
     const result = await db.query(query, params);
     res.json(result.rows);
   } catch (err: any) {
     console.error('Error fetching deals:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/deals/won
+ * Récupérer tous les deals gagnés
+ */
+router.get('/won',
+  authenticateToken,
+  requireOrganization,
+  async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+    const { limit = 50, offset = 0 } = req.query;
+
+    const result = await db.query(
+      `SELECT
+        d.*,
+        c.full_name as contact_name,
+        co.name as company_name,
+        p.name as pipeline_name,
+        ps.name as stage_name,
+        u.first_name || ' ' || u.last_name as owner_name
+      FROM deals d
+      LEFT JOIN contacts c ON d.contact_id = c.id
+      LEFT JOIN companies co ON d.company_id = co.id
+      LEFT JOIN pipelines p ON d.pipeline_id = p.id
+      LEFT JOIN pipeline_stages ps ON d.stage_id = ps.id
+      LEFT JOIN users u ON d.owner_id = u.id
+      WHERE d.status = 'won' AND d.organization_id = $1 AND d.deleted_at IS NULL
+      ORDER BY d.won_at DESC, d.actual_close_date DESC
+      LIMIT $2 OFFSET $3`,
+      [orgId, parseInt(limit as string), parseInt(offset as string)]
+    );
+
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('Error fetching won deals:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/deals/conversion-rate
+ * Calculer le taux de conversion des deals
+ */
+router.get('/conversion-rate',
+  authenticateToken,
+  requireOrganization,
+  async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+
+    const result = await db.query(
+      `SELECT
+        COUNT(*) as total_deals,
+        COUNT(*) FILTER (WHERE status = 'won') as won_deals,
+        COUNT(*) FILTER (WHERE status = 'lost') as lost_deals,
+        COUNT(*) FILTER (WHERE status IN ('won', 'lost')) as closed_deals,
+        COALESCE(SUM(value), 0) as total_value,
+        COALESCE(SUM(value) FILTER (WHERE status = 'won'), 0) as won_value,
+        COALESCE(SUM(value) FILTER (WHERE status = 'lost'), 0) as lost_value,
+        ROUND(
+          (COUNT(*) FILTER (WHERE status = 'won')::numeric /
+           NULLIF(COUNT(*) FILTER (WHERE status IN ('won', 'lost')), 0)) * 100,
+          2
+        ) as conversion_rate_percent,
+        ROUND(
+          (SUM(value) FILTER (WHERE status = 'won')::numeric /
+           NULLIF(SUM(value) FILTER (WHERE status IN ('won', 'lost')), 0)) * 100,
+          2
+        ) as value_conversion_rate_percent,
+        AVG(EXTRACT(DAY FROM (actual_close_date - created_at::date))) FILTER (WHERE status = 'won') as avg_days_to_win
+      FROM deals
+      WHERE organization_id = $1 AND deleted_at IS NULL`,
+      [orgId]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    console.error('Error calculating conversion rate:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/deals/stats
+ * Alias pour stats/summary (pour compatibilité)
+ */
+router.get('/stats',
+  authenticateToken,
+  requireOrganization,
+  async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+
+    const result = await db.query(
+      `SELECT
+        COUNT(*) as total_deals,
+        COUNT(*) FILTER (WHERE status = 'open') as open_deals,
+        COUNT(*) FILTER (WHERE status = 'won') as won_deals,
+        COUNT(*) FILTER (WHERE status = 'lost') as lost_deals,
+        COALESCE(SUM(value), 0) as total_value,
+        COALESCE(SUM(value) FILTER (WHERE status = 'open'), 0) as open_value,
+        COALESCE(SUM(value) FILTER (WHERE status = 'won'), 0) as won_value,
+        AVG(probability) as avg_probability
+      FROM deals
+      WHERE organization_id = $1 AND deleted_at IS NULL`,
+      [orgId]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    console.error('Error fetching deal stats:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/deals/by-pipeline/:pipelineId
+ * Récupérer tous les deals d'un pipeline spécifique
+ */
+router.get('/by-pipeline/:pipelineId',
+  authenticateToken,
+  requireOrganization,
+  async (req: AuthRequest, res: Response) => {
+  try {
+    const { pipelineId } = req.params;
+    const orgId = getOrgIdFromRequest(req);
+
+    const result = await db.query(
+      `SELECT
+        d.*,
+        c.full_name as contact_name,
+        co.name as company_name,
+        ps.name as stage_name,
+        u.first_name || ' ' || u.last_name as owner_name,
+        COUNT(*) OVER() as total_count,
+        SUM(d.value) OVER() as pipeline_total_value
+      FROM deals d
+      LEFT JOIN contacts c ON d.contact_id = c.id
+      LEFT JOIN companies co ON d.company_id = co.id
+      LEFT JOIN pipeline_stages ps ON d.stage_id = ps.id
+      LEFT JOIN users u ON d.owner_id = u.id
+      WHERE d.pipeline_id = $1 AND d.organization_id = $2 AND d.deleted_at IS NULL
+      ORDER BY ps.display_order ASC, d.created_at DESC`,
+      [pipelineId, orgId]
+    );
+
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('Error fetching deals by pipeline:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -106,9 +259,9 @@ router.get('/:id',
     const orgId = getOrgIdFromRequest(req);
 
     const result = await db.query(
-      `SELECT 
+      `SELECT
         d.*,
-        c.name as contact_name,
+        c.full_name as contact_name,
         c.email as contact_email,
         co.name as company_name,
         p.name as pipeline_name,
@@ -149,9 +302,9 @@ router.get('/by-stage/:stageId',
     const orgId = getOrgIdFromRequest(req);
 
     const result = await db.query(
-      `SELECT 
+      `SELECT
         d.*,
-        c.name as contact_name,
+        c.full_name as contact_name,
         co.name as company_name,
         u.first_name || ' ' || u.last_name as owner_name,
         COUNT(*) OVER() as total_count,
@@ -592,7 +745,7 @@ router.get('/stats/summary',
         COALESCE(SUM(value) FILTER (WHERE status = 'open'), 0) as open_value,
         COALESCE(SUM(value) FILTER (WHERE status = 'won'), 0) as won_value,
         AVG(probability) as avg_probability,
-        AVG(EXTRACT(DAY FROM (close_date - created_at))) as avg_days_in_pipeline
+        AVG(EXTRACT(DAY FROM (expected_close_date - created_at::date))) as avg_days_in_pipeline
       FROM deals
       WHERE organization_id = $1 AND deleted_at IS NULL`,
       [orgId]

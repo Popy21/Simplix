@@ -87,9 +87,9 @@ export const MaybeDraxDraggable: React.FC<DraggableProps> = ({
       // Check if we're clicking on a button or non-draggable element
       const target = event.target as HTMLElement;
       const isButton =
-        target.closest('button') ||
+        (typeof target.closest === 'function' && target.closest('button')) ||
         target.tagName === 'BUTTON' ||
-        target.closest('[data-no-drag]') ||
+        (typeof target.closest === 'function' && target.closest('[data-no-drag]')) ||
         target.hasAttribute('data-no-drag') ||
         target.getAttribute('role') === 'button';
 
