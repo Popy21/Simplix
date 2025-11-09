@@ -510,3 +510,305 @@ export const campaignsService = {
     api.post(`/campaigns/${id}/track/${action}`, { customer_id }),
   getStats: (id: number) => api.get(`/campaigns/${id}/stats`),
 };
+
+// ============================================================================
+// NOUVEAUX MODULES v4.0
+// ============================================================================
+
+// Bank Accounts API (Comptabilité)
+export const bankAccountsService = {
+  getAll: () => api.get('/bank-accounts'),
+  getOne: (id: string) => api.get(`/bank-accounts/${id}`),
+  create: (data: {
+    account_name: string;
+    bank_name: string;
+    iban?: string;
+    bic?: string;
+    account_type?: string;
+    currency?: string;
+    opening_balance?: number;
+  }) => api.post('/bank-accounts', data),
+  update: (id: string, data: any) => api.put(`/bank-accounts/${id}`, data),
+  delete: (id: string) => api.delete(`/bank-accounts/${id}`),
+  getBalance: (id: string) => api.get(`/bank-accounts/${id}/balance`),
+  adjustBalance: (id: string, amount: number, reason: string) =>
+    api.post(`/bank-accounts/${id}/adjust-balance`, { amount, reason }),
+};
+
+// Bank Transactions API
+export const bankTransactionsService = {
+  getAll: (params?: { account_id?: string; start_date?: string; end_date?: string }) =>
+    api.get('/bank-transactions', { params }),
+  getOne: (id: string) => api.get(`/bank-transactions/${id}`),
+  create: (data: {
+    bank_account_id: string;
+    transaction_type: 'credit' | 'debit';
+    amount: number;
+    description: string;
+    transaction_date: string;
+    reference?: string;
+    category?: string;
+  }) => api.post('/bank-transactions', data),
+  importFile: (accountId: string, file: any) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('account_id', accountId);
+    return api.post('/bank-transactions/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  reconcile: (id: string, invoiceId: string) =>
+    api.post(`/bank-transactions/${id}/reconcile`, { invoice_id: invoiceId }),
+  autoReconcile: (accountId: string) =>
+    api.post('/bank-transactions/auto-reconcile', { account_id: accountId }),
+};
+
+// Accounting API
+export const accountingService = {
+  getEntries: (params?: { start_date?: string; end_date?: string; account?: string }) =>
+    api.get('/accounting/entries', { params }),
+  createEntry: (data: any) => api.post('/accounting/entries', data),
+  validateEntry: (id: string) => api.post(`/accounting/entries/${id}/validate`),
+  exportFEC: (fiscalYear: number, startDate: string, endDate: string) =>
+    api.post('/accounting/export/fec', { fiscal_year: fiscalYear, start_date: startDate, end_date: endDate }),
+  getTrialBalance: (params: { start_date: string; end_date: string }) =>
+    api.get('/accounting/trial-balance', { params }),
+  getLedger: (account: string, params?: { start_date?: string; end_date?: string }) =>
+    api.get(`/accounting/ledger/${account}`, { params }),
+  getChartOfAccounts: () => api.get('/accounting/chart-of-accounts'),
+};
+
+// Tax Rates API
+export const taxRatesService = {
+  getAll: () => api.get('/tax-rates'),
+  getOne: (id: string) => api.get(`/tax-rates/${id}`),
+  create: (data: { name: string; rate_percentage: number; country?: string; is_default?: boolean }) =>
+    api.post('/tax-rates', data),
+  update: (id: string, data: any) => api.put(`/tax-rates/${id}`, data),
+  delete: (id: string) => api.delete(`/tax-rates/${id}`),
+};
+
+// Cash Flow API
+export const cashFlowService = {
+  getForecast: (params: { start_date: string; end_date: string }) =>
+    api.get('/cash-flow/forecast', { params }),
+  createForecast: (data: any) => api.post('/cash-flow/forecast', data),
+  updateForecast: (id: string, data: any) => api.put(`/cash-flow/forecast/${id}`, data),
+};
+
+// Recurring Invoices API (Facturation avancée)
+export const recurringInvoicesService = {
+  getAll: (params?: { status?: string }) => api.get('/recurring-invoices', { params }),
+  getOne: (id: string) => api.get(`/recurring-invoices/${id}`),
+  create: (data: {
+    customer_id: string;
+    frequency: 'monthly' | 'quarterly' | 'yearly';
+    interval_count?: number;
+    start_date: string;
+    end_date?: string;
+    title: string;
+    items: any[];
+    subtotal_amount: number;
+    tax_amount: number;
+    total_amount: number;
+    auto_send?: boolean;
+  }) => api.post('/recurring-invoices', data),
+  update: (id: string, data: any) => api.put(`/recurring-invoices/${id}`, data),
+  delete: (id: string) => api.delete(`/recurring-invoices/${id}`),
+  pause: (id: string) => api.post(`/recurring-invoices/${id}/pause`),
+  resume: (id: string) => api.post(`/recurring-invoices/${id}/resume`),
+  processDue: () => api.post('/recurring-invoices/process-due'),
+  getHistory: (id: string) => api.get(`/recurring-invoices/${id}/history`),
+};
+
+// Credit Notes API
+export const creditNotesService = {
+  getAll: (params?: { customer_id?: string }) => api.get('/credit-notes', { params }),
+  getOne: (id: string) => api.get(`/credit-notes/${id}`),
+  create: (data: {
+    customer_id: string;
+    original_invoice_id?: string;
+    credit_type: 'full' | 'partial';
+    reason: string;
+    items: any[];
+    subtotal_amount: number;
+    tax_amount: number;
+    total_amount: number;
+  }) => api.post('/credit-notes', data),
+  fromInvoice: (invoiceId: string, data: any) =>
+    api.post(`/credit-notes/from-invoice/${invoiceId}`, data),
+  apply: (id: string, invoiceId: string, amount: number) =>
+    api.post(`/credit-notes/${id}/apply`, { invoice_id: invoiceId, amount }),
+  delete: (id: string) => api.delete(`/credit-notes/${id}`),
+  downloadPDF: (id: string) => api.get(`/credit-notes/${id}/pdf`, { responseType: 'blob' }),
+};
+
+// Projects API (Projets & Temps)
+export const projectsService = {
+  getAll: (params?: { status?: string; customer_id?: string }) =>
+    api.get('/projects', { params }),
+  getOne: (id: string) => api.get(`/projects/${id}`),
+  create: (data: {
+    name: string;
+    customer_id?: string;
+    project_type: 'time_and_materials' | 'fixed_price' | 'retainer';
+    status?: string;
+    start_date: string;
+    end_date?: string;
+    estimated_hours?: number;
+    hourly_rate?: number;
+    budget_amount?: number;
+    description?: string;
+  }) => api.post('/projects', data),
+  update: (id: string, data: any) => api.put(`/projects/${id}`, data),
+  delete: (id: string) => api.delete(`/projects/${id}`),
+  getStats: (id: string) => api.get(`/projects/${id}/stats`),
+  getTasks: (id: string) => api.get(`/projects/${id}/tasks`),
+  getTimeEntries: (id: string) => api.get(`/projects/${id}/time-entries`),
+  close: (id: string) => api.post(`/projects/${id}/close`),
+};
+
+// Project Tasks API
+export const projectTasksService = {
+  getAll: (projectId: string) => api.get(`/projects/${projectId}/tasks`),
+  getOne: (id: string) => api.get(`/project-tasks/${id}`),
+  create: (data: {
+    project_id: string;
+    title: string;
+    description?: string;
+    status?: string;
+    priority?: string;
+    assigned_to?: string;
+    estimated_hours?: number;
+    due_date?: string;
+  }) => api.post('/project-tasks', data),
+  update: (id: string, data: any) => api.put(`/project-tasks/${id}`, data),
+  delete: (id: string) => api.delete(`/project-tasks/${id}`),
+};
+
+// Time Entries API
+export const timeEntriesService = {
+  getAll: (params?: { project_id?: string; user_id?: string; start_date?: string; end_date?: string }) =>
+    api.get('/time-entries', { params }),
+  getOne: (id: string) => api.get(`/time-entries/${id}`),
+  create: (data: {
+    project_id: string;
+    task_id?: string;
+    user_id: string;
+    description: string;
+    duration_hours: number;
+    hourly_rate?: number;
+    is_billable?: boolean;
+    entry_date: string;
+  }) => api.post('/time-entries', data),
+  update: (id: string, data: any) => api.put(`/time-entries/${id}`, data),
+  delete: (id: string) => api.delete(`/time-entries/${id}`),
+  startTimer: (data: { project_id: string; task_id?: string; description: string }) =>
+    api.post('/time-entries/timer/start', data),
+  stopTimer: (id: string) => api.post(`/time-entries/timer/${id}/stop`),
+  getSummary: (params: { user_id?: string; start_date: string; end_date: string }) =>
+    api.get('/time-entries/summary', { params }),
+};
+
+// Employees API (RH)
+export const employeesService = {
+  getAll: (params?: { status?: string; department?: string }) =>
+    api.get('/employees', { params }),
+  getOne: (id: string) => api.get(`/employees/${id}`),
+  create: (data: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    employee_number: string;
+    job_title: string;
+    department?: string;
+    employment_type: string;
+    hire_date: string;
+    base_salary?: number;
+    currency?: string;
+  }) => api.post('/employees', data),
+  update: (id: string, data: any) => api.put(`/employees/${id}`, data),
+  delete: (id: string) => api.delete(`/employees/${id}`),
+  terminate: (id: string, terminationDate: string, reason: string) =>
+    api.post(`/employees/${id}/terminate`, { termination_date: terminationDate, reason }),
+  getDocuments: (id: string) => api.get(`/employees/${id}/documents`),
+};
+
+// Employee Leaves API
+export const employeeLeavesService = {
+  getAll: (params?: { employee_id?: string; status?: string; leave_type?: string }) =>
+    api.get('/employee-leaves', { params }),
+  getOne: (id: string) => api.get(`/employee-leaves/${id}`),
+  request: (data: {
+    employee_id: string;
+    leave_type: string;
+    start_date: string;
+    end_date: string;
+    half_day?: boolean;
+    reason: string;
+  }) => api.post('/employee-leaves', data),
+  update: (id: string, data: any) => api.put(`/employee-leaves/${id}`, data),
+  approve: (id: string, approvedBy: string) =>
+    api.post(`/employee-leaves/${id}/approve`, { approved_by: approvedBy }),
+  reject: (id: string, rejectedBy: string, reason: string) =>
+    api.post(`/employee-leaves/${id}/reject`, { rejected_by: rejectedBy, reason }),
+  cancel: (id: string) => api.post(`/employee-leaves/${id}/cancel`),
+  getBalance: (employeeId: string) => api.get(`/employees/${employeeId}/leave-balance`),
+};
+
+// Time Clockings API
+export const timeClockingsService = {
+  getAll: (params?: { employee_id?: string; start_date?: string; end_date?: string }) =>
+    api.get('/time-clockings', { params }),
+  clockIn: (employeeId: string, location?: { latitude: number; longitude: number }) =>
+    api.post('/time-clockings/clock-in', { employee_id: employeeId, location }),
+  clockOut: (id: string, location?: { latitude: number; longitude: number }) =>
+    api.post(`/time-clockings/${id}/clock-out`, { location }),
+  getSummary: (employeeId: string, startDate: string, endDate: string) =>
+    api.get('/time-clockings/summary', { params: { employee_id: employeeId, start_date: startDate, end_date: endDate } }),
+};
+
+// Warehouses API (Stock)
+export const warehousesService = {
+  getAll: () => api.get('/warehouses'),
+  getOne: (id: string) => api.get(`/warehouses/${id}`),
+  create: (data: {
+    name: string;
+    code: string;
+    warehouse_type: string;
+    address?: string;
+    city?: string;
+    postal_code?: string;
+    country?: string;
+  }) => api.post('/warehouses', data),
+  update: (id: string, data: any) => api.put(`/warehouses/${id}`, data),
+  delete: (id: string) => api.delete(`/warehouses/${id}`),
+  getInventory: (id: string) => api.get(`/warehouses/${id}/inventory`),
+};
+
+// Inventory Levels API
+export const inventoryService = {
+  getAll: (params?: { warehouse_id?: string; product_id?: string }) =>
+    api.get('/inventory-levels', { params }),
+  getOne: (id: string) => api.get(`/inventory-levels/${id}`),
+  getLowStock: (warehouseId?: string) =>
+    api.get('/inventory-levels/low-stock', { params: { warehouse_id: warehouseId } }),
+  update: (id: string, data: any) => api.put(`/inventory-levels/${id}`, data),
+};
+
+// Stock Movements API
+export const stockMovementsService = {
+  getAll: (params?: { warehouse_id?: string; product_id?: string; start_date?: string; end_date?: string }) =>
+    api.get('/stock-movements', { params }),
+  create: (data: {
+    product_id: string;
+    warehouse_id: string;
+    movement_type: string;
+    quantity: number;
+    unit_cost?: number;
+    reference?: string;
+    notes?: string;
+  }) => api.post('/stock-movements', data),
+  getHistory: (productId: string, warehouseId?: string) =>
+    api.get('/stock-movements/history', { params: { product_id: productId, warehouse_id: warehouseId } }),
+};
