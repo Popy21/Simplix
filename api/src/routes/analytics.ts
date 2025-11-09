@@ -539,4 +539,86 @@ router.get('/forecasting', async (req: Request, res: Response) => {
   }
 });
 
+// Main analytics endpoint - consolidated overview
+router.get('/', async (req: Request, res: Response) => {
+  try {
+    const analytics: any = {};
+
+    // Deals analytics
+    const dealsStats = await db.query(`
+      SELECT
+        COUNT(*) as total_deals,
+        COUNT(*) FILTER (WHERE status = 'open') as open_deals,
+        COUNT(*) FILTER (WHERE status = 'won') as won_deals,
+        COUNT(*) FILTER (WHERE status = 'lost') as lost_deals,
+        COALESCE(SUM(value), 0) as total_value,
+        COALESCE(SUM(value) FILTER (WHERE status = 'won'), 0) as won_value,
+        COALESCE(AVG(probability), 0) as avg_probability
+      FROM deals
+      WHERE deleted_at IS NULL
+    `);
+    analytics.deals = dealsStats.rows[0];
+
+    // Contacts analytics
+    const contactsStats = await db.query(`
+      SELECT
+        COUNT(*) as total_contacts,
+        COUNT(*) FILTER (WHERE type = 'lead') as leads,
+        COUNT(*) FILTER (WHERE type = 'customer') as customers,
+        COALESCE(AVG(score), 0) as avg_score
+      FROM contacts
+      WHERE deleted_at IS NULL
+    `);
+    analytics.contacts = contactsStats.rows[0];
+
+    // Revenue analytics
+    const revenueStats = await db.query(`
+      SELECT
+        COALESCE(SUM(total_amount), 0) as total_revenue,
+        COALESCE(SUM(total_amount) FILTER (WHERE status = 'paid'), 0) as paid_revenue,
+        COALESCE(SUM(total_amount) FILTER (WHERE status IN ('pending', 'sent')), 0) as pending_revenue,
+        COUNT(*) as total_invoices,
+        COUNT(*) FILTER (WHERE status = 'paid') as paid_invoices,
+        COUNT(*) FILTER (WHERE due_date < NOW() AND status NOT IN ('paid', 'cancelled')) as overdue_invoices
+      FROM invoices
+    `);
+    analytics.revenue = revenueStats.rows[0];
+
+    // Quotes analytics
+    const quotesStats = await db.query(`
+      SELECT
+        COUNT(*) as total_quotes,
+        COUNT(*) FILTER (WHERE status = 'draft') as draft_quotes,
+        COUNT(*) FILTER (WHERE status = 'sent') as sent_quotes,
+        COUNT(*) FILTER (WHERE status = 'accepted') as accepted_quotes,
+        COALESCE(SUM(total_amount), 0) as total_value,
+        ROUND(
+          (COUNT(*) FILTER (WHERE status = 'accepted')::numeric /
+           NULLIF(COUNT(*) FILTER (WHERE status IN ('accepted', 'rejected')), 0)) * 100,
+          2
+        ) as acceptance_rate
+      FROM quotes
+    `);
+    analytics.quotes = quotesStats.rows[0];
+
+    // Activities analytics
+    const activitiesStats = await db.query(`
+      SELECT
+        COUNT(*) as total_activities,
+        COUNT(*) FILTER (WHERE type = 'call') as calls,
+        COUNT(*) FILTER (WHERE type = 'email') as emails,
+        COUNT(*) FILTER (WHERE type = 'meeting') as meetings,
+        COUNT(*) FILTER (WHERE scheduled_at > NOW() AND completed_at IS NULL) as upcoming,
+        COUNT(*) FILTER (WHERE scheduled_at < NOW() AND completed_at IS NULL) as overdue
+      FROM activities
+    `);
+    analytics.activities = activitiesStats.rows[0];
+
+    res.json(analytics);
+  } catch (err: any) {
+    console.error('Error fetching analytics:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

@@ -85,8 +85,10 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     let paramCount = 2;
 
     if (status) {
+      // Map 'new' to 'lead' for backward compatibility
+      const mappedStatus = status === 'new' ? 'lead' : status;
       filters.push(`c.type = $${paramCount}`);
-      params.push(status);
+      params.push(mappedStatus);
       paramCount++;
     }
 

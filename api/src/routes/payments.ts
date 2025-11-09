@@ -715,9 +715,8 @@ router.post('/stripe/webhook', async (req, res) => {
  * GET /api/payments
  * Récupérer tous les paiements
  */
-router.get('/', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const orgId = getOrgIdFromRequest(req);
     const { invoice_id, from_date, to_date, payment_method } = req.query;
 
     let query = `
@@ -730,11 +729,11 @@ router.get('/', authenticateToken, requireOrganization, async (req: AuthRequest,
       FROM payments p
       JOIN invoices i ON p.invoice_id = i.id
       LEFT JOIN customers cust ON i.customer_id = cust.id
-      WHERE cust.organization_id = $1
+      WHERE 1=1
     `;
 
-    const params: any[] = [orgId];
-    let paramCount = 2;
+    const params: any[] = [];
+    let paramCount = 1;
 
     if (invoice_id) {
       query += ` AND p.invoice_id = $${paramCount}`;
@@ -774,9 +773,8 @@ router.get('/', authenticateToken, requireOrganization, async (req: AuthRequest,
  * GET /api/payments/stats
  * Statistiques des paiements
  */
-router.get('/stats', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const orgId = getOrgIdFromRequest(req);
     const { period = 'month' } = req.query;
 
     let dateFormat = 'month';
@@ -791,11 +789,10 @@ router.get('/stats', authenticateToken, requireOrganization, async (req: AuthReq
         COUNT(*) as payment_count,
         SUM(p.amount) as total_amount
       FROM payments p
-      JOIN invoices i ON p.invoice_id = i.id
-      WHERE i.organization_id = $2 AND p.payment_date >= CURRENT_DATE - INTERVAL '6 months'
+      WHERE p.payment_date >= CURRENT_DATE - INTERVAL '6 months'
       GROUP BY DATE_TRUNC($1, p.payment_date), p.payment_method
       ORDER BY period DESC, p.payment_method
-    `, [dateFormat, orgId]);
+    `, [dateFormat]);
 
     // Total global
     const totalStats = await pool.query(`
@@ -805,9 +802,51 @@ router.get('/stats', authenticateToken, requireOrganization, async (req: AuthReq
         AVG(p.amount) as average_payment,
         COUNT(DISTINCT p.invoice_id) as invoices_paid
       FROM payments p
-      JOIN invoices i ON p.invoice_id = i.id
-      WHERE i.organization_id = $1
-    `, [orgId]);
+    `);
+
+    res.json({
+      by_period: stats.rows,
+      total: totalStats.rows[0]
+    });
+  } catch (error: any) {
+    console.error('Erreur lors de la récupération des statistiques de paiements:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/payments/stats/summary
+ * Alias for /stats endpoint for backward compatibility
+ */
+router.get('/stats/summary', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { period = 'month' } = req.query;
+
+    let dateFormat = 'month';
+    if (period === 'day') dateFormat = 'day';
+    else if (period === 'week') dateFormat = 'week';
+    else if (period === 'year') dateFormat = 'year';
+
+    const stats = await pool.query(`
+      SELECT
+        DATE_TRUNC($1, p.payment_date) as period,
+        p.payment_method,
+        COUNT(*) as payment_count,
+        SUM(p.amount) as total_amount
+      FROM payments p
+      WHERE p.payment_date >= CURRENT_DATE - INTERVAL '6 months'
+      GROUP BY DATE_TRUNC($1, p.payment_date), p.payment_method
+      ORDER BY period DESC, p.payment_method
+    `, [dateFormat]);
+
+    const totalStats = await pool.query(`
+      SELECT
+        COUNT(*) as total_payments,
+        SUM(p.amount) as total_amount,
+        AVG(p.amount) as average_payment,
+        COUNT(DISTINCT p.invoice_id) as invoices_paid
+      FROM payments p
+    `);
 
     res.json({
       by_period: stats.rows,

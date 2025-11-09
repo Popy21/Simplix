@@ -12,6 +12,19 @@ const api = axios.create({
   },
 });
 
+// Separate axios instance for auth refresh (no interceptors to avoid infinite loops)
+const authApi = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Circuit breaker to prevent infinite refresh loops
+let isRefreshing = false;
+let refreshFailureCount = 0;
+const MAX_REFRESH_FAILURES = 3;
+
 // Request interceptor to add JWT token to all requests
 api.interceptors.request.use(
   async (config) => {
@@ -43,28 +56,41 @@ api.interceptors.response.use(
       response.status,
       response.data
     );
+    // Reset failure count on successful request
+    refreshFailureCount = 0;
     return response;
   },
   async (error) => {
     const originalRequest = error.config;
 
-    // Only attempt refresh once to avoid infinite loops
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Only attempt refresh once per request and if not already refreshing
+    if (error.response?.status === 401 && !originalRequest._retry && !isRefreshing) {
+      // Check circuit breaker - too many failures?
+      if (refreshFailureCount >= MAX_REFRESH_FAILURES) {
+        console.log('Too many refresh failures, logging out user');
+        await storage.clearAuth();
+        isRefreshing = false;
+        refreshFailureCount = 0;
+        return Promise.reject(error);
+      }
+
       originalRequest._retry = true;
+      isRefreshing = true;
 
       try {
         // Attempt to refresh the token
         const refreshToken = await storage.getRefreshToken();
-        
+
         if (!refreshToken) {
           // No refresh token available, clear auth and reject
           await storage.clearAuth();
           console.log('No refresh token available, user logged out');
+          isRefreshing = false;
           return Promise.reject(error);
         }
 
-        // Call refresh endpoint
-        const response = await authService.refresh(refreshToken);
+        // Call refresh endpoint using authApi (no interceptors)
+        const response = await authApi.post('/auth/refresh', { refreshToken });
         const { token, accessToken, refreshToken: newRefreshToken } = response.data;
 
         // Update stored tokens
@@ -73,20 +99,46 @@ api.interceptors.response.use(
           await storage.saveRefreshToken(newRefreshToken);
         }
 
+        // Reset failure count on successful refresh
+        refreshFailureCount = 0;
+        isRefreshing = false;
+
         // Update the authorization header with new token
         originalRequest.headers.Authorization = `Bearer ${accessToken || token}`;
 
         // Retry the original request
         return api(originalRequest);
       } catch (refreshError) {
+        // Increment failure count
+        refreshFailureCount++;
+        isRefreshing = false;
+
         // Refresh failed, clear auth and redirect to login
-        try {
-          await storage.clearAuth();
-          console.log('Token refresh failed, user logged out');
-        } catch (clearErr) {
-          console.error('Error clearing auth:', clearErr);
+        console.log(`Token refresh failed (attempt ${refreshFailureCount}/${MAX_REFRESH_FAILURES})`);
+
+        // If max failures reached, clear auth
+        if (refreshFailureCount >= MAX_REFRESH_FAILURES) {
+          try {
+            await storage.clearAuth();
+            console.log('Max refresh failures reached, user logged out');
+            refreshFailureCount = 0;
+          } catch (clearErr) {
+            console.error('Error clearing auth:', clearErr);
+          }
         }
+
         return Promise.reject(refreshError);
+      }
+    }
+
+    // If already refreshing, wait a bit before rejecting
+    if (isRefreshing && error.response?.status === 401) {
+      console.log('Refresh already in progress, queuing request');
+      // Wait for refresh to complete (max 2 seconds)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (!isRefreshing) {
+        // Retry the request after refresh completed
+        return api(originalRequest);
       }
     }
 

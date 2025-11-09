@@ -54,8 +54,10 @@ router.get('/',
     }
 
     if (status) {
+      // Map 'active' to 'open' for backward compatibility
+      const mappedStatus = status === 'active' ? 'open' : status;
       query += ` AND d.status = $${paramCount}`;
-      params.push(status);
+      params.push(mappedStatus);
       paramCount++;
     }
 
@@ -745,7 +747,7 @@ router.get('/stats/summary',
         COALESCE(SUM(value) FILTER (WHERE status = 'open'), 0) as open_value,
         COALESCE(SUM(value) FILTER (WHERE status = 'won'), 0) as won_value,
         AVG(probability) as avg_probability,
-        AVG(EXTRACT(DAY FROM (expected_close_date - created_at::date))) as avg_days_in_pipeline
+        AVG(EXTRACT(DAY FROM (expected_close_date - created_at::timestamp))) as avg_days_in_pipeline
       FROM deals
       WHERE organization_id = $1 AND deleted_at IS NULL`,
       [orgId]

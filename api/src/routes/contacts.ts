@@ -76,6 +76,42 @@ router.get('/', authenticateToken, requireOrganization, async (req: AuthRequest,
   }
 });
 
+// Get deleted contacts (alias for backward compatibility)
+router.get('/deleted', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+    const { page = '1', limit = '50' } = req.query;
+    const pageNum = Math.max(1, parseInt(page as string) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 50));
+    const offset = (pageNum - 1) * limitNum;
+
+    const query = `
+      SELECT
+        c.id,
+        c.first_name,
+        c.last_name,
+        c.full_name,
+        c.email,
+        c.phone,
+        c.company_id,
+        co.name as company_name,
+        c.deleted_at,
+        c.created_at
+      FROM contacts c
+      LEFT JOIN companies co ON c.company_id = co.id
+      WHERE c.organization_id = $1 AND c.deleted_at IS NOT NULL
+      ORDER BY c.deleted_at DESC
+      LIMIT $2 OFFSET $3
+    `;
+
+    const result = await pool.query(query, [orgId, limitNum, offset]);
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('Error fetching deleted contacts:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get contact by ID
 router.get('/:id', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {
@@ -210,7 +246,7 @@ router.put('/:id', authenticateToken, requireOrganization, async (req: AuthReque
   }
 });
 
-// Get deleted contacts
+// Get deleted contacts (full route)
 router.get('/deleted/list', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {
     const orgId = getOrgIdFromRequest(req);
@@ -305,6 +341,60 @@ router.delete('/:id', authenticateToken, requireOrganization, async (req: AuthRe
 
     res.json({ message: 'Contact deleted successfully' });
   } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get contact activities
+router.get('/:id/activities', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const orgId = getOrgIdFromRequest(req);
+
+    const result = await pool.query(
+      `SELECT
+        a.*,
+        u.first_name || ' ' || u.last_name as created_by_name,
+        d.title as deal_title
+      FROM activities a
+      LEFT JOIN users u ON a.created_by = u.id
+      LEFT JOIN deals d ON a.deal_id = d.id
+      WHERE a.contact_id = $1 AND a.organization_id = $2
+      ORDER BY a.created_at DESC`,
+      [id, orgId]
+    );
+
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('Error fetching contact activities:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get contact deals
+router.get('/:id/deals', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const orgId = getOrgIdFromRequest(req);
+
+    const result = await pool.query(
+      `SELECT
+        d.*,
+        ps.name as stage_name,
+        p.name as pipeline_name,
+        u.first_name || ' ' || u.last_name as owner_name
+      FROM deals d
+      LEFT JOIN pipeline_stages ps ON d.stage_id = ps.id
+      LEFT JOIN pipelines p ON d.pipeline_id = p.id
+      LEFT JOIN users u ON d.owner_id = u.id
+      WHERE d.contact_id = $1 AND d.organization_id = $2 AND d.deleted_at IS NULL
+      ORDER BY d.created_at DESC`,
+      [id, orgId]
+    );
+
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('Error fetching contact deals:', err);
     res.status(500).json({ error: err.message });
   }
 });

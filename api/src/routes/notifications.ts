@@ -261,7 +261,7 @@ router.get('/user/:userId/unread-count', async (req: Request, res: Response) => 
 
   try {
     const result = await db.query(
-      'SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND is_read = 0',
+      'SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND read = false',
       [userId]
     );
     res.json({ count: result.rows[0].count });

@@ -168,4 +168,30 @@ router.delete('/:id', authenticateToken, requireOrganization, async (req: AuthRe
   }
 });
 
+// Get company contacts
+router.get('/:id/contacts', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const orgId = getOrgIdFromRequest(req);
+
+    const result = await pool.query(
+      `SELECT
+        c.*,
+        u.first_name || ' ' || u.last_name as owner_name,
+        (SELECT COUNT(*) FROM activities WHERE contact_id = c.id) as activity_count,
+        (SELECT COUNT(*) FROM deals WHERE contact_id = c.id AND deleted_at IS NULL) as deal_count
+      FROM contacts c
+      LEFT JOIN users u ON c.owner_id = u.id
+      WHERE c.company_id = $1 AND c.organization_id = $2 AND c.deleted_at IS NULL
+      ORDER BY c.created_at DESC`,
+      [id, orgId]
+    );
+
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('Error fetching company contacts:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
