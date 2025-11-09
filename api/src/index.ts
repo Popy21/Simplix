@@ -45,6 +45,8 @@ import recurringInvoicesRouter from './routes/recurring-invoices';
 import creditNotesRouter from './routes/credit-notes';
 import logger from './utils/logger';
 import path from 'path';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './config/swagger';
 
 dotenv.config();
 
@@ -62,11 +64,30 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // Logger middleware
 app.use(logger.httpMiddleware());
 
+// Swagger API Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customSiteTitle: 'Simplix API Documentation',
+  customfavIcon: '/favicon.ico',
+  customCss: '.swagger-ui .topbar { display: none }'
+}));
+
+// Health check endpoint
+app.get('/health', (req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    version: '4.0.0',
+    uptime: process.uptime()
+  });
+});
+
 // Routes
 app.get('/', (req: Request, res: Response) => {
   res.json({
-    message: 'Simplix Sales CRM API',
+    message: 'Simplix ERP/CRM API v4.0',
     version: '4.0.0',
+    documentation: '/api-docs',
+    health: '/health',
     endpoints: {
       auth: '/api/auth',
       customers: '/api/customers',

@@ -29,7 +29,9 @@
     "pg": "^8.16.3",
     "puppeteer": "^24.26.1",
     "sqlite3": "^5.1.7",
-    "stripe": "^19.2.0"
+    "stripe": "^19.2.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
