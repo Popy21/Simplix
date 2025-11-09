@@ -1,0 +1,23 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║                   SIMPLIX v4.0 - COMMANDE DE DÉPLOIEMENT            ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+🚀 COPIER-COLLER CETTE COMMANDE DANS VOTRE TERMINAL:
+
+ssh root@82.165.134.105 'curl -fsSL https://raw.githubusercontent.com/Popy21/Simplix/claude/simplix-roadmap-analysis-011CUx1wAomWPhRbBARmsgTw/deploy-server-side.sh | bash'
+
+MOT DE PASSE: HkVB9iuftdyè(4442212l???
+
+══════════════════════════════════════════════════════════════════════
+
+⏱️  Le script prendra 10-15 minutes
+
+✅ Après le déploiement, testez:
+   https://simplix.paraweb.fr
+   https://simplix.paraweb.fr/api-docs
+
+🔐 Login démo:
+   Email: admin@simplix-demo.fr
+   Password: Test1234!
+
+══════════════════════════════════════════════════════════════════════
