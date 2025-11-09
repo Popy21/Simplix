@@ -7,10 +7,12 @@ import { getOrgIdFromRequest } from '../utils/multiTenancyHelper';
 
 const router = Router();
 
-// Initialize Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2025-10-29.clover',
-});
+// Initialize Stripe (optional - only if key is provided)
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-10-29.clover',
+    })
+  : null;
 
 // ========================================
 // PUBLIC ROUTES (No authentication required)

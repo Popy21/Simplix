@@ -58,24 +58,44 @@ class Logger {
     }
   }
 
-  info(category: string, message: string, data?: any) {
-    this.log('info', category, message, data);
+  info(categoryOrMessage: string, message?: string, data?: any) {
+    if (message === undefined) {
+      this.log('info', 'General', categoryOrMessage);
+    } else {
+      this.log('info', categoryOrMessage, message, data);
+    }
   }
 
-  warn(category: string, message: string, data?: any) {
-    this.log('warn', category, message, data);
+  warn(categoryOrMessage: string, message?: string, data?: any) {
+    if (message === undefined) {
+      this.log('warn', 'General', categoryOrMessage);
+    } else {
+      this.log('warn', categoryOrMessage, message, data);
+    }
   }
 
-  error(category: string, message: string, data?: any) {
-    this.log('error', category, message, data);
+  error(categoryOrMessage: string, message?: string, data?: any) {
+    if (message === undefined) {
+      this.log('error', 'General', categoryOrMessage);
+    } else {
+      this.log('error', categoryOrMessage, message, data);
+    }
   }
 
-  debug(category: string, message: string, data?: any) {
-    this.log('debug', category, message, data);
+  debug(categoryOrMessage: string, message?: string, data?: any) {
+    if (message === undefined) {
+      this.log('debug', 'General', categoryOrMessage);
+    } else {
+      this.log('debug', categoryOrMessage, message, data);
+    }
   }
 
-  success(category: string, message: string, data?: any) {
-    this.log('success', category, message, data);
+  success(categoryOrMessage: string, message?: string, data?: any) {
+    if (message === undefined) {
+      this.log('success', 'General', categoryOrMessage);
+    } else {
+      this.log('success', categoryOrMessage, message, data);
+    }
   }
 
   // Middleware pour logger les requêtes HTTP
