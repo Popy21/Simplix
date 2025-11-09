@@ -36,6 +36,13 @@ import uploadRouter from './routes/upload';
 import showcaseRouter from './routes/showcase';
 import pdfRouter from './routes/pdf';
 import companyProfileRouter from './routes/company-profile';
+import bankAccountsRouter from './routes/bank-accounts';
+import bankTransactionsRouter from './routes/bank-transactions';
+import accountingRouter from './routes/accounting';
+import taxRatesRouter from './routes/tax-rates';
+import cashFlowRouter from './routes/cash-flow';
+import recurringInvoicesRouter from './routes/recurring-invoices';
+import creditNotesRouter from './routes/credit-notes';
 import logger from './utils/logger';
 import path from 'path';
 
@@ -81,7 +88,14 @@ app.get('/', (req: Request, res: Response) => {
       expenses: '/api/expenses',
       dashboard: '/api/dashboard',
       templates: '/api/templates',
-      showcase: '/api/showcase'
+      showcase: '/api/showcase',
+      bank_accounts: '/api/bank-accounts',
+      bank_transactions: '/api/bank-transactions',
+      accounting: '/api/accounting',
+      tax_rates: '/api/tax-rates',
+      cash_flow: '/api/cash-flow',
+      recurring_invoices: '/api/recurring-invoices',
+      credit_notes: '/api/credit-notes'
     }
   });
 });
@@ -121,6 +135,13 @@ app.use('/api/templates', templatesRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/showcase', showcaseRouter);
 app.use('/api/company-profile', companyProfileRouter);
+app.use('/api/bank-accounts', bankAccountsRouter);
+app.use('/api/bank-transactions', bankTransactionsRouter);
+app.use('/api/accounting', accountingRouter);
+app.use('/api/tax-rates', taxRatesRouter);
+app.use('/api/cash-flow', cashFlowRouter);
+app.use('/api/recurring-invoices', recurringInvoicesRouter);
+app.use('/api/credit-notes', creditNotesRouter);
 app.use('/api', pdfRouter);
 
 // Error handling middleware
