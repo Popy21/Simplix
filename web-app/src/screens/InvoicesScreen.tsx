@@ -6,6 +6,8 @@ import { FileTextIcon, DollarIcon, CheckCircleIcon, ClockIcon, AlertTriangleIcon
 import Navigation from '../components/Navigation';
 import DocumentPreview from '../components/DocumentPreview';
 import { quoteService, invoicesService, templatesService, contactService, companyService, productService, companyProfileService, paymentsService } from '../services/api';
+import { API_URL } from '../config/api';
+import { toAbsoluteUrl } from '../utils/url';
 
 type InvoicesScreenProps = { navigation: NativeStackNavigationProp<RootStackParamList, 'Invoices'>; };
 type TabType = 'quotes' | 'invoices';
@@ -334,7 +336,7 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
 
       // Utiliser le nouvel endpoint qui génère un PDF avec Puppeteer
       // Cet endpoint utilise exactement le même HTML que l'aperçu
-      const downloadUrl = `http://localhost:3000/api/${type}/${id}/download`;
+      const downloadUrl = `${API_URL}/${type}/${id}/download`;
 
       if (Platform.OS === 'web') {
         // Créer un lien invisible pour télécharger le PDF
@@ -1250,7 +1252,7 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
                       </View>
                       {selectedTemplate.show_logo && selectedTemplate.logo_url && (
                         <Image
-                          source={{ uri: selectedTemplate.logo_url.startsWith('http') ? selectedTemplate.logo_url : `http://localhost:3000${selectedTemplate.logo_url}` }}
+                          source={{ uri: toAbsoluteUrl(selectedTemplate.logo_url) }}
                           style={styles.liveLogoImage}
                         />
                       )}
@@ -1301,9 +1303,7 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
                             <View style={styles.clientLogoContainer}>
                               <Image
                                 source={{
-                                  uri: (selectedClient.logo_url || selectedClient.logo)?.startsWith('http')
-                                    ? (selectedClient.logo_url || selectedClient.logo)
-                                    : `http://localhost:3000${selectedClient.logo_url || selectedClient.logo}`
+                                  uri: toAbsoluteUrl(selectedClient.logo_url || selectedClient.logo)
                                 }}
                                 style={styles.clientLogoImage}
                               />
@@ -1454,7 +1454,7 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
                       };
 
                       // Envoyer la requête POST pour générer le PDF
-                      const response = await fetch('http://localhost:3000/api/download-pdf', {
+                      const response = await fetch(`${API_URL}/download-pdf`, {
                         method: 'POST',
                         headers: {
                           'Content-Type': 'application/json',
@@ -1547,7 +1547,7 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
             {previewItem && (
               <View style={styles.iframeContainer}>
                 <iframe
-                  src={`http://localhost:3000/api/${previewItem.type === 'quote' ? 'quotes' : 'invoices'}/${previewItem.id}/pdf`}
+                  src={`${API_URL}/${previewItem.type === 'quote' ? 'quotes' : 'invoices'}/${previewItem.id}/pdf`}
                   style={{
                     width: '100%',
                     height: '100%',

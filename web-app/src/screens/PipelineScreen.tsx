@@ -138,8 +138,8 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
       setRecentlyDeleted(deletedRes.data);
 
       // Set default stage_id when stages are loaded
-      if (stagesRes.data.length > 0 && !newOppForm.stage_id) {
-        setNewOppForm(prev => ({ ...prev, stage_id: stagesRes.data[0].id }));
+      if (stagesRes.data.length > 0) {
+        setNewOppForm(prev => ({ ...prev, stage_id: prev.stage_id || stagesRes.data[0].id }));
       }
     } catch (err: any) {
       console.error('Erreur lors du chargement des données:', err);
@@ -750,7 +750,13 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
         </View>
         <TouchableOpacity
           style={styles.addButton}
-          onPress={() => setNewOppModalVisible(true)}
+          onPress={() => {
+            // Ensure stage_id is set before opening modal
+            if (stages.length > 0 && !newOppForm.stage_id) {
+              setNewOppForm(prev => ({ ...prev, stage_id: stages[0].id }));
+            }
+            setNewOppModalVisible(true);
+          }}
         >
           <Text style={styles.addButtonText}>+ Nouveau</Text>
         </TouchableOpacity>

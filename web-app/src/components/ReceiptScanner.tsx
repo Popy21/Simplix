@@ -204,7 +204,7 @@ const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onDataExtracted }) => {
       // Sur mobile, utiliser react-native-document-picker
       try {
         const result = await DocumentPicker.pick({
-          type: [DocumentPicker.types.images, DocumentPicker.types.pdf],
+          type: [DocumentPicker.types.images],
           allowMultiSelection: false,
         });
 
@@ -227,6 +227,15 @@ const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onDataExtracted }) => {
   const handleWebFileChange = async (event: any) => {
     const file = event.target.files?.[0];
     if (file) {
+      // Validate file type - only accept images
+      if (!file.type.startsWith('image/')) {
+        Alert.alert(
+          'Type de fichier non supporté',
+          'Veuillez sélectionner uniquement des fichiers image (JPG, PNG, etc.). Les PDF ne sont pas supportés pour le moment.'
+        );
+        return;
+      }
+
       const uri = URL.createObjectURL(file);
       setImageUri(uri);
       await processImage(uri);
@@ -240,7 +249,7 @@ const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onDataExtracted }) => {
     } else if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ['Annuler', 'Prendre une photo', 'Choisir une photo/PDF'],
+          options: ['Annuler', 'Prendre une photo', 'Choisir une photo'],
           cancelButtonIndex: 0,
         },
         async (buttonIndex) => {
@@ -259,7 +268,7 @@ const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onDataExtracted }) => {
         [
           { text: 'Annuler', style: 'cancel' },
           { text: 'Prendre une photo', onPress: handleLaunchCamera },
-          { text: 'Choisir une photo/PDF', onPress: handlePickDocument },
+          { text: 'Choisir une photo', onPress: handlePickDocument },
         ],
         { cancelable: true }
       );
@@ -270,7 +279,7 @@ const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onDataExtracted }) => {
     <View style={styles.container}>
       <Text style={styles.label}>Scanner une facture</Text>
       <Text style={styles.hint}>
-        Prenez une photo ou sélectionnez une image/PDF pour extraire automatiquement les informations
+        Prenez une photo ou sélectionnez une image pour extraire automatiquement les informations
       </Text>
 
       {imageUri && !loading && (
@@ -297,7 +306,7 @@ const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onDataExtracted }) => {
         <input
           ref={fileInputRef as any}
           type="file"
-          accept="image/*,.pdf"
+          accept="image/*"
           style={{ display: 'none' }}
           onChange={handleWebFileChange}
         />

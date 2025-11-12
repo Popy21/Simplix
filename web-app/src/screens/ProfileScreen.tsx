@@ -12,6 +12,7 @@ import {
   Modal,
 } from 'react-native';
 import { companyProfileService } from '../services/api';
+import ImageUpload from '../components/ImageUpload';
 
 interface CompanyProfile {
   id?: number;
@@ -134,6 +135,12 @@ export default function ProfileScreen() {
             placeholder="Nom de votre entreprise"
           />
         </View>
+
+        <ImageUpload
+          value={profile.logo_url}
+          onChange={(url) => setProfile({ ...profile, logo_url: url as string })}
+          label="Logo de l'entreprise"
+        />
 
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Forme juridique</Text>

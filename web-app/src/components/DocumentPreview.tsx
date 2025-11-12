@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, ScrollView } from 'react-native';
+import { toAbsoluteUrl } from '../utils/url';
 
 interface DocumentPreviewProps {
   template: any;
@@ -38,10 +39,7 @@ export default function DocumentPreview({ template, document, compact = false }:
   const layoutStyles = getLayoutStyles(template.template_layout || 'professional');
 
   // Convertir le logo_url en URL absolue si c'est un chemin relatif
-  let logoUrl = template.logo_url || template.template_logo_url || '';
-  if (logoUrl && !logoUrl.startsWith('http')) {
-    logoUrl = `http://localhost:3000${logoUrl}`;
-  }
+  const logoUrl = toAbsoluteUrl(template.logo_url || template.template_logo_url);
 
   return (
     <View style={[

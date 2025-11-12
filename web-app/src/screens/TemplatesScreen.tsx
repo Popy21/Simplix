@@ -18,6 +18,7 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
+import { toAbsoluteUrl } from '../utils/url';
 import { FileTextIcon, EditIcon, TrashIcon, CheckCircleIcon } from '../components/Icons';
 import { templatesService, uploadService, companyProfileService } from '../services/api';
 import * as ImagePicker from 'expo-image-picker';
@@ -1002,7 +1003,7 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
                   >
                     {formData.logo_url ? (
                       <Image
-                        source={{ uri: formData.logo_url.startsWith('http') ? formData.logo_url : `http://localhost:3000${formData.logo_url}` }}
+                        source={{ uri: toAbsoluteUrl(formData.logo_url) }}
                         style={styles.logoImage}
                       />
                     ) : (

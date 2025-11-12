@@ -1,0 +1,163 @@
+=============================================================================
+📋 COMMANDES À COPIER-COLLER DANS LE TERMINAL PLESK
+=============================================================================
+
+⚠️  ATTENTION : Avant d'exécuter ces commandes, vous devez uploader dist.tar.gz
+
+📤 ÉTAPE 1 : UPLOAD du fichier dist.tar.gz
+─────────────────────────────────────────────────────────────────────────
+
+1. Dans Plesk, allez dans "Domains" > "simplix.drive.paraweb.fr" > "File Manager"
+2. Cliquez sur le bouton "Upload Files" (en haut)
+3. Uploadez le fichier : /Users/adelbouachraoui/Desktop/Bureau/Simplix/dist.tar.gz
+4. Déplacez-le dans le dossier : /var/www/simplix/
+
+=============================================================================
+
+🚀 ÉTAPE 2 : DÉPLOIEMENT (Terminal Plesk)
+─────────────────────────────────────────────────────────────────────────
+
+Copiez et collez TOUTES ces commandes dans le Terminal Plesk :
+
+─────────────────────────────────────────────────────────────────────────
+#!/bin/bash
+set -e
+
+echo "🚀 Déploiement Frontend Simplix CRM"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Vérifier que le fichier dist.tar.gz existe
+if [ ! -f "/var/www/simplix/dist.tar.gz" ]; then
+    echo "❌ ERREUR : dist.tar.gz non trouvé dans /var/www/simplix/"
+    echo "   Uploadez d'abord le fichier via File Manager Plesk"
+    exit 1
+fi
+
+# Créer répertoire web
+echo "📂 Création répertoire web..."
+mkdir -p /var/www/simplix/web
+
+# Extraire le frontend
+echo "📦 Extraction du frontend..."
+cd /var/www/simplix/web
+rm -rf *
+tar -xzf /var/www/simplix/dist.tar.gz
+
+# Permissions
+echo "🔒 Configuration permissions..."
+chown -R www-data:www-data /var/www/simplix/web
+chmod -R 755 /var/www/simplix/web
+
+# Configuration Nginx
+echo "⚙️  Configuration Nginx..."
+cat > /etc/nginx/sites-available/simplix.drive.paraweb.fr << 'NGINX_EOF'
+upstream simplix_api {
+    server 127.0.0.1:3000;
+    keepalive 64;
+}
+
+server {
+    listen 80;
+    server_name simplix.drive.paraweb.fr www.simplix.drive.paraweb.fr;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name simplix.drive.paraweb.fr www.simplix.drive.paraweb.fr;
+
+    ssl_certificate /etc/ssl/certs/simplix.drive.paraweb.fr.crt;
+    ssl_certificate_key /etc/ssl/private/simplix.drive.paraweb.fr.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    client_max_body_size 50M;
+
+    root /var/www/simplix/web;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache";
+    }
+
+    location /api {
+        proxy_pass http://simplix_api;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /uploads {
+        alias /var/www/simplix/uploads;
+        expires 30d;
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}
+NGINX_EOF
+
+# Vérifier configuration Nginx
+echo "🔍 Test configuration Nginx..."
+nginx -t
+
+# Recharger Nginx
+echo "🔄 Rechargement Nginx..."
+systemctl reload nginx
+
+# Afficher résultat
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ DÉPLOIEMENT RÉUSSI !"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "📊 État des services :"
+systemctl is-active nginx && echo "   ✅ Nginx : Running" || echo "   ❌ Nginx : Stopped"
+pm2 list 2>/dev/null | grep -q online && echo "   ✅ PM2   : Online" || echo "   ℹ️  PM2   : Vérifier manuellement"
+echo ""
+echo "📁 Fichiers déployés :"
+ls -lh /var/www/simplix/web/ | head -10
+echo ""
+echo "🌐 Accédez à : https://simplix.drive.paraweb.fr"
+echo "🔐 Login : admin@simplix.fr / admin123"
+─────────────────────────────────────────────────────────────────────────
+
+=============================================================================
+
+✅ RÉSULTAT ATTENDU
+─────────────────────────────────────────────────────────────────────────
+
+Si tout fonctionne, vous devriez voir :
+
+✅ DÉPLOIEMENT RÉUSSI !
+📊 État des services :
+   ✅ Nginx : Running
+   ✅ PM2   : Online
+
+📁 Fichiers déployés :
+-rw-r--r-- 1 www-data www-data  1.2K Nov 10 XX:XX index.html
+-rw-r--r-- 1 www-data www-data  14K  Nov 10 XX:XX favicon.ico
+...
+
+🌐 Accédez à : https://simplix.drive.paraweb.fr
+
+=============================================================================
+
+🎯 ENSUITE
+─────────────────────────────────────────────────────────────────────────
+
+1. Ouvrez votre navigateur
+2. Allez sur : https://simplix.drive.paraweb.fr
+3. Acceptez le certificat SSL auto-signé
+4. Connectez-vous avec : admin@simplix.fr / admin123
+
+Votre CRM complet sera opérationnel ! 🚀
+
+=============================================================================

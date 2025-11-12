@@ -57,6 +57,8 @@ const ExpensesScreen = () => {
   const [filters, setFilters] = useState<ExpenseFilters>({});
   const [search, setSearch] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [form, setForm] = useState<Partial<Expense>>({
     expense_date: new Date().toISOString().slice(0, 10),
@@ -162,8 +164,25 @@ const ExpensesScreen = () => {
     }
   };
 
+  const handleExpenseClick = (expense: Expense) => {
+    setSelectedExpense(expense);
+    setDetailModalVisible(true);
+  };
+
+  const handleUpdateExpenseStatus = async (expenseId: string, status: string, payment_status?: string) => {
+    try {
+      await expenseService.updateStatus(expenseId, { status, payment_status });
+      await Promise.all([loadExpenses(), loadSummary()]);
+      Alert.alert('Succès', 'Statut mis à jour.');
+      setDetailModalVisible(false);
+    } catch (error) {
+      console.error('Failed to update expense status', error);
+      Alert.alert('Erreur', 'Impossible de mettre à jour le statut.');
+    }
+  };
+
   const renderExpense = ({ item }: { item: Expense }) => (
-    <TouchableOpacity style={styles.expenseCard} activeOpacity={0.75}>
+    <TouchableOpacity style={styles.expenseCard} activeOpacity={0.75} onPress={() => handleExpenseClick(item)}>
       <View style={styles.expenseHeader}>
         <View style={styles.expenseIcon}>
           <FileTextIcon size={20} color="#0EA5E9" />
@@ -447,6 +466,142 @@ const ExpensesScreen = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Modal Détails/Modification Dépense */}
+      <Modal visible={detailModalVisible} animationType="slide" transparent>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContent}>
+            {selectedExpense && (
+              <>
+                <View style={styles.modalHeaderRow}>
+                  <Text style={styles.modalTitle}>Détails de la dépense</Text>
+                  <TouchableOpacity onPress={() => setDetailModalVisible(false)}>
+                    <Text style={styles.modalClose}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailLabel}>Description</Text>
+                    <Text style={styles.detailValue}>{selectedExpense.description || selectedExpense.reference || 'Sans description'}</Text>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailLabel}>Montant TTC</Text>
+                      <Text style={[styles.detailValue, styles.detailAmount]}>
+                        {formatCurrency(selectedExpense.amount || 0, selectedExpense.currency)}
+                      </Text>
+                    </View>
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailLabel}>TVA</Text>
+                      <Text style={styles.detailValue}>
+                        {formatCurrency(selectedExpense.tax_amount || 0, selectedExpense.currency)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailLabel}>Fournisseur</Text>
+                      {selectedExpense.supplier_id ? (
+                        <TouchableOpacity onPress={async () => {
+                          if (selectedExpense.supplier_id) {
+                            try {
+                              const { data } = await supplierService.getById(selectedExpense.supplier_id as string);
+                              Alert.alert(
+                                data.name || data.legal_name,
+                                `Email: ${data.email || 'N/A'}\nTéléphone: ${data.phone || 'N/A'}\nSite: ${data.website || 'N/A'}`,
+                                [{ text: 'OK' }]
+                              );
+                            } catch (error) {
+                              console.error('Failed to load supplier', error);
+                            }
+                          }
+                        }}>
+                          <Text style={[styles.detailValue, styles.detailLink]}>{selectedExpense.supplier_name || 'Non spécifié'}</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <Text style={styles.detailValue}>Non spécifié</Text>
+                      )}
+                    </View>
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailLabel}>Date</Text>
+                      <Text style={styles.detailValue}>{formatDate(selectedExpense.expense_date)}</Text>
+                    </View>
+                  </View>
+
+                  {selectedExpense.payment_method && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailLabel}>Méthode de paiement</Text>
+                      <Text style={styles.detailValue}>{selectedExpense.payment_method}</Text>
+                    </View>
+                  )}
+
+                  {selectedExpense.notes && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailLabel}>Notes</Text>
+                      <Text style={styles.detailValue}>{selectedExpense.notes}</Text>
+                    </View>
+                  )}
+
+                  <View style={styles.statusChangeSection}>
+                    <Text style={styles.statusChangeTitle}>Changer le statut</Text>
+
+                    <Text style={styles.statusChangeSubtitle}>Statut de la dépense</Text>
+                    <View style={styles.statusButtonRow}>
+                      {['submitted', 'approved', 'rejected'].map((status) => (
+                        <TouchableOpacity
+                          key={status}
+                          style={[
+                            styles.statusButton,
+                            selectedExpense.status === status && styles.statusButtonActive,
+                          ]}
+                          onPress={() => handleUpdateExpenseStatus(selectedExpense.id as string, status, selectedExpense.payment_status)}
+                        >
+                          <Text
+                            style={[
+                              styles.statusButtonText,
+                              selectedExpense.status === status && styles.statusButtonTextActive,
+                            ]}
+                          >
+                            {statusLabel(status)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={styles.statusChangeSubtitle}>Statut de paiement</Text>
+                    <View style={styles.statusButtonRow}>
+                      {['unpaid', 'partial', 'paid'].map((paymentStatus) => (
+                        <TouchableOpacity
+                          key={paymentStatus}
+                          style={[
+                            styles.statusButton,
+                            selectedExpense.payment_status === paymentStatus && styles.statusButtonActive,
+                          ]}
+                          onPress={() =>
+                            handleUpdateExpenseStatus(selectedExpense.id as string, selectedExpense.status || 'submitted', paymentStatus)
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.statusButtonText,
+                              selectedExpense.payment_status === paymentStatus && styles.statusButtonTextActive,
+                            ]}
+                          >
+                            {paymentLabel(paymentStatus)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -647,6 +802,90 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F172A',
   },
   modalSubmitText: { color: '#FFFFFF', fontWeight: '600' },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalClose: {
+    fontSize: 28,
+    color: '#64748B',
+    fontWeight: '300',
+  },
+  detailSection: {
+    marginBottom: 16,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  detailValue: {
+    fontSize: 15,
+    color: '#0F172A',
+    fontWeight: '500',
+  },
+  detailLink: {
+    color: '#2563EB',
+    textDecorationLine: 'underline',
+  },
+  detailAmount: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  statusChangeSection: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  statusChangeTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 16,
+  },
+  statusChangeSubtitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+    marginBottom: 10,
+    marginTop: 12,
+  },
+  statusButtonRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  statusButton: {
+    flex: 1,
+    minWidth: 90,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+  },
+  statusButtonActive: {
+    backgroundColor: '#0F172A',
+  },
+  statusButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  statusButtonTextActive: {
+    color: '#FFFFFF',
+  },
 });
 
 export default ExpensesScreen;

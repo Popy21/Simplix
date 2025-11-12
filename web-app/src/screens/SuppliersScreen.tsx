@@ -13,9 +13,9 @@ import {
   RefreshControl,
   Platform,
 } from 'react-native';
-import { supplierService } from '../services/api';
-import { Supplier } from '../types';
-import { DollarIcon, UsersIcon } from '../components/Icons';
+import { supplierService, expenseService } from '../services/api';
+import { Supplier, Expense } from '../types';
+import { DollarIcon, UsersIcon, FileTextIcon } from '../components/Icons';
 import Navigation from '../components/Navigation';
 
 type SupplierSummary = {
@@ -42,6 +42,10 @@ const SuppliersScreen = () => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Supplier['category'] | 'all'>('all');
   const [modalVisible, setModalVisible] = useState(false);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [supplierExpenses, setSupplierExpenses] = useState<Expense[]>([]);
+  const [loadingExpenses, setLoadingExpenses] = useState(false);
   const [form, setForm] = useState<Partial<Supplier>>({
     name: '',
     category: 'vendor',
@@ -89,6 +93,21 @@ const SuppliersScreen = () => {
     loadSummary();
   };
 
+  const handleSupplierClick = async (supplier: Supplier) => {
+    setSelectedSupplier(supplier);
+    setDetailModalVisible(true);
+    setLoadingExpenses(true);
+    try {
+      const { data } = await expenseService.getAll({ supplierId: supplier.id as string, limit: 10 });
+      setSupplierExpenses(data.data || []);
+    } catch (error) {
+      console.error('Failed to load supplier expenses', error);
+      setSupplierExpenses([]);
+    } finally {
+      setLoadingExpenses(false);
+    }
+  };
+
   const handleCreateSupplier = async () => {
     if (!form.name?.trim()) {
       Alert.alert('Nom requis', 'Veuillez renseigner un nom de fournisseur.');
@@ -116,7 +135,7 @@ const SuppliersScreen = () => {
   };
 
   const renderSupplier = ({ item }: { item: Supplier }) => (
-    <TouchableOpacity style={styles.card} activeOpacity={0.75}>
+    <TouchableOpacity style={styles.card} activeOpacity={0.75} onPress={() => handleSupplierClick(item)}>
       <View style={styles.cardHeader}>
         <View style={styles.avatar}>
           <UsersIcon size={22} color="#007AFF" />
@@ -324,6 +343,85 @@ const SuppliersScreen = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Modal Détails Fournisseur avec Dépenses */}
+      <Modal visible={detailModalVisible} animationType="slide" transparent>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContent}>
+            {selectedSupplier && (
+              <>
+                <View style={styles.modalHeaderRow}>
+                  <Text style={styles.modalTitle}>{selectedSupplier.name}</Text>
+                  <TouchableOpacity onPress={() => setDetailModalVisible(false)}>
+                    <Text style={styles.modalClose}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailLabel}>Catégorie</Text>
+                    <Text style={styles.detailValue}>{formatCategory(selectedSupplier.category)}</Text>
+                  </View>
+
+                  {selectedSupplier.contact_name && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailLabel}>Contact</Text>
+                      <Text style={styles.detailValue}>{selectedSupplier.contact_name}</Text>
+                    </View>
+                  )}
+
+                  {selectedSupplier.email && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailLabel}>Email</Text>
+                      <Text style={styles.detailValue}>{selectedSupplier.email}</Text>
+                    </View>
+                  )}
+
+                  {selectedSupplier.phone && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailLabel}>Téléphone</Text>
+                      <Text style={styles.detailValue}>{selectedSupplier.phone}</Text>
+                    </View>
+                  )}
+
+                  {selectedSupplier.website && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailLabel}>Site Web</Text>
+                      <Text style={styles.detailValue}>{selectedSupplier.website}</Text>
+                    </View>
+                  )}
+
+                  <View style={styles.expensesSection}>
+                    <Text style={styles.expensesSectionTitle}>Dépenses récentes</Text>
+                    {loadingExpenses ? (
+                      <ActivityIndicator size="small" color="#007AFF" style={{ marginTop: 16 }} />
+                    ) : supplierExpenses.length > 0 ? (
+                      supplierExpenses.map((expense) => (
+                        <View key={expense.id} style={styles.expenseItem}>
+                          <FileTextIcon size={18} color="#64748B" />
+                          <View style={{ flex: 1, marginLeft: 12 }}>
+                            <Text style={styles.expenseItemTitle}>
+                              {expense.description || expense.reference || 'Dépense'}
+                            </Text>
+                            <Text style={styles.expenseItemDate}>
+                              {expense.expense_date ? new Date(expense.expense_date).toLocaleDateString('fr-FR') : '—'}
+                            </Text>
+                          </View>
+                          <Text style={styles.expenseItemAmount}>
+                            {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: expense.currency || 'EUR' }).format(expense.amount || 0)}
+                          </Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.emptyExpensesText}>Aucune dépense enregistrée</Text>
+                    )}
+                  </View>
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -448,6 +546,73 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F172A',
   },
   modalSubmitText: { color: '#FFFFFF', fontWeight: '600' },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalClose: {
+    fontSize: 28,
+    color: '#64748B',
+    fontWeight: '300',
+  },
+  detailSection: {
+    marginBottom: 16,
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  detailValue: {
+    fontSize: 15,
+    color: '#0F172A',
+    fontWeight: '500',
+  },
+  expensesSection: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  expensesSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 16,
+  },
+  expenseItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  expenseItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  expenseItemDate: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  expenseItemAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  emptyExpensesText: {
+    fontSize: 14,
+    color: '#94A3B8',
+    textAlign: 'center',
+    paddingVertical: 24,
+  },
 });
 
 export default SuppliersScreen;

@@ -25,11 +25,11 @@ export default function ImageUpload({ value, onChange, multiple = false, label }
       if (multiple) {
         const uploadPromises = Array.from(files).map(file => uploadService.uploadImage(file));
         const results = await Promise.all(uploadPromises);
-        const newUrls = results.map(r => `http://localhost:3000${r.data.url}`);
+        const newUrls = results.map(r => r.data.url);
         onChange([...images, ...newUrls]);
       } else {
         const result = await uploadService.uploadImage(files[0]);
-        onChange(`http://localhost:3000${result.data.url}`);
+        onChange(result.data.url);
       }
     } catch (error) {
       console.error('Upload error:', error);
