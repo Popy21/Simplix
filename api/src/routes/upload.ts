@@ -8,7 +8,8 @@ import { requireOrganization } from '../middleware/multiTenancy';
 const router = express.Router();
 
 // Créer le dossier uploads s'il n'existe pas
-const uploadDir = path.join(__dirname, '../../uploads');
+// Use environment variable in production, default to local path in development
+const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }

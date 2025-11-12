@@ -11,7 +11,8 @@ module.exports = {
       max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000
+        PORT: 3000,
+        UPLOAD_DIR: '/var/www/simplix/uploads'
       },
       error_file: '/var/log/simplix/error.log',
       out_file: '/var/log/simplix/out.log',
