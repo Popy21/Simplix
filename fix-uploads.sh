@@ -34,11 +34,13 @@ remote_exec "
     ls -la $APP_DIR/ | grep uploads
 "
 
-# Pull latest code changes
+# Pull latest code changes (force reset to avoid conflicts)
 echo -e "${YELLOW}📥 Pulling latest code...${NC}"
 remote_exec "
     cd $APP_DIR
-    git pull origin main
+    git fetch origin main
+    git reset --hard origin/main
+    git clean -fd
 "
 
 # Copy updated ecosystem config
