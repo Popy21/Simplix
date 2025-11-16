@@ -12,7 +12,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 
 // App Screens
-import HomeScreen from './src/screens/HomeScreen';
+import HomeScreen from './src/screens/GlassHomeScreen';
 import DashboardScreen from './src/screens/GlassDashboardScreen';
 import PipelineScreen from './src/screens/GlassPipelineScreen';
 import TasksScreen from './src/screens/TasksScreen';

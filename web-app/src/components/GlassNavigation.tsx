@@ -228,7 +228,7 @@ export default function GlassNavigation() {
             onPress={handleLogout}
             activeOpacity={0.7}
           >
-            <Text style={styles.logoutIcon}>⏻</Text>
+            <Text style={styles.logoutIcon}>×</Text>
             {isExpanded && <Text style={styles.logoutText}>Déconnexion</Text>}
           </TouchableOpacity>
         </View>

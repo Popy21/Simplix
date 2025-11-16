@@ -322,7 +322,7 @@ export default function GlassPipelineScreen({ navigation }: PipelineScreenProps)
 
           <TouchableOpacity style={styles.filterButton} activeOpacity={0.7}>
             <GlassCard variant="light" elevation="sm" padding={12} borderRadius={12}>
-              <Text style={styles.filterIcon}>⚙️</Text>
+              <Text style={styles.filterIcon}>•••</Text>
             </GlassCard>
           </TouchableOpacity>
         </View>

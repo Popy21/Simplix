@@ -77,7 +77,7 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
           change: stats.revenue_change || 0,
           changeLabel: 'vs mois dernier',
           gradient: ['#007AFF', '#5AC8FA'],
-          icon: '📈',
+          icon: '€',
         },
         {
           id: '2',
@@ -86,7 +86,7 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
           change: stats.deals_change || 0,
           changeLabel: 'cette semaine',
           gradient: ['#5856D6', '#AF52DE'],
-          icon: '🎯',
+          icon: '•',
         },
         {
           id: '3',
@@ -95,7 +95,7 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
           change: stats.conversion_change || 0,
           changeLabel: 'vs mois dernier',
           gradient: ['#34C759', '#30D158'],
-          icon: '⚡',
+          icon: '%',
         },
         {
           id: '4',
@@ -104,7 +104,7 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
           change: stats.contacts_change || 0,
           changeLabel: 'cette semaine',
           gradient: ['#FF9500', '#FFCC00'],
-          icon: '👥',
+          icon: '+',
         },
       ];
 
@@ -120,7 +120,7 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
           change: 12.5,
           changeLabel: 'vs mois dernier',
           gradient: ['#007AFF', '#5AC8FA'],
-          icon: '📈',
+          icon: '€',
         },
         {
           id: '2',
@@ -129,7 +129,7 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
           change: 8.3,
           changeLabel: 'cette semaine',
           gradient: ['#5856D6', '#AF52DE'],
-          icon: '🎯',
+          icon: '•',
         },
         {
           id: '3',
@@ -138,7 +138,7 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
           change: 5.2,
           changeLabel: 'vs mois dernier',
           gradient: ['#34C759', '#30D158'],
-          icon: '⚡',
+          icon: '%',
         },
         {
           id: '4',
@@ -147,7 +147,7 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
           change: 15.7,
           changeLabel: 'cette semaine',
           gradient: ['#FF9500', '#FFCC00'],
-          icon: '👥',
+          icon: '+',
         },
       ]);
     } finally {
@@ -250,7 +250,7 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <View>
-              <Text style={styles.greeting}>Bonjour 👋</Text>
+              <Text style={styles.greeting}>Bonjour</Text>
               <Text style={styles.title}>Tableau de bord</Text>
             </View>
 
@@ -288,7 +288,7 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
           <Text style={styles.sectionTitle}>Activité récente</Text>
           <GlassCard variant="frosted" elevation="md">
             <View style={styles.activityPlaceholder}>
-              <Text style={styles.placeholderText}>🚀 Chargement de l'activité...</Text>
+              <Text style={styles.placeholderText}>Chargement de l'activité...</Text>
             </View>
           </GlassCard>
         </Animated.View>
@@ -312,7 +312,7 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
 
           <GlassCard variant="frosted" elevation="md">
             <View style={styles.pipelinePlaceholder}>
-              <Text style={styles.placeholderText}>📊 Visualisation du pipeline</Text>
+              <Text style={styles.placeholderText}>Visualisation du pipeline</Text>
             </View>
           </GlassCard>
         </Animated.View>
