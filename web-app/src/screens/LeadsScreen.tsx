@@ -23,6 +23,7 @@ import {
   TrendingDownIcon,
   UsersIcon,
 } from '../components/Icons';
+import { leadsService, contactService } from '../services/api';
 
 type LeadsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Contacts'>;
@@ -85,7 +86,33 @@ export default function LeadsScreen({ navigation }: LeadsScreenProps) {
 
   const fetchLeads = async () => {
     try {
-      // Mock data - remplacer par appel API réel
+      setLoading(true);
+
+      // Fetch real leads data from API
+      const response = await contactService.getAll({ type: 'lead' });
+      const contacts = response.data.data || response.data;
+
+      // Transform API data to Lead format
+      const apiLeads: Lead[] = contacts.map((contact: any) => ({
+        id: contact.id,
+        name: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.full_name || 'N/A',
+        company: contact.company_name || 'N/A',
+        email: contact.email || '',
+        phone: contact.phone || '',
+        score: contact.score || 0,
+        trend: contact.score >= 70 ? 'up' : contact.score >= 40 ? 'flat' : 'down',
+        contacts: 0, // Could be calculated from activities
+        lastActivity: 'N/A',
+        status: contact.score >= 70 ? 'hot' : contact.score >= 40 ? 'warm' : 'cold',
+        deals: 0, // Could be fetched from deals API
+        activities: 0, // Could be fetched from activities API
+      }));
+
+      setLeads(apiLeads);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching leads:', error);
+      // Fallback to mock data if API fails
       const mockLeads: Lead[] = [
         {
           id: '1',

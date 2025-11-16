@@ -563,3 +563,79 @@ export const campaignsService = {
     api.post(`/campaigns/${id}/track/${action}`, { customer_id }),
   getStats: (id: number) => api.get(`/campaigns/${id}/stats`),
 };
+
+// Deals API
+export const dealsService = {
+  getAll: (params?: { pipeline_id?: string; stage_id?: string; status?: string; owner_id?: string; min_value?: number; max_value?: number; search?: string }) =>
+    api.get('/deals', { params }),
+  getById: (id: string) => api.get(`/deals/${id}`),
+  create: (deal: { title: string; pipeline_id: string; stage_id: string; value?: number; probability?: number; contact_id?: string; company_id?: string; expected_close_date?: string; description?: string }) =>
+    api.post('/deals', deal),
+  update: (id: string, deal: any) => api.put(`/deals/${id}`, deal),
+  delete: (id: string) => api.delete(`/deals/${id}`),
+  updateStage: (id: string, stage_id: string) => api.patch(`/deals/${id}/stage`, { stage_id }),
+  updateStatus: (id: string, status: string, data?: { lost_reason?: string }) =>
+    api.patch(`/deals/${id}/status`, { status, ...data }),
+  getRecentlyDeleted: (params?: { limit?: number }) =>
+    api.get('/deals/deleted/recent', { params }),
+  restore: (id: string) => api.patch(`/deals/${id}/restore`),
+  getSummary: () => api.get('/deals/summary'),
+};
+
+// Leads API
+export const leadsService = {
+  getAll: (params?: { status?: string; source?: string; min_score?: number; max_score?: number; page?: number; limit?: number }) =>
+    api.get('/leads', { params }),
+  getById: (id: string) => api.get(`/leads/${id}`),
+  getScoreBreakdown: (id: string) => api.get(`/leads/${id}/score-breakdown`),
+  updateScore: (id: string) => api.post(`/leads/${id}/recalculate-score`),
+  getTopLeads: (params?: { limit?: number; min_score?: number }) =>
+    api.get('/leads/top', { params }),
+  convertToCustomer: (id: string) => api.post(`/leads/${id}/convert-to-customer`),
+};
+
+// Documents API
+export const documentsService = {
+  getAll: (params?: { contact_id?: string; deal_id?: string; company_id?: string; type?: string }) =>
+    api.get('/documents', { params }),
+  getById: (id: string) => api.get(`/documents/${id}`),
+  create: (document: { title: string; file_url: string; file_name: string; contact_id?: string; deal_id?: string; company_id?: string; document_type?: string; description?: string; file_size?: number; mime_type?: string }) =>
+    api.post('/documents', document),
+  update: (id: string, document: any) => api.put(`/documents/${id}`, document),
+  delete: (id: string) => api.delete(`/documents/${id}`),
+  getVersions: (id: string) => api.get(`/documents/${id}/versions`),
+  createVersion: (id: string, data: { file_url: string; file_name: string; change_notes?: string }) =>
+    api.post(`/documents/${id}/versions`, data),
+};
+
+// Workflows API
+export const workflowsService = {
+  getAll: (organizationId: string) => api.get('/workflows', { params: { organizationId } }),
+  getById: (workflowId: string) => api.get(`/workflows/${workflowId}`),
+  create: (workflow: { organizationId: string; name: string; description?: string; trigger: any; actions: any[]; enabled?: boolean }) =>
+    api.post('/workflows', workflow),
+  update: (workflowId: string, workflow: any) => api.put(`/workflows/${workflowId}`, workflow),
+  delete: (workflowId: string) => api.delete(`/workflows/${workflowId}`),
+  toggle: (workflowId: string, enabled: boolean) => api.patch(`/workflows/${workflowId}/toggle`, { enabled }),
+  getExecutions: (workflowId: string, params?: { page?: number; limit?: number }) =>
+    api.get(`/workflows/${workflowId}/executions`, { params }),
+  testWorkflow: (workflowId: string, testData?: any) =>
+    api.post(`/workflows/${workflowId}/test`, { testData }),
+};
+
+// Emails API
+export const emailsService = {
+  send: (data: { organizationId: string; to: string; subject: string; body?: string; cc?: string; bcc?: string; templateId?: string; variables?: any; attachments?: any[] }) =>
+    api.post('/emails/send', data),
+  getTemplates: (organizationId: string) => api.get('/emails/templates', { params: { organizationId } }),
+  getTemplateById: (templateId: string) => api.get(`/emails/templates/${templateId}`),
+  createTemplate: (template: { organizationId: string; name: string; subject: string; body: string; variables?: string[] }) =>
+    api.post('/emails/templates', template),
+  updateTemplate: (templateId: string, template: any) =>
+    api.put(`/emails/templates/${templateId}`, template),
+  deleteTemplate: (templateId: string) => api.delete(`/emails/templates/${templateId}`),
+  getLogs: (params?: { organizationId?: string; from_date?: string; to_date?: string; status?: string; page?: number; limit?: number }) =>
+    api.get('/emails/logs', { params }),
+  trackOpen: (emailId: string) => api.post(`/emails/${emailId}/track/open`),
+  trackClick: (emailId: string, linkUrl: string) => api.post(`/emails/${emailId}/track/click`, { linkUrl }),
+};

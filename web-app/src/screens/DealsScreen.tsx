@@ -15,6 +15,8 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { TrendingUpIcon, UsersIcon, DollarIcon, CalendarIcon } from '../components/Icons';
+import { dealsService, pipelineService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 type DealsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -43,7 +45,8 @@ interface DealStage {
 const { width, height } = Dimensions.get('window');
 
 export default function DealsScreen({ navigation }: DealsScreenProps) {
-  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
   const [stages, setStages] = useState<DealStage[]>([]);
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -54,16 +57,65 @@ export default function DealsScreen({ navigation }: DealsScreenProps) {
     contact: '',
     value: '',
     probability: '25',
-    stageId: 'prospection',
+    stageId: '',
     expectedCloseDate: '',
   });
 
   useEffect(() => {
-    initializeKanban();
+    fetchDealsData();
   }, []);
 
-  const initializeKanban = () => {
-    // Mock data - à remplacer par API réelle
+  const fetchDealsData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch pipeline stages and deals in parallel
+      const [stagesResponse, dealsResponse] = await Promise.all([
+        pipelineService.getStages(),
+        dealsService.getAll({ status: 'open' })
+      ]);
+
+      const pipelineStages = stagesResponse.data;
+      const allDeals = dealsResponse.data;
+
+      // Group deals by stage
+      const stagesWithDeals: DealStage[] = pipelineStages.map((stage: any) => ({
+        id: stage.id,
+        name: stage.name,
+        color: stage.color || '#007AFF',
+        deals: allDeals
+          .filter((deal: any) => deal.stage_id === stage.id)
+          .map((deal: any) => ({
+            id: deal.id,
+            title: deal.title,
+            company: deal.company_name || 'N/A',
+            contact: deal.contact_name || 'N/A',
+            value: parseFloat(deal.value) || 0,
+            probability: deal.probability || 0,
+            stageId: deal.stage_id,
+            stageName: deal.stage_name,
+            expectedCloseDate: deal.expected_close_date ? new Date(deal.expected_close_date).toLocaleDateString('fr-FR') : '',
+            notes: deal.description || '',
+          })),
+      }));
+
+      setStages(stagesWithDeals);
+
+      // Set first stage as default for new deals
+      if (stagesWithDeals.length > 0) {
+        setNewDealForm(prev => ({ ...prev, stageId: stagesWithDeals[0].id }));
+      }
+    } catch (error) {
+      console.error('Error fetching deals:', error);
+      Alert.alert('Erreur', 'Impossible de charger les opportunités');
+      // Fallback to mock data if API fails
+      initializeMockData();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const initializeMockData = () => {
     const mockStages: DealStage[] = [
       {
         id: '1',
