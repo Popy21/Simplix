@@ -17,7 +17,7 @@ import DashboardScreen from './src/screens/GlassDashboardScreen';
 import PipelineScreen from './src/screens/GlassPipelineScreen';
 import TasksScreen from './src/screens/TasksScreen';
 import ContactsScreen from './src/screens/ContactsScreen';
-import AnalyticsScreen from './src/screens/AnalyticsScreen';
+import AnalyticsScreen from './src/screens/GlassAnalyticsScreen';
 import InvoicesScreen from './src/screens/InvoicesScreen';
 import ProductsScreen from './src/screens/ProductsScreen';
 import SalesScreen from './src/screens/SalesScreen';
