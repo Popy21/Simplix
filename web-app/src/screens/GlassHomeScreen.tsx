@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Dimensions,
   Platform,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -23,6 +24,19 @@ import {
   PackageIcon,
   DollarIcon,
   SettingsIcon,
+  BarChartIcon,
+  GridIcon,
+  TargetIcon,
+  BriefcaseIcon,
+  SendIcon,
+  ZapIcon,
+  RepeatIcon,
+  ShoppingCartIcon,
+  TruckIcon,
+  FolderIcon,
+  CopyIcon,
+  PieChartIcon,
+  LayersIcon,
 } from '../components/Icons';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -31,86 +45,272 @@ type HomeScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
 };
 
+interface MenuCategory {
+  id: string;
+  title: string;
+  icon: React.ComponentType<{ size: number; color: string }>;
+  gradient: [string, string];
+  items: MenuItem[];
+}
+
 interface MenuItem {
   id: string;
   title: string;
   subtitle: string;
   screen: keyof RootStackParamList;
   icon: React.ComponentType<{ size: number; color: string }>;
-  gradient: [string, string];
   badge?: string;
+  isNew?: boolean;
 }
 
-const menuItems: MenuItem[] = [
+const menuCategories: MenuCategory[] = [
   {
-    id: '1',
-    title: 'Tableau de bord',
-    subtitle: 'Vue d\'ensemble et statistiques',
-    screen: 'Dashboard',
-    icon: ChartIcon,
+    id: 'core',
+    title: 'Vue d\'ensemble',
+    icon: GridIcon,
     gradient: ['#007AFF', '#5AC8FA'],
+    items: [
+      {
+        id: 'dashboard',
+        title: 'Tableau de bord',
+        subtitle: 'Vue d\'ensemble et KPIs',
+        screen: 'Dashboard',
+        icon: ChartIcon,
+      },
+      {
+        id: 'analytics',
+        title: 'Analytique',
+        subtitle: 'Rapports et statistiques',
+        screen: 'Analytics',
+        icon: BarChartIcon,
+      },
+      {
+        id: 'pilotage',
+        title: 'Pilotage',
+        subtitle: 'Indicateurs de performance',
+        screen: 'Pilotage',
+        icon: PieChartIcon,
+      },
+    ],
   },
   {
-    id: '2',
-    title: 'Pipeline',
-    subtitle: 'Gestion des opportunités',
-    screen: 'Pipeline',
-    icon: TrendingUpIcon,
+    id: 'sales',
+    title: 'Ventes & CRM',
+    icon: TargetIcon,
     gradient: ['#5856D6', '#AF52DE'],
+    items: [
+      {
+        id: 'pipeline',
+        title: 'Pipeline',
+        subtitle: 'Gestion des opportunités',
+        screen: 'Pipeline',
+        icon: TrendingUpIcon,
+        badge: '12',
+      },
+      {
+        id: 'contacts',
+        title: 'Contacts',
+        subtitle: 'Base de données clients',
+        screen: 'Contacts',
+        icon: UsersIcon,
+      },
+      {
+        id: 'deals',
+        title: 'Affaires',
+        subtitle: 'Suivi des deals',
+        screen: 'Deals',
+        icon: BriefcaseIcon,
+      },
+      {
+        id: 'leads',
+        title: 'Leads',
+        subtitle: 'Prospects qualifiés',
+        screen: 'Leads',
+        icon: TargetIcon,
+        isNew: true,
+      },
+    ],
   },
   {
-    id: '3',
-    title: 'Tâches',
-    subtitle: 'Suivi des actions',
-    screen: 'Tasks',
-    icon: CheckCircleIcon,
+    id: 'operations',
+    title: 'Opérations',
+    icon: LayersIcon,
     gradient: ['#FF9500', '#FFCC00'],
-    badge: '3',
+    items: [
+      {
+        id: 'tasks',
+        title: 'Tâches',
+        subtitle: 'Suivi des actions',
+        screen: 'Tasks',
+        icon: CheckCircleIcon,
+        badge: '7',
+      },
+      {
+        id: 'sales',
+        title: 'Ventes',
+        subtitle: 'Historique des transactions',
+        screen: 'Sales',
+        icon: DollarIcon,
+      },
+      {
+        id: 'invoices',
+        title: 'Factures',
+        subtitle: 'Gestion comptable',
+        screen: 'Invoices',
+        icon: FileTextIcon,
+      },
+      {
+        id: 'products',
+        title: 'Produits',
+        subtitle: 'Catalogue et tarifs',
+        screen: 'Products',
+        icon: PackageIcon,
+      },
+    ],
   },
   {
-    id: '4',
-    title: 'Contacts',
-    subtitle: 'Base de données clients',
-    screen: 'Contacts',
-    icon: UsersIcon,
-    gradient: ['#34C759', '#30D158'],
-  },
-  {
-    id: '5',
-    title: 'Factures',
-    subtitle: 'Gestion comptable',
-    screen: 'Invoices',
-    icon: FileTextIcon,
-    gradient: ['#FF2D55', '#FF375F'],
-  },
-  {
-    id: '6',
-    title: 'Produits',
-    subtitle: 'Catalogue et tarifs',
-    screen: 'Products',
-    icon: PackageIcon,
-    gradient: ['#AF52DE', '#BF5AF2'],
-  },
-  {
-    id: '7',
-    title: 'Ventes',
-    subtitle: 'Historique des transactions',
-    screen: 'Sales',
+    id: 'finance',
+    title: 'Finance',
     icon: DollarIcon,
-    gradient: ['#007AFF', '#5AC8FA'],
+    gradient: ['#34C759', '#30D158'],
+    items: [
+      {
+        id: 'expenses',
+        title: 'Dépenses',
+        subtitle: 'Gestion des frais',
+        screen: 'Expenses',
+        icon: ShoppingCartIcon,
+      },
+      {
+        id: 'suppliers',
+        title: 'Fournisseurs',
+        subtitle: 'Base fournisseurs',
+        screen: 'Suppliers',
+        icon: TruckIcon,
+      },
+    ],
   },
   {
-    id: '8',
-    title: 'Paramètres',
-    subtitle: 'Configuration de l\'application',
-    screen: 'Profile',
+    id: 'automation',
+    title: 'Automatisation',
+    icon: ZapIcon,
+    gradient: ['#FF2D55', '#FF375F'],
+    items: [
+      {
+        id: 'workflows',
+        title: 'Workflows',
+        subtitle: 'Automatisation des processus',
+        screen: 'Workflows',
+        icon: RepeatIcon,
+        isNew: true,
+      },
+      {
+        id: 'emails',
+        title: 'Emails',
+        subtitle: 'Campagnes et templates',
+        screen: 'Emails',
+        icon: SendIcon,
+      },
+      {
+        id: 'documents',
+        title: 'Documents',
+        subtitle: 'Gestion documentaire',
+        screen: 'Documents',
+        icon: FolderIcon,
+      },
+      {
+        id: 'templates',
+        title: 'Templates',
+        subtitle: 'Modèles de documents',
+        screen: 'Templates',
+        icon: CopyIcon,
+      },
+    ],
+  },
+  {
+    id: 'settings',
+    title: 'Configuration',
     icon: SettingsIcon,
     gradient: ['#8E8E93', '#AEAEB2'],
+    items: [
+      {
+        id: 'teams',
+        title: 'Équipes',
+        subtitle: 'Gestion des utilisateurs',
+        screen: 'Teams',
+        icon: UsersIcon,
+      },
+      {
+        id: 'profile',
+        title: 'Profil',
+        subtitle: 'Paramètres personnels',
+        screen: 'Profile',
+        icon: SettingsIcon,
+      },
+    ],
   },
 ];
 
 export default function GlassHomeScreen({ navigation }: HomeScreenProps) {
-  const renderMenuItem = (item: MenuItem) => {
+  const [expandedCategory, setExpandedCategory] = useState<string | null>('core');
+
+  const toggleCategory = (categoryId: string) => {
+    setExpandedCategory(expandedCategory === categoryId ? null : categoryId);
+  };
+
+  const renderCategoryHeader = (category: MenuCategory) => {
+    const Icon = category.icon;
+    const isExpanded = expandedCategory === category.id;
+
+    return (
+      <TouchableOpacity
+        key={category.id}
+        onPress={() => toggleCategory(category.id)}
+        activeOpacity={0.8}
+        style={styles.categoryHeader}
+      >
+        <GlassCard variant="frosted" elevation="md" glow glowColor={category.gradient[0]}>
+          <LinearGradient
+            colors={[...category.gradient.map((c) => c + '08')]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+
+          <View style={styles.categoryHeaderContent}>
+            <View style={styles.categoryLeft}>
+              <View
+                style={[
+                  styles.categoryIconContainer,
+                  { backgroundColor: category.gradient[0] + '20' },
+                ]}
+              >
+                <Icon size={24} color={category.gradient[0]} />
+              </View>
+
+              <View>
+                <Text style={styles.categoryTitle}>{category.title}</Text>
+                <Text style={styles.categorySubtitle}>
+                  {category.items.length} modules
+                </Text>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.chevron,
+                { transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] },
+              ]}
+            >
+              <Text style={styles.chevronText}>▼</Text>
+            </View>
+          </View>
+        </GlassCard>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderMenuItem = (item: MenuItem, categoryGradient: [string, string]) => {
     const Icon = item.icon;
 
     return (
@@ -120,45 +320,65 @@ export default function GlassHomeScreen({ navigation }: HomeScreenProps) {
         activeOpacity={0.9}
         style={styles.menuItemWrapper}
       >
-        <GlassCard variant="frosted" elevation="md" padding={0} glow glowColor={item.gradient[0]}>
+        <GlassCard variant="light" elevation="sm" glow glowColor={categoryGradient[0]}>
           <LinearGradient
-            colors={[...item.gradient.map(c => c + '10')]}
+            colors={[...categoryGradient.map((c) => c + '05')]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
 
           <View style={styles.menuItemContent}>
-            <View style={styles.menuItemHeader}>
+            <View style={styles.menuItemLeft}>
               <View
                 style={[
-                  styles.iconContainer,
-                  {
-                    backgroundColor: item.gradient[0] + '20',
-                  },
+                  styles.menuIconContainer,
+                  { backgroundColor: categoryGradient[0] + '15' },
                 ]}
               >
-                <Icon size={28} color={item.gradient[0]} />
+                <Icon size={22} color={categoryGradient[0]} />
               </View>
 
+              <View style={styles.menuItemText}>
+                <View style={styles.menuItemTitleRow}>
+                  <Text style={styles.menuItemTitle}>{item.title}</Text>
+                  {item.isNew && (
+                    <View style={styles.newBadge}>
+                      <Text style={styles.newBadgeText}>NEW</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.menuItemSubtitle}>{item.subtitle}</Text>
+              </View>
+            </View>
+
+            <View style={styles.menuItemRight}>
               {item.badge && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{item.badge}</Text>
                 </View>
               )}
-            </View>
-
-            <View style={styles.menuItemText}>
-              <Text style={styles.menuItemTitle}>{item.title}</Text>
-              <Text style={styles.menuItemSubtitle}>{item.subtitle}</Text>
-            </View>
-
-            <View style={styles.arrowContainer}>
               <Text style={styles.arrow}>→</Text>
             </View>
           </View>
         </GlassCard>
       </TouchableOpacity>
+    );
+  };
+
+  const renderCategory = (category: MenuCategory) => {
+    const isExpanded = expandedCategory === category.id;
+
+    return (
+      <View key={category.id} style={styles.categoryWrapper}>
+        {renderCategoryHeader(category)}
+
+        {isExpanded && (
+          <View style={styles.categoryItems}>
+            {category.items.map((item) => renderMenuItem(item, category.gradient))}
+          </View>
+        )}
+      </View>
     );
   };
 
@@ -180,31 +400,41 @@ export default function GlassHomeScreen({ navigation }: HomeScreenProps) {
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>Simplix CRM</Text>
-            <Text style={styles.subtitle}>Bienvenue dans votre espace de gestion</Text>
+            <Text style={styles.subtitle}>
+              Plateforme complète de gestion commerciale
+            </Text>
           </View>
 
-          {/* Menu Grid */}
-          <View style={styles.menuGrid}>{menuItems.map(renderMenuItem)}</View>
-
-          {/* Quick Stats Footer */}
-          <GlassCard variant="light" elevation="sm" style={styles.footer}>
-            <View style={styles.footerContent}>
-              <View style={styles.footerStat}>
-                <Text style={styles.footerStatValue}>24</Text>
-                <Text style={styles.footerStatLabel}>Tâches en cours</Text>
+          {/* Quick Stats */}
+          <GlassCard variant="frosted" elevation="md" style={styles.statsCard}>
+            <LinearGradient
+              colors={['#007AFF10', '#5AC8FA10']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.statsContent}>
+              <View style={styles.stat}>
+                <Text style={styles.statValue}>24</Text>
+                <Text style={styles.statLabel}>Tâches actives</Text>
               </View>
-              <View style={styles.footerDivider} />
-              <View style={styles.footerStat}>
-                <Text style={styles.footerStatValue}>156</Text>
-                <Text style={styles.footerStatLabel}>Contacts</Text>
+              <View style={styles.statDivider} />
+              <View style={styles.stat}>
+                <Text style={styles.statValue}>156</Text>
+                <Text style={styles.statLabel}>Contacts</Text>
               </View>
-              <View style={styles.footerDivider} />
-              <View style={styles.footerStat}>
-                <Text style={styles.footerStatValue}>12</Text>
-                <Text style={styles.footerStatLabel}>Deals actifs</Text>
+              <View style={styles.statDivider} />
+              <View style={styles.stat}>
+                <Text style={styles.statValue}>12</Text>
+                <Text style={styles.statLabel}>Deals ouverts</Text>
               </View>
             </View>
           </GlassCard>
+
+          {/* Categories */}
+          <View style={styles.categoriesContainer}>
+            {menuCategories.map(renderCategory)}
+          </View>
         </ScrollView>
       </View>
     </GlassLayout>
@@ -225,7 +455,7 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
-    marginBottom: glassTheme.spacing.xl,
+    marginBottom: glassTheme.spacing.lg,
   },
   title: {
     ...glassTheme.typography.displayMedium,
@@ -237,36 +467,139 @@ const styles = StyleSheet.create({
     color: glassTheme.colors.text.tertiary,
   },
 
-  // Menu Grid
-  menuGrid: {
-    gap: glassTheme.spacing.md,
+  // Stats Card
+  statsCard: {
     marginBottom: glassTheme.spacing.xl,
   },
+  statsContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: glassTheme.spacing.md,
+  },
+  stat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    ...glassTheme.typography.displaySmall,
+    color: glassTheme.colors.primary,
+    marginBottom: 4,
+  },
+  statLabel: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+  },
+
+  // Categories
+  categoriesContainer: {
+    gap: glassTheme.spacing.lg,
+  },
+  categoryWrapper: {
+    gap: glassTheme.spacing.sm,
+  },
+
+  // Category Header
+  categoryHeader: {
+    marginBottom: 0,
+  },
+  categoryHeaderContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: glassTheme.spacing.md,
+  },
+  categoryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: glassTheme.spacing.md,
+  },
+  categoryIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  categoryTitle: {
+    ...glassTheme.typography.h2,
+    color: glassTheme.colors.text.primary,
+    marginBottom: 2,
+  },
+  categorySubtitle: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+  },
+  chevron: {
+    transition: 'transform 0.3s ease',
+  },
+  chevronText: {
+    fontSize: 12,
+    color: glassTheme.colors.text.tertiary,
+  },
+
+  // Category Items
+  categoryItems: {
+    gap: glassTheme.spacing.sm,
+    paddingLeft: glassTheme.spacing.md,
+  },
+
+  // Menu Item
   menuItemWrapper: {
     width: '100%',
   },
   menuItemContent: {
-    padding: glassTheme.spacing.lg,
-    minHeight: 100,
-  },
-  menuItemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: glassTheme.spacing.md,
+    alignItems: 'center',
+    paddingVertical: glassTheme.spacing.md,
   },
-  iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+  menuItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: glassTheme.spacing.md,
+    flex: 1,
+  },
+  menuIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  menuItemText: {
+    flex: 1,
+  },
+  menuItemTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  menuItemTitle: {
+    ...glassTheme.typography.bodyLarge,
+    color: glassTheme.colors.text.primary,
+    fontWeight: '600',
+  },
+  menuItemSubtitle: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+  },
+  menuItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: glassTheme.spacing.sm,
+  },
   badge: {
     backgroundColor: glassTheme.colors.error,
-    minWidth: 24,
-    height: 24,
-    borderRadius: 12,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 8,
@@ -277,53 +610,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  menuItemText: {
-    marginBottom: glassTheme.spacing.sm,
+  newBadge: {
+    backgroundColor: glassTheme.colors.success,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
-  menuItemTitle: {
-    ...glassTheme.typography.h2,
-    color: glassTheme.colors.text.primary,
-    marginBottom: 4,
-  },
-  menuItemSubtitle: {
-    ...glassTheme.typography.bodySmall,
-    color: glassTheme.colors.text.tertiary,
-  },
-  arrowContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
+  newBadgeText: {
+    ...glassTheme.typography.caption,
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '700',
   },
   arrow: {
-    fontSize: 20,
+    fontSize: 18,
     color: glassTheme.colors.text.tertiary,
-  },
-
-  // Footer
-  footer: {
-    marginTop: glassTheme.spacing.lg,
-  },
-  footerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingVertical: glassTheme.spacing.md,
-  },
-  footerStat: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  footerStatValue: {
-    ...glassTheme.typography.displaySmall,
-    color: glassTheme.colors.primary,
-    marginBottom: 4,
-  },
-  footerStatLabel: {
-    ...glassTheme.typography.caption,
-    color: glassTheme.colors.text.tertiary,
-  },
-  footerDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: 'rgba(0, 0, 0, 0.08)',
   },
 });

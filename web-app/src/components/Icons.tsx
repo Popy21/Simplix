@@ -324,3 +324,97 @@ export const SettingsIcon = ({ size = 24, color = '#8E8E93' }: IconProps) => (
     />
   </Svg>
 );
+
+export const BarChartIcon = ({ size = 24, color = '#007AFF' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Line x1="18" y1="20" x2="18" y2="10" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    <Line x1="12" y1="20" x2="12" y2="4" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    <Line x1="6" y1="20" x2="6" y2="14" stroke={color} strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+export const GridIcon = ({ size = 24, color = '#007AFF' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="3" y="3" width="7" height="7" rx="1" stroke={color} strokeWidth="2" />
+    <Rect x="14" y="3" width="7" height="7" rx="1" stroke={color} strokeWidth="2" />
+    <Rect x="3" y="14" width="7" height="7" rx="1" stroke={color} strokeWidth="2" />
+    <Rect x="14" y="14" width="7" height="7" rx="1" stroke={color} strokeWidth="2" />
+  </Svg>
+);
+
+export const LayersIcon = ({ size = 24, color = '#007AFF' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 2L2 7l10 5 10-5-10-5z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const TargetIcon = ({ size = 24, color = '#FF3B30' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth="2" />
+    <Circle cx="12" cy="12" r="6" stroke={color} strokeWidth="2" />
+    <Circle cx="12" cy="12" r="2" stroke={color} strokeWidth="2" />
+  </Svg>
+);
+
+export const BriefcaseIcon = ({ size = 24, color = '#5856D6' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="2" y="7" width="20" height="14" rx="2" stroke={color} strokeWidth="2" />
+    <Path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16" stroke={color} strokeWidth="2" />
+  </Svg>
+);
+
+export const SendIcon = ({ size = 24, color = '#34C759' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const ZapIcon = ({ size = 24, color = '#FFCC00' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const RepeatIcon = ({ size = 24, color = '#007AFF' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const ShoppingCartIcon = ({ size = 24, color = '#FF9500' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="9" cy="21" r="1" stroke={color} strokeWidth="2" />
+    <Circle cx="20" cy="21" r="1" stroke={color} strokeWidth="2" />
+    <Path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const TruckIcon = ({ size = 24, color = '#8E8E93' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="1" y="3" width="15" height="13" rx="2" stroke={color} strokeWidth="2" />
+    <Path d="M16 8h5l3 3v5h-4" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <Circle cx="5.5" cy="18.5" r="2.5" stroke={color} strokeWidth="2" />
+    <Circle cx="18.5" cy="18.5" r="2.5" stroke={color} strokeWidth="2" />
+  </Svg>
+);
+
+export const FolderIcon = ({ size = 24, color = '#007AFF' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const CopyIcon = ({ size = 24, color = '#007AFF' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="9" y="9" width="13" height="13" rx="2" stroke={color} strokeWidth="2" />
+    <Path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const PieChartIcon = ({ size = 24, color = '#AF52DE' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M21.21 15.89A10 10 0 118 2.83" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M22 12A10 10 0 0012 2v10z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
