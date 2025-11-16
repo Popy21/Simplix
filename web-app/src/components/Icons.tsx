@@ -312,3 +312,15 @@ export const EyeIcon = ({ size = 24, color = '#007AFF' }: IconProps) => (
     <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth="2" />
   </Svg>
 );
+
+export const SettingsIcon = ({ size = 24, color = '#8E8E93' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth="2" />
+    <Path
+      d="M12 1v6m0 6v10M6.5 4.5l3 3m5 5l3 3M1 12h6m6 0h10M4.5 17.5l3-3m5-5l3-3"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
+  </Svg>
+);
