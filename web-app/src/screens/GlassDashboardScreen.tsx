@@ -16,6 +16,7 @@ import { RootStackParamList } from '../navigation/types';
 import { glassTheme } from '../theme/glassTheme';
 import GlassCard from '../components/GlassCard';
 import { analyticsService } from '../services/api';
+import GlassLayout from '../components/GlassLayout';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH > 768 ? (SCREEN_WIDTH - 360) / 3 : SCREEN_WIDTH - 48;
@@ -230,16 +231,17 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
   };
 
   return (
-    <View style={styles.container}>
-      {/* Animated gradient background */}
-      <LinearGradient
-        colors={['#F2F2F7', '#E8E8ED', '#F2F2F7']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+    <GlassLayout>
+      <View style={styles.container}>
+        {/* Animated gradient background */}
+        <LinearGradient
+          colors={['#F2F2F7', '#E8E8ED', '#F2F2F7']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
 
-      <ScrollView
+        <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -315,7 +317,8 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
           </GlassCard>
         </Animated.View>
       </ScrollView>
-    </View>
+      </View>
+    </GlassLayout>
   );
 }
 

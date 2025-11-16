@@ -13,8 +13,8 @@ import RegisterScreen from './src/screens/RegisterScreen';
 
 // App Screens
 import HomeScreen from './src/screens/HomeScreen';
-import DashboardScreen from './src/screens/DashboardScreen';
-import PipelineScreen from './src/screens/PipelineScreen';
+import DashboardScreen from './src/screens/GlassDashboardScreen';
+import PipelineScreen from './src/screens/GlassPipelineScreen';
 import TasksScreen from './src/screens/TasksScreen';
 import ContactsScreen from './src/screens/ContactsScreen';
 import AnalyticsScreen from './src/screens/AnalyticsScreen';

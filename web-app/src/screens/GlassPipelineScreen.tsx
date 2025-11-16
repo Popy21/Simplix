@@ -15,6 +15,7 @@ import { RootStackParamList } from '../navigation/types';
 import { glassTheme } from '../theme/glassTheme';
 import GlassCard from '../components/GlassCard';
 import { dealsService, pipelineService } from '../services/api';
+import GlassLayout from '../components/GlassLayout';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLUMN_WIDTH = 320;
@@ -299,16 +300,17 @@ export default function GlassPipelineScreen({ navigation }: PipelineScreenProps)
   };
 
   return (
-    <View style={styles.container}>
-      {/* Gradient background */}
-      <LinearGradient
-        colors={['#F2F2F7', '#E8E8ED', '#F2F2F7']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+    <GlassLayout>
+      <View style={styles.container}>
+        {/* Gradient background */}
+        <LinearGradient
+          colors={['#F2F2F7', '#E8E8ED', '#F2F2F7']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
 
-      {/* Header */}
+        {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View>
@@ -337,7 +339,8 @@ export default function GlassPipelineScreen({ navigation }: PipelineScreenProps)
       >
         {stages.map(renderStageColumn)}
       </ScrollView>
-    </View>
+      </View>
+    </GlassLayout>
   );
 }
 
