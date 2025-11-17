@@ -22,7 +22,7 @@ import {
   UsersIcon,
   XCircleIcon,
 } from '../components/Icons';
-import Navigation from '../components/Navigation';
+import GlassLayout from '../components/GlassLayout';
 import {
   MaybeDraxProvider,
   MaybeDraxDraggable,
@@ -768,8 +768,9 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
   };
 
   return (
-    <View style={styles.container}>
-      <Navigation />
+    <GlassLayout>
+      <View style={styles.container}>
+      
       {/* En-tête */}
       <View style={styles.header}>
         <View>
@@ -1364,6 +1365,7 @@ export default function TasksScreen({ navigation }: TasksScreenProps) {
         }}
       />
     </View>
+    </GlassLayout>
   );
 }
 

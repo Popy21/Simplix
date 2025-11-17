@@ -16,7 +16,7 @@ import {
 import { supplierService, expenseService } from '../services/api';
 import { Supplier, Expense } from '../types';
 import { DollarIcon, UsersIcon, FileTextIcon } from '../components/Icons';
-import Navigation from '../components/Navigation';
+import GlassLayout from '../components/GlassLayout';
 
 type SupplierSummary = {
   total_active?: number;
@@ -162,8 +162,9 @@ const SuppliersScreen = () => {
   );
 
   return (
-    <View style={styles.container}>
-      <Navigation />
+    <GlassLayout>
+      <View style={styles.container}>
+      
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -423,6 +424,7 @@ const SuppliersScreen = () => {
         </View>
       </Modal>
     </View>
+    </GlassLayout>
   );
 };
 

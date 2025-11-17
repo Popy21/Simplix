@@ -27,7 +27,7 @@ import {
   PlusIcon,
   FileTextIcon,
 } from '../components/Icons';
-import Navigation from '../components/Navigation';
+import GlassLayout from '../components/GlassLayout';
 import { useAuth } from '../context/AuthContext';
 import ImageUpload from '../components/ImageUpload';
 
@@ -477,8 +477,9 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
   }
 
   return (
-    <View style={styles.container}>
-      <Navigation />
+    <GlassLayout>
+      <View style={styles.container}>
+      
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Contacts</Text>
@@ -1166,6 +1167,7 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
         </View>
       </Modal>
     </View>
+    </GlassLayout>
   );
 }
 

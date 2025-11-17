@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { productService } from '../services/api';
 import { Product } from '../types';
-import Navigation from '../components/Navigation';
+import GlassLayout from '../components/GlassLayout';
 import ImageUpload from '../components/ImageUpload';
 
 interface ProductWithDetails extends Product {
@@ -318,8 +318,9 @@ export default function ProductsScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Navigation />
+    <GlassLayout>
+      <View style={styles.container}>
+      
       {/* En-tête */}
       <View style={styles.header}>
         <View>
@@ -689,6 +690,7 @@ export default function ProductsScreen() {
         </View>
       </Modal>
     </View>
+    </GlassLayout>
   );
 }
 

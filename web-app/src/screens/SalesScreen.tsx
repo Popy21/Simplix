@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { saleService } from '../services/api';
 import { Sale } from '../types';
-import Navigation from '../components/Navigation';
+import GlassLayout from '../components/GlassLayout';
 
 interface SaleWithDetails extends Sale {
   salesPerson?: string;
@@ -275,8 +275,9 @@ export default function SalesScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Navigation />
+    <GlassLayout>
+      <View style={styles.container}>
+      
       {/* En-tête */}
       <View style={styles.header}>
         <View>
@@ -623,6 +624,7 @@ export default function SalesScreen() {
         </View>
       </Modal>
     </View>
+    </GlassLayout>
   );
 }
 

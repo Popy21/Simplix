@@ -16,7 +16,7 @@ import {
 import { expenseService, supplierService } from '../services/api';
 import { Expense, Supplier } from '../types';
 import { DollarIcon, FileTextIcon, CalendarIcon } from '../components/Icons';
-import Navigation from '../components/Navigation';
+import GlassLayout from '../components/GlassLayout';
 import ReceiptScanner from '../components/ReceiptScanner';
 
 type ExpenseFilters = {
@@ -211,8 +211,9 @@ const ExpensesScreen = () => {
   );
 
   return (
-    <View style={styles.container}>
-      <Navigation />
+    <GlassLayout>
+      <View style={styles.container}>
+      
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={styles.content}
@@ -603,6 +604,7 @@ const ExpensesScreen = () => {
         </View>
       </Modal>
     </View>
+    </GlassLayout>
   );
 };
 

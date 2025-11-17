@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal,
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { FileTextIcon, DollarIcon, CheckCircleIcon, ClockIcon, AlertTriangleIcon, EditIcon, TrashIcon, MailIcon, PlusIcon, CreditCardIcon, AppleIcon, BankIcon, EyeIcon } from '../components/Icons';
-import Navigation from '../components/Navigation';
+import GlassLayout from '../components/GlassLayout';
 import DocumentPreview from '../components/DocumentPreview';
 import { quoteService, invoicesService, templatesService, contactService, companyService, productService, companyProfileService, paymentsService } from '../services/api';
 import { API_URL } from '../config/api';
@@ -662,8 +662,9 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
   // Show onboarding if no templates exist
   if (!checkingTemplates && !hasTemplates) {
     return (
+    <GlassLayout>
       <View style={styles.container}>
-        <Navigation />
+        
         <View style={styles.onboardingContainer}>
           <View style={styles.onboardingIconContainer}>
             <FileTextIcon size={80} color="#007AFF" />
@@ -682,12 +683,14 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
           </TouchableOpacity>
         </View>
       </View>
+      </GlassLayout>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Navigation />
+    <GlassLayout>
+      <View style={styles.container}>
+      
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Facturation</Text>
@@ -1621,9 +1624,11 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
           </View>
         </View>
       </Modal>
-    </View>
+      </View>
+    </GlassLayout>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F2F7' },
