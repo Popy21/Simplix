@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { glassTheme } from '../theme/glassTheme';
+import { isMobile, layout, responsiveSpacing, responsiveFontSizes } from '../theme/responsive';
 import GlassCard from '../components/GlassCard';
 import GlassLayout from '../components/GlassLayout';
 import {
@@ -449,21 +450,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: glassTheme.spacing.lg,
-    paddingTop: Platform.OS === 'ios' ? 60 : 24,
+    padding: layout.contentPadding,
+    paddingTop: isMobile ? responsiveSpacing.md : (Platform.OS === 'ios' ? 60 : 24),
   },
 
   // Header
   header: {
-    marginBottom: glassTheme.spacing.lg,
+    marginBottom: responsiveSpacing.lg,
   },
   title: {
-    ...glassTheme.typography.displayMedium,
+    fontSize: responsiveFontSizes.displayMedium,
+    fontWeight: '700',
     color: glassTheme.colors.text.primary,
     marginBottom: 8,
   },
   subtitle: {
-    ...glassTheme.typography.body,
+    fontSize: responsiveFontSizes.body,
     color: glassTheme.colors.text.tertiary,
   },
 

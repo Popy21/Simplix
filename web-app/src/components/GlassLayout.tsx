@@ -1,10 +1,8 @@
 import React, { ReactNode } from 'react';
-import { View, StyleSheet, Dimensions, Platform } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import GlassNavigation from './GlassNavigation';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const NAV_WIDTH = SCREEN_WIDTH > 768 ? 280 : 72;
-const IS_LARGE_SCREEN = SCREEN_WIDTH > 768;
+import GlassBottomNav from './GlassBottomNav';
+import { isMobile, isTablet, layout } from '../theme/responsive';
 
 interface GlassLayoutProps {
   children: ReactNode;
@@ -16,14 +14,22 @@ export default function GlassLayout({ children, hideNavigation = false }: GlassL
     return <View style={styles.fullScreen}>{children}</View>;
   }
 
+  // Mobile: Bottom navigation
+  if (isMobile) {
+    return (
+      <View style={styles.mobileContainer}>
+        <View style={styles.mobileContent}>{children}</View>
+        <GlassBottomNav />
+      </View>
+    );
+  }
+
+  // Tablet/Desktop: Sidebar navigation
   return (
     <View style={styles.container}>
-      {/* Glass Navigation Sidebar */}
-      <View style={[styles.sidebar, { width: IS_LARGE_SCREEN ? NAV_WIDTH : 72 }]}>
+      <View style={[styles.sidebar, { width: layout.sidebarWidth }]}>
         <GlassNavigation />
       </View>
-
-      {/* Main Content Area */}
       <View style={styles.content}>{children}</View>
     </View>
   );
@@ -44,5 +50,14 @@ const styles = StyleSheet.create({
   },
   fullScreen: {
     flex: 1,
+  },
+  // Mobile styles
+  mobileContainer: {
+    flex: 1,
+    backgroundColor: '#F2F2F7',
+  },
+  mobileContent: {
+    flex: 1,
+    paddingBottom: layout.bottomNavHeight,
   },
 });
