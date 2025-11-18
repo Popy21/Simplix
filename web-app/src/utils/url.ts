@@ -10,10 +10,10 @@ export function toAbsoluteUrl(url: string | undefined | null): string {
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
-  // For uploads paths, prepend the API base URL
+  // For uploads paths, prepend the base URL without /api
   // API_URL is like 'https://simplix.drive.paraweb.fr/api'
   // url is like '/uploads/image-xxx.png'
-  // Result should be 'https://simplix.drive.paraweb.fr/api/uploads/image-xxx.png'
+  // Result should be 'https://simplix.drive.paraweb.fr/uploads/image-xxx.png'
   const baseUrl = API_URL.replace(/\/api$/, ''); // Remove trailing /api if present
-  return `${baseUrl}/api${url.startsWith('/') ? url : '/' + url}`;
+  return `${baseUrl}${url.startsWith('/') ? url : '/' + url}`;
 }
