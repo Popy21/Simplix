@@ -418,3 +418,37 @@ export const PieChartIcon = ({ size = 24, color = '#AF52DE' }: IconProps) => (
     <Path d="M22 12A10 10 0 0012 2v10z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
+
+// New V5.0 Feature Icons
+export const ShieldIcon = ({ size = 24, color = '#34C759' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const BrainIcon = ({ size = 24, color = '#AF52DE' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 4.5a2.5 2.5 0 00-4.96-.46 2.5 2.5 0 00-1.98 3 2.5 2.5 0 00-1.32 4.24 3 3 0 00.34 5.58 2.5 2.5 0 002.96 3.08A2.5 2.5 0 009.5 22c1.21 0 2.5-.74 2.5-2.5m0-15a2.5 2.5 0 014.96-.46 2.5 2.5 0 011.98 3 2.5 2.5 0 011.32 4.24 3 3 0 01-.34 5.58 2.5 2.5 0 01-2.96 3.08A2.5 2.5 0 0014.5 22c-1.21 0-2.5-.74-2.5-2.5m0-15V8m0 8v4" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const WebhookIcon = ({ size = 24, color = '#FF9500' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M18 16.016c2.489 0 4-2.007 4-4s-1.511-4-4-4c-.239 0-.473.019-.702.057L15.098 2.5A1.5 1.5 0 0013.668 1h-.336a1.5 1.5 0 00-1.43 1.5L9.702 8.073A3.989 3.989 0 009 8.016c-2.489 0-4 2.007-4 4s1.511 4 4 4c.239 0 .473-.019.702-.057l2.2 5.573A1.5 1.5 0 0013.332 23h.336a1.5 1.5 0 001.43-1.5l2.2-5.427c.233.038.467.057.702.057z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const MailOpenIcon = ({ size = 24, color = '#FF2D55' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M4 8l8-5 8 5v11a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M4 8l8 5 8-5" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const CreditCard2Icon = ({ size = 24, color = '#5AC8FA' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="1" y="4" width="22" height="16" rx="2" stroke={color} strokeWidth="2" />
+    <Path d="M1 10h22" stroke={color} strokeWidth="2" />
+    <Path d="M5 15h3" stroke={color} strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);

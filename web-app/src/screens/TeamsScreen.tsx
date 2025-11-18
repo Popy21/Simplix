@@ -14,6 +14,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { UsersIcon, TrendingUpIcon } from '../components/Icons';
+import { withGlassLayout } from '../components/withGlassLayout';
 
 type TeamsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -55,7 +56,7 @@ interface Territory {
   current: number;
 }
 
-export default function TeamsScreen({ navigation }: TeamsScreenProps) {
+function TeamsScreen({ navigation }: TeamsScreenProps) {
   const [activeTab, setActiveTab] = useState<'team' | 'departments' | 'territories'>('team');
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -1229,3 +1230,5 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
   },
 });
+
+export default withGlassLayout(TeamsScreen);

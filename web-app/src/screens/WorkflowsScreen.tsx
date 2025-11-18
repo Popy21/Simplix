@@ -14,6 +14,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { UsersIcon, TrendingUpIcon } from '../components/Icons';
+import { withGlassLayout } from '../components/withGlassLayout';
 
 type WorkflowsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -63,7 +64,7 @@ const ACTION_TYPES = [
   { id: 'send_notification', label: '🔔 Notifier', icon: '🔔' },
 ];
 
-export default function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
+function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [builderVisible, setBuilderVisible] = useState(false);
@@ -1006,3 +1007,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
+
+export default withGlassLayout(WorkflowsScreen);

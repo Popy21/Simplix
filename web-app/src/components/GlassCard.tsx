@@ -2,6 +2,7 @@ import React, { ReactNode } from 'react';
 import { View, StyleSheet, ViewStyle, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { glassTheme, withShadow } from '../theme/glassTheme';
+import { entranceAnimation } from '../utils/animations';
 
 interface GlassCardProps {
   children: ReactNode;
@@ -12,6 +13,8 @@ interface GlassCardProps {
   borderRadius?: number;
   glow?: boolean;
   glowColor?: string;
+  animated?: boolean;
+  animationDelay?: number;
 }
 
 export default function GlassCard({
@@ -23,9 +26,14 @@ export default function GlassCard({
   borderRadius = glassTheme.radius.lg,
   glow = false,
   glowColor = glassTheme.colors.primary,
+  animated = false, // Disabled by default to avoid hooks in loops
+  animationDelay = 0,
 }: GlassCardProps) {
   const glassStyle = glassTheme.glass[variant];
   const shadowStyle = withShadow(elevation);
+
+  // Animation disabled to avoid React hooks violations when used in .map()
+  // TODO: Implement animation with CSS or a different approach
 
   return (
     <View

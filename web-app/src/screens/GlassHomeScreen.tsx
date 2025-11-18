@@ -7,8 +7,14 @@ import {
   TouchableOpacity,
   Dimensions,
   Platform,
-  Animated,
+  LayoutAnimation,
+  UIManager,
 } from 'react-native';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
@@ -38,6 +44,11 @@ import {
   CopyIcon,
   PieChartIcon,
   LayersIcon,
+  ShieldIcon,
+  BrainIcon,
+  WebhookIcon,
+  MailOpenIcon,
+  CreditCard2Icon,
 } from '../components/Icons';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -130,6 +141,14 @@ const menuCategories: MenuCategory[] = [
         icon: TargetIcon,
         isNew: true,
       },
+      {
+        id: 'ai-scoring',
+        title: 'IA Lead Scoring',
+        subtitle: 'Scoring intelligent par IA',
+        screen: 'Dashboard',
+        icon: BrainIcon,
+        isNew: true,
+      },
     ],
   },
   {
@@ -176,6 +195,14 @@ const menuCategories: MenuCategory[] = [
     gradient: ['#34C759', '#30D158'],
     items: [
       {
+        id: 'stripe-payments',
+        title: 'Paiements Stripe',
+        subtitle: 'Encaissements en ligne',
+        screen: 'Dashboard',
+        icon: CreditCard2Icon,
+        isNew: true,
+      },
+      {
         id: 'expenses',
         title: 'Dépenses',
         subtitle: 'Gestion des frais',
@@ -203,6 +230,22 @@ const menuCategories: MenuCategory[] = [
         subtitle: 'Automatisation des processus',
         screen: 'Workflows',
         icon: RepeatIcon,
+        isNew: true,
+      },
+      {
+        id: 'email-campaigns',
+        title: 'Email Marketing',
+        subtitle: 'Campagnes automatisées',
+        screen: 'Dashboard',
+        icon: MailOpenIcon,
+        isNew: true,
+      },
+      {
+        id: 'webhooks',
+        title: 'Webhooks',
+        subtitle: 'Intégrations temps réel',
+        screen: 'Dashboard',
+        icon: WebhookIcon,
         isNew: true,
       },
       {
@@ -235,6 +278,14 @@ const menuCategories: MenuCategory[] = [
     gradient: ['#8E8E93', '#AEAEB2'],
     items: [
       {
+        id: 'security-2fa',
+        title: 'Sécurité 2FA',
+        subtitle: 'Authentification à 2 facteurs',
+        screen: 'Profile',
+        icon: ShieldIcon,
+        isNew: true,
+      },
+      {
         id: 'teams',
         title: 'Équipes',
         subtitle: 'Gestion des utilisateurs',
@@ -256,6 +307,7 @@ export default function GlassHomeScreen({ navigation }: HomeScreenProps) {
   const [expandedCategory, setExpandedCategory] = useState<string | null>('core');
 
   const toggleCategory = (categoryId: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedCategory(expandedCategory === categoryId ? null : categoryId);
   };
 
@@ -311,17 +363,24 @@ export default function GlassHomeScreen({ navigation }: HomeScreenProps) {
     );
   };
 
-  const renderMenuItem = (item: MenuItem, categoryGradient: [string, string]) => {
+  const renderMenuItem = (item: MenuItem, categoryGradient: [string, string], index: number, categoryId: string) => {
     const Icon = item.icon;
 
     return (
       <TouchableOpacity
-        key={item.id}
+        key={`${categoryId}-${item.id}`}
         onPress={() => navigation.navigate(item.screen)}
         activeOpacity={0.9}
         style={styles.menuItemWrapper}
       >
-        <GlassCard variant="light" elevation="sm" glow glowColor={categoryGradient[0]}>
+        <GlassCard
+          variant="light"
+          elevation="sm"
+          glow
+          glowColor={categoryGradient[0]}
+          animated={true}
+          animationDelay={index * 50}
+        >
           <LinearGradient
             colors={[...categoryGradient.map((c) => c + '05')]}
             start={{ x: 0, y: 0 }}
@@ -376,7 +435,7 @@ export default function GlassHomeScreen({ navigation }: HomeScreenProps) {
 
         {isExpanded && (
           <View style={styles.categoryItems}>
-            {category.items.map((item) => renderMenuItem(item, category.gradient))}
+            {category.items.map((item, index) => renderMenuItem(item, category.gradient, index, category.id))}
           </View>
         )}
       </View>
@@ -402,7 +461,7 @@ export default function GlassHomeScreen({ navigation }: HomeScreenProps) {
           <View style={styles.header}>
             <Text style={styles.title}>Simplix CRM</Text>
             <Text style={styles.subtitle}>
-              Plateforme complète de gestion commerciale
+              Plateforme IA Complète - Paiements, Automatisation & Marketing
             </Text>
           </View>
 

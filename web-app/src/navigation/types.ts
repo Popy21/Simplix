@@ -6,20 +6,39 @@ export type RootStackParamList = {
   // App Stack
   Home: undefined;
   Dashboard: undefined;
-  Pipeline: undefined;
-  Tasks: undefined;
-  Contacts: undefined;
   Analytics: undefined;
+  Pilotage: undefined;
+
+  // Sales & CRM
+  Pipeline: undefined;
+  Contacts: undefined;
+  Deals: undefined;
+  Leads: undefined;
+
+  // Operations
+  Tasks: undefined;
+  Sales: undefined;
   Invoices: undefined;
   Products: undefined;
-  Sales: undefined;
-  Suppliers: undefined;
+
+  // Finance
   Expenses: undefined;
-  Pilotage: undefined;
+  Suppliers: undefined;
+
+  // Automation
+  Workflows: undefined;
+  Emails: undefined;
+  Documents: undefined;
   Templates: undefined;
+
+  // Configuration
+  Teams: undefined;
+  Profile: undefined;
+  Settings: undefined;
+
+  // Other
   Showcase: undefined;
   TestAll: undefined;
   ChangePassword: undefined;
   Customers: undefined;
-  Profile: undefined;
 };

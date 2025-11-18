@@ -24,6 +24,7 @@ import {
   UsersIcon,
 } from '../components/Icons';
 import { leadsService, contactService } from '../services/api';
+import { withGlassLayout } from '../components/withGlassLayout';
 
 type LeadsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Contacts'>;
@@ -58,7 +59,7 @@ interface ScoreBreakdown {
 
 const { width, height } = Dimensions.get('window');
 
-export default function LeadsScreen({ navigation }: LeadsScreenProps) {
+function LeadsScreen({ navigation }: LeadsScreenProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -201,9 +202,6 @@ export default function LeadsScreen({ navigation }: LeadsScreenProps) {
       ];
 
       setLeads(mockLeads);
-      setLoading(false);
-    } catch (error) {
-      console.error('Erreur lors du chargement des leads:', error);
       setLoading(false);
     }
   };
@@ -1010,3 +1008,5 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
   },
 });
+
+export default withGlassLayout(LeadsScreen);

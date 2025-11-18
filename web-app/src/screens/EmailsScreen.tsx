@@ -14,6 +14,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { UsersIcon, TrendingUpIcon } from '../components/Icons';
+import { withGlassLayout } from '../components/withGlassLayout';
 
 type EmailsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -48,7 +49,7 @@ interface EmailLog {
   clickCount: number;
 }
 
-export default function EmailsScreen({ navigation }: EmailsScreenProps) {
+function EmailsScreen({ navigation }: EmailsScreenProps) {
   const [activeTab, setActiveTab] = useState<'templates' | 'scheduled' | 'logs'>('templates');
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [scheduled, setScheduled] = useState<ScheduledEmail[]>([]);
@@ -1084,3 +1085,5 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
   },
 });
+
+export default withGlassLayout(EmailsScreen);

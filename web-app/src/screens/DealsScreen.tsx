@@ -17,6 +17,7 @@ import { RootStackParamList } from '../navigation/types';
 import { TrendingUpIcon, UsersIcon, DollarIcon, CalendarIcon } from '../components/Icons';
 import { dealsService, pipelineService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { withGlassLayout } from '../components/withGlassLayout';
 
 type DealsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -44,7 +45,7 @@ interface DealStage {
 
 const { width, height } = Dimensions.get('window');
 
-export default function DealsScreen({ navigation }: DealsScreenProps) {
+function DealsScreen({ navigation }: DealsScreenProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [stages, setStages] = useState<DealStage[]>([]);
@@ -1072,3 +1073,5 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
   },
 });
+
+export default withGlassLayout(DealsScreen);

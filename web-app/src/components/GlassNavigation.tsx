@@ -168,6 +168,7 @@ export default function GlassNavigation() {
     const isActive = route.name === item.name;
     const Icon = item.icon;
     const isHovered = hoverIndex === index;
+    // Animation disabled to avoid React hooks violations when used in .map()
 
     return (
       <TouchableOpacity

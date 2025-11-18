@@ -36,8 +36,15 @@ import uploadRouter from './routes/upload';
 import showcaseRouter from './routes/showcase';
 import pdfRouter from './routes/pdf';
 import companyProfileRouter from './routes/company-profile';
+import stripeRouter from './routes/stripe';
+import webhooksRouter from './routes/webhooks';
+import auth2faRouter from './routes/auth-2fa';
+import emailCampaignsRouter from './routes/email-campaigns';
+import aiRouter from './routes/ai';
+import settingsRouter from './routes/settings';
 import logger from './utils/logger';
 import path from 'path';
+import { setupSwagger } from './config/swagger';
 
 dotenv.config();
 
@@ -54,6 +61,9 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Logger middleware
 app.use(logger.httpMiddleware());
+
+// Setup Swagger documentation
+setupSwagger(app);
 
 // Routes
 app.get('/', (req: Request, res: Response) => {
@@ -122,6 +132,12 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/showcase', showcaseRouter);
 app.use('/api/company-profile', companyProfileRouter);
 app.use('/api', pdfRouter);
+app.use('/api/stripe', stripeRouter);
+app.use('/api/webhooks', webhooksRouter);
+app.use('/api/auth', auth2faRouter);
+app.use('/api/email-campaigns', emailCampaignsRouter);
+app.use('/api/ai', aiRouter);
+app.use('/api/settings', settingsRouter);
 
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: Function) => {

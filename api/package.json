@@ -19,6 +19,8 @@
   "dependencies": {
     "@types/multer": "^2.0.0",
     "@types/pg": "^8.15.5",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -28,7 +30,9 @@
     "pg": "^8.16.3",
     "puppeteer": "^24.26.1",
     "sqlite3": "^5.1.7",
-    "stripe": "^19.2.0"
+    "stripe": "^19.3.1",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

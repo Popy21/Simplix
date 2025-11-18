@@ -29,6 +29,12 @@ import ShowcaseScreen from './src/screens/ShowcaseScreen';
 import TestAllScreen from './src/screens/TestAllScreen';
 import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import DealsScreen from './src/screens/DealsScreen';
+import LeadsScreen from './src/screens/LeadsScreen';
+import WorkflowsScreen from './src/screens/WorkflowsScreen';
+import EmailsScreen from './src/screens/EmailsScreen';
+import DocumentsScreen from './src/screens/DocumentsScreen';
+import TeamsScreen from './src/screens/TeamsScreen';
 
 import { RootStackParamList } from './src/navigation/types';
 import { SearchIcon } from './src/components/Icons';
@@ -215,6 +221,60 @@ function Navigation() {
               component={ProfileScreen}
               options={{
                 title: 'Mon Profil',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Deals"
+              component={DealsScreen}
+              options={{
+                title: 'Affaires',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Leads"
+              component={LeadsScreen}
+              options={{
+                title: 'Leads',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Workflows"
+              component={WorkflowsScreen}
+              options={{
+                title: 'Workflows',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Emails"
+              component={EmailsScreen}
+              options={{
+                title: 'Emails',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Documents"
+              component={DocumentsScreen}
+              options={{
+                title: 'Documents',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Teams"
+              component={TeamsScreen}
+              options={{
+                title: 'Équipes',
                 headerShown: true,
                 headerStyle: { backgroundColor: '#F2F2F7' },
               }}

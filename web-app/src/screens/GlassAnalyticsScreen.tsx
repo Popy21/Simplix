@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Dimensions,
   Platform,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -14,6 +15,7 @@ import { RootStackParamList } from '../navigation/types';
 import { glassTheme } from '../theme/glassTheme';
 import GlassCard from '../components/GlassCard';
 import GlassLayout from '../components/GlassLayout';
+import { chartRevealAnimation } from '../utils/animations';
 import {
   TrendingUpIcon,
   TrendingDownIcon,
@@ -68,6 +70,9 @@ export default function GlassAnalyticsScreen({ navigation }: AnalyticsScreenProp
   const [topPerformers, setTopPerformers] = useState<any[]>([]);
   const [leadScoring, setLeadScoring] = useState<ChartData[]>([]);
   const [revenueTimeSeries, setRevenueTimeSeries] = useState<TimeSeriesData[]>([]);
+
+  // Animation values for charts
+  const chartAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadAnalyticsData();
@@ -190,6 +195,8 @@ export default function GlassAnalyticsScreen({ navigation }: AnalyticsScreenProp
       console.error('Error loading analytics:', error);
     } finally {
       setLoading(false);
+      // Animate charts on load
+      chartRevealAnimation(chartAnim, 300).start();
     }
   };
 
@@ -259,25 +266,31 @@ export default function GlassAnalyticsScreen({ navigation }: AnalyticsScreenProp
         <Text style={styles.chartTitle}>{title}</Text>
 
         <View style={styles.barChartContainer}>
-          {data.map((item, index) => (
-            <View key={index} style={styles.barRow}>
-              <Text style={styles.barLabel}>{item.label}</Text>
-              <View style={styles.barTrack}>
-                <LinearGradient
-                  colors={[item.color || '#007AFF', (item.color || '#007AFF') + '80']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[
-                    styles.barFill,
-                    { width: `${(item.value / maxValue) * 100}%` },
-                  ]}
-                />
+          {data.map((item, index) => {
+            const barWidth = chartAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: ['0%', `${(item.value / maxValue) * 100}%`],
+            });
+
+            return (
+              <View key={index} style={styles.barRow}>
+                <Text style={styles.barLabel}>{item.label}</Text>
+                <View style={styles.barTrack}>
+                  <Animated.View style={{ width: barWidth }}>
+                    <LinearGradient
+                      colors={[item.color || '#007AFF', (item.color || '#007AFF') + '80']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.barFill}
+                    />
+                  </Animated.View>
+                </View>
+                <Animated.Text style={[styles.barValue, { opacity: chartAnim }]}>
+                  {showPercentage ? `${item.percentage}%` : item.value}
+                </Animated.Text>
               </View>
-              <Text style={styles.barValue}>
-                {showPercentage ? `${item.percentage}%` : item.value}
-              </Text>
-            </View>
-          ))}
+            );
+          })}
         </View>
       </GlassCard>
     );

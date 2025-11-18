@@ -13,6 +13,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { UsersIcon, TrendingUpIcon } from '../components/Icons';
+import { withGlassLayout } from '../components/withGlassLayout';
 
 type DocumentsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -40,7 +41,7 @@ interface Document {
   category: string;
 }
 
-export default function DocumentsScreen({ navigation }: DocumentsScreenProps) {
+function DocumentsScreen({ navigation }: DocumentsScreenProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
@@ -829,3 +830,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
+
+export default withGlassLayout(DocumentsScreen);
