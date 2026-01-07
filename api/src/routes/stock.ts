@@ -40,6 +40,58 @@ router.get('/alerts', authenticateToken, async (req: AuthRequest, res: Response)
   }
 });
 
+// Niveaux de stock (tous les produits avec stock)
+router.get('/levels', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+    const { page = 1, limit = 50, low_stock_only } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    let whereClause = `p.organization_id = $1 AND p.track_stock = true AND p.deleted_at IS NULL`;
+    if (low_stock_only === 'true') {
+      whereClause += ` AND p.stock_quantity <= COALESCE(p.stock_min_alert, 0)`;
+    }
+
+    const result = await db.query(`
+      SELECT
+        p.id,
+        p.name,
+        p.sku,
+        p.stock_quantity,
+        p.stock_min_alert,
+        p.stock_location,
+        p.price,
+        p.cost_price,
+        (p.stock_quantity * COALESCE(p.cost_price, p.price * 0.7)) as stock_value,
+        CASE
+          WHEN p.stock_quantity <= 0 THEN 'out_of_stock'
+          WHEN p.stock_quantity <= COALESCE(p.stock_min_alert, 0) THEN 'low_stock'
+          ELSE 'in_stock'
+        END as status
+      FROM products p
+      WHERE ${whereClause}
+      ORDER BY p.name ASC
+      LIMIT $2 OFFSET $3
+    `, [organizationId, limit, offset]);
+
+    const countResult = await db.query(`
+      SELECT COUNT(*) as total FROM products p WHERE ${whereClause}
+    `, [organizationId]);
+
+    res.json({
+      data: result.rows,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: parseInt(countResult.rows[0].total),
+        pages: Math.ceil(parseInt(countResult.rows[0].total) / Number(limit))
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Valorisation du stock
 router.get('/valuation', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

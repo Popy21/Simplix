@@ -143,11 +143,15 @@ router.post('/templates', authenticateToken, async (req: AuthRequest, res: Respo
  */
 router.get('/templates', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { organizationId } = req.query;
+    // Accepter organizationId depuis query OU depuis le token utilisateur
+    const organizationId = req.query.organizationId || (req.user as any)?.organizationId || (req.user as any)?.organization_id;
 
     if (!organizationId) {
-      return res.status(400).json({
-        error: 'organizationId est requis',
+      // Retourner une liste vide au lieu d'une erreur 400
+      return res.json({
+        success: true,
+        templates: [],
+        total: 0,
       });
     }
 

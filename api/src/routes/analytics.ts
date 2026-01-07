@@ -41,6 +41,85 @@ router.get('/dashboard', async (req: Request, res: Response) => {
   }
 });
 
+// Get sales analytics summary
+router.get('/sales', async (req: Request, res: Response) => {
+  try {
+    const { period = 'month' } = req.query;
+    const now = new Date();
+    let startDate: Date;
+
+    switch (period) {
+      case 'week':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      case 'month':
+      default:
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    const [revenue, byProduct, byCustomer, trend] = await Promise.all([
+      db.query(`
+        SELECT
+          COALESCE(SUM(total_amount), 0) as total_revenue,
+          COUNT(*) as total_orders,
+          COALESCE(AVG(total_amount), 0) as avg_order_value
+        FROM sales
+        WHERE status = 'completed' AND sale_date >= $1
+      `, [startDate]),
+
+      db.query(`
+        SELECT
+          p.name as product_name,
+          COUNT(*) as quantity_sold,
+          SUM(si.quantity * si.unit_price) as revenue
+        FROM sale_items si
+        JOIN products p ON si.product_id = p.id
+        JOIN sales s ON si.sale_id = s.id
+        WHERE s.status = 'completed' AND s.sale_date >= $1
+        GROUP BY p.id, p.name
+        ORDER BY revenue DESC
+        LIMIT 10
+      `, [startDate]),
+
+      db.query(`
+        SELECT
+          c.name as customer_name,
+          COUNT(s.id) as order_count,
+          SUM(s.total_amount) as total_spent
+        FROM sales s
+        JOIN customers c ON s.customer_id = c.id
+        WHERE s.status = 'completed' AND s.sale_date >= $1
+        GROUP BY c.id, c.name
+        ORDER BY total_spent DESC
+        LIMIT 10
+      `, [startDate]),
+
+      db.query(`
+        SELECT
+          to_char(sale_date, 'YYYY-MM-DD') as date,
+          SUM(total_amount) as revenue
+        FROM sales
+        WHERE status = 'completed' AND sale_date >= $1
+        GROUP BY date
+        ORDER BY date ASC
+      `, [startDate])
+    ]);
+
+    res.json({
+      period,
+      summary: revenue.rows[0],
+      topProducts: byProduct.rows,
+      topCustomers: byCustomer.rows,
+      trend: trend.rows
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get sales statistics by period
 router.get('/sales-by-period', async (req: Request, res: Response) => {
   const { period = 'month' } = req.query;

@@ -4,6 +4,42 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
+// GET /api/settings - Retourne tous les paramètres
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const organizationId = req.user?.organization_id;
+
+    // Récupérer l'organisation
+    const orgResult = await db.query(
+      `SELECT id, name, domain, settings, created_at, updated_at
+       FROM organizations WHERE id = $1`,
+      [organizationId]
+    );
+
+    // Récupérer le profil utilisateur
+    const userResult = await db.query(
+      `SELECT id, email, first_name, last_name, role, settings, avatar_url
+       FROM users WHERE id = $1`,
+      [userId]
+    );
+
+    // Récupérer le profil entreprise
+    const companyResult = await db.query(
+      `SELECT * FROM company_profiles WHERE user_id = $1`,
+      [userId]
+    );
+
+    res.json({
+      organization: orgResult.rows[0] || null,
+      user: userResult.rows[0] || null,
+      company: companyResult.rows[0] || null
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /**
  * @swagger
  * /api/settings/organization:

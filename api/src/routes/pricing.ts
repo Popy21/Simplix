@@ -8,6 +8,30 @@ const router = express.Router();
 // GRILLES TARIFAIRES
 // ==========================================
 
+// GET /lists - Alias pour /price-lists
+router.get('/lists', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+
+    const result = await db.query(`
+      SELECT
+        pl.*,
+        COUNT(DISTINCT pli.product_id) as products_count,
+        COUNT(DISTINCT c.id) as customers_count
+      FROM price_lists pl
+      LEFT JOIN price_list_items pli ON pl.id = pli.price_list_id
+      LEFT JOIN customers c ON c.price_list_id = pl.id AND c.deleted_at IS NULL
+      WHERE pl.organization_id = $1
+      GROUP BY pl.id
+      ORDER BY pl.name
+    `, [organizationId]);
+
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Liste des grilles tarifaires
 router.get('/price-lists', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

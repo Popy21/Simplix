@@ -8,6 +8,72 @@ const router = express.Router();
 // PRÉVISION DE TRÉSORERIE
 // ==========================================
 
+// Prévision de trésorerie automatique basée sur les factures
+router.get('/forecast', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+    const { months = 3 } = req.query;
+    const numMonths = Math.min(12, Math.max(1, parseInt(months as string) || 3));
+
+    // Encaissements prévus (factures non payées)
+    const inflows = await db.query(`
+      SELECT
+        date_trunc('month', due_date) as month,
+        COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as expected_amount,
+        COUNT(*) as invoice_count
+      FROM invoices
+      WHERE organization_id = $1
+        AND status IN ('sent', 'partial')
+        AND deleted_at IS NULL
+        AND due_date >= CURRENT_DATE
+        AND due_date < CURRENT_DATE + INTERVAL '${numMonths} months'
+      GROUP BY date_trunc('month', due_date)
+      ORDER BY month
+    `, [organizationId]);
+
+    // Décaissements prévus (factures fournisseurs, charges récurrentes)
+    const outflows = await db.query(`
+      SELECT
+        date_trunc('month', due_date) as month,
+        COALESCE(SUM(amount), 0) as expected_amount,
+        COUNT(*) as expense_count
+      FROM expenses
+      WHERE organization_id = $1
+        AND status = 'pending'
+        AND deleted_at IS NULL
+        AND due_date >= CURRENT_DATE
+        AND due_date < CURRENT_DATE + INTERVAL '${numMonths} months'
+      GROUP BY date_trunc('month', due_date)
+      ORDER BY month
+    `, [organizationId]);
+
+    // Solde actuel estimé
+    const balance = await db.query(`
+      SELECT
+        COALESCE(SUM(amount) FILTER (WHERE p.payment_date IS NOT NULL), 0) as total_received,
+        COALESCE(SUM(e.amount) FILTER (WHERE e.status = 'paid'), 0) as total_paid
+      FROM invoices i
+      LEFT JOIN payments p ON p.invoice_id = i.id
+      CROSS JOIN expenses e
+      WHERE i.organization_id = $1 AND i.deleted_at IS NULL
+        AND e.organization_id = $1 AND e.deleted_at IS NULL
+    `, [organizationId]);
+
+    res.json({
+      period: `${numMonths} months`,
+      currentBalance: parseFloat(balance.rows[0]?.total_received || 0) - parseFloat(balance.rows[0]?.total_paid || 0),
+      expectedInflows: inflows.rows,
+      expectedOutflows: outflows.rows,
+      summary: {
+        totalExpectedInflows: inflows.rows.reduce((sum: number, r: any) => sum + parseFloat(r.expected_amount), 0),
+        totalExpectedOutflows: outflows.rows.reduce((sum: number, r: any) => sum + parseFloat(r.expected_amount), 0)
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Liste des prévisions
 router.get('/forecasts', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

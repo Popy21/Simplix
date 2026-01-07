@@ -4,6 +4,53 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
+// Résumé de la balance âgée
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+    const referenceDate = new Date().toISOString().split('T')[0];
+
+    const result = await db.query(`
+      WITH balances AS (
+        SELECT
+          i.total_amount - COALESCE((SELECT SUM(amount) FROM payments WHERE invoice_id = i.id), 0) as balance,
+          CURRENT_DATE - i.due_date::DATE as days_overdue
+        FROM invoices i
+        WHERE i.organization_id = $1
+          AND i.deleted_at IS NULL
+          AND i.status NOT IN ('paid', 'cancelled', 'draft')
+          AND i.total_amount > COALESCE((SELECT SUM(amount) FROM payments WHERE invoice_id = i.id), 0)
+      )
+      SELECT
+        COUNT(*) as total_invoices,
+        COALESCE(SUM(balance), 0) as total_outstanding,
+        COALESCE(SUM(balance) FILTER (WHERE days_overdue < 0), 0) as not_yet_due,
+        COALESCE(SUM(balance) FILTER (WHERE days_overdue BETWEEN 0 AND 30), 0) as overdue_0_30,
+        COALESCE(SUM(balance) FILTER (WHERE days_overdue BETWEEN 31 AND 60), 0) as overdue_31_60,
+        COALESCE(SUM(balance) FILTER (WHERE days_overdue BETWEEN 61 AND 90), 0) as overdue_61_90,
+        COALESCE(SUM(balance) FILTER (WHERE days_overdue > 90), 0) as overdue_90_plus
+      FROM balances
+    `, [organizationId]);
+
+    const summary = result.rows[0];
+
+    res.json({
+      referenceDate,
+      totalInvoices: parseInt(summary.total_invoices),
+      totalOutstanding: parseFloat(summary.total_outstanding),
+      agingBuckets: {
+        notYetDue: parseFloat(summary.not_yet_due),
+        overdue_0_30: parseFloat(summary.overdue_0_30),
+        overdue_31_60: parseFloat(summary.overdue_31_60),
+        overdue_61_90: parseFloat(summary.overdue_61_90),
+        overdue_90_plus: parseFloat(summary.overdue_90_plus)
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Balance âgée des créances clients
 router.get('/receivables', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

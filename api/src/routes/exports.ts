@@ -6,6 +6,89 @@ import { getOrgIdFromRequest } from '../utils/multiTenancyHelper';
 
 const router = express.Router();
 
+// GET / - Liste des exports disponibles
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    res.json({
+      available_exports: [
+        { id: 'fec', name: 'FEC (Fichier des Écritures Comptables)', endpoint: '/api/exports/fec', format: 'txt' },
+        { id: 'csv_invoices', name: 'Export CSV Factures', endpoint: '/api/exports/csv/invoices', format: 'csv' },
+        { id: 'csv_payments', name: 'Export CSV Paiements', endpoint: '/api/exports/csv/payments', format: 'csv' },
+        { id: 'csv_expenses', name: 'Export CSV Dépenses', endpoint: '/api/exports/csv/expenses', format: 'csv' },
+        { id: 'contacts', name: 'Export Contacts', endpoint: '/api/exports/contacts', format: 'csv' }
+      ],
+      parameters: {
+        from_date: 'Date de début (YYYY-MM-DD)',
+        to_date: 'Date de fin (YYYY-MM-DD)',
+        siren: 'SIREN (pour FEC uniquement)'
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Export contacts
+router.get('/contacts', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+    const { type, format = 'json' } = req.query;
+
+    let query = `
+      SELECT
+        c.first_name as "Prénom",
+        c.last_name as "Nom",
+        c.email as "Email",
+        c.phone as "Téléphone",
+        c.company as "Société",
+        c.position as "Fonction",
+        c.type as "Type",
+        c.source as "Source",
+        c.score as "Score",
+        c.address as "Adresse",
+        c.city as "Ville",
+        c.postal_code as "Code postal",
+        c.country as "Pays",
+        c.created_at as "Date création"
+      FROM contacts c
+      WHERE c.organization_id = $1 AND c.deleted_at IS NULL
+    `;
+    const params: any[] = [orgId];
+
+    if (type) {
+      params.push(type);
+      query += ` AND c.type = $${params.length}`;
+    }
+
+    query += ' ORDER BY c.last_name, c.first_name';
+
+    const result = await pool.query(query, params);
+
+    if (format === 'csv') {
+      const headers = ['Prénom', 'Nom', 'Email', 'Téléphone', 'Société', 'Fonction', 'Type', 'Source', 'Score', 'Adresse', 'Ville', 'Code postal', 'Pays', 'Date création'];
+      let csv = headers.join(';') + '\n';
+
+      for (const row of result.rows) {
+        const values = headers.map(h => {
+          const val = row[h];
+          if (val === null || val === undefined) return '';
+          if (val instanceof Date) return val.toLocaleDateString('fr-FR');
+          return `"${String(val).replace(/"/g, '""')}"`;
+        });
+        csv += values.join(';') + '\n';
+      }
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="contacts.csv"');
+      res.send('\ufeff' + csv);
+    } else {
+      res.json(result.rows);
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /**
  * FEC (Fichier des Écritures Comptables) - Format obligatoire pour contrôle fiscal France
  *

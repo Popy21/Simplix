@@ -3,6 +3,61 @@ import { pool as db } from '../database/db';
 
 const router = express.Router();
 
+// GET / - Liste des rapports disponibles et résumé
+router.get('/', async (req: Request, res: Response) => {
+  try {
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+
+    // Résumé rapide
+    const [salesSummary, quoteSummary, productSummary] = await Promise.all([
+      db.query(`
+        SELECT
+          COUNT(*) as total_sales,
+          COALESCE(SUM(total_amount), 0) as total_revenue
+        FROM sales
+        WHERE EXTRACT(YEAR FROM sale_date) = $1
+      `, [currentYear]),
+      db.query(`
+        SELECT
+          COUNT(*) as total_quotes,
+          COUNT(*) FILTER (WHERE status = 'accepted') as accepted_quotes,
+          COALESCE(SUM(total_amount) FILTER (WHERE status = 'accepted'), 0) as accepted_value
+        FROM quotes
+        WHERE EXTRACT(YEAR FROM created_at) = $1
+      `, [currentYear]),
+      db.query(`
+        SELECT
+          COUNT(*) as total_products,
+          COALESCE(SUM(stock * price), 0) as total_stock_value
+        FROM products
+        WHERE deleted_at IS NULL
+      `)
+    ]);
+
+    res.json({
+      available_reports: [
+        { id: 'sales', name: 'Rapport des ventes', endpoint: '/api/reports/sales' },
+        { id: 'customers', name: 'Rapport clients', endpoint: '/api/reports/customers' },
+        { id: 'products', name: 'Performance produits', endpoint: '/api/reports/products' },
+        { id: 'quotes', name: 'Rapport devis', endpoint: '/api/reports/quotes' },
+        { id: 'teams', name: 'Performance équipes', endpoint: '/api/reports/teams' },
+        { id: 'users', name: 'Performance utilisateurs', endpoint: '/api/reports/users' },
+        { id: 'revenue', name: 'Revenus par période', endpoint: '/api/reports/revenue' },
+        { id: 'inventory', name: 'État des stocks', endpoint: '/api/reports/inventory' }
+      ],
+      summary: {
+        year: currentYear,
+        sales: salesSummary.rows[0],
+        quotes: quoteSummary.rows[0],
+        products: productSummary.rows[0]
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Sales report by date range
 router.get('/sales', async (req: Request, res: Response) => {
   const { startDate, endDate, groupBy = 'day' } = req.query;

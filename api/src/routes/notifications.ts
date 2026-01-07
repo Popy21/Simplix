@@ -5,6 +5,31 @@ const router = express.Router();
 
 // IMPORTANT: Routes avec des chemins spécifiques DOIVENT être avant /:id
 
+// GET / - Liste toutes les notifications
+router.get('/', async (req: Request, res: Response) => {
+  try {
+    const { page = 1, limit = 50 } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    const result = await db.query(`
+      SELECT * FROM notifications
+      ORDER BY created_at DESC
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+
+    const countResult = await db.query('SELECT COUNT(*) as total FROM notifications');
+
+    res.json({
+      notifications: result.rows,
+      total: parseInt(countResult.rows[0].total),
+      page: Number(page),
+      limit: Number(limit)
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get contextual notification count
 router.get('/contextual/count', async (req: Request, res: Response) => {
   try {

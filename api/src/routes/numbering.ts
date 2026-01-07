@@ -4,6 +4,37 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
+// GET / - Alias pour /sequences (paramètres de numérotation)
+router.get('/settings', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+
+    const result = await db.query(`
+      SELECT
+        ds.*,
+        (SELECT COUNT(*) FROM document_number_audit WHERE sequence_id = ds.id) as total_generated,
+        (SELECT COUNT(*) FROM document_number_audit WHERE sequence_id = ds.id AND year = EXTRACT(YEAR FROM CURRENT_DATE)) as generated_this_year,
+        (SELECT MAX(generated_at) FROM document_number_audit WHERE sequence_id = ds.id) as last_generated_at
+      FROM document_sequences ds
+      WHERE ds.organization_id = $1
+      ORDER BY ds.document_type
+    `, [organizationId]);
+
+    res.json({
+      sequences: result.rows,
+      defaults: {
+        invoice: { prefix: 'FAC', separator: '-', include_year: true, min_digits: 5, reset_yearly: true },
+        quote: { prefix: 'DEV', separator: '-', include_year: true, min_digits: 5, reset_yearly: true },
+        credit_note: { prefix: 'AV', separator: '-', include_year: true, min_digits: 5, reset_yearly: true },
+        delivery_note: { prefix: 'BL', separator: '-', include_year: true, min_digits: 5, reset_yearly: true },
+        purchase_order: { prefix: 'BC', separator: '-', include_year: true, min_digits: 5, reset_yearly: true }
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Récupérer toutes les séquences de l'organisation
 router.get('/sequences', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

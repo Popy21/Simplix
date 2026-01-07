@@ -107,6 +107,55 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Résumé du CA (summary)
+router.get('/summary', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+    const { period = 'month' } = req.query;
+    const now = new Date();
+    let startDate: Date;
+
+    switch (period) {
+      case 'week':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      case 'quarter':
+        const quarter = Math.floor(now.getMonth() / 3);
+        startDate = new Date(now.getFullYear(), quarter * 3, 1);
+        break;
+      case 'month':
+      default:
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    const result = await db.query(`
+      SELECT
+        COALESCE(SUM(total_amount) FILTER (WHERE status IN ('sent', 'paid', 'partial')), 0) as total_revenue,
+        COALESCE(SUM(total_amount) FILTER (WHERE status = 'paid'), 0) as collected,
+        COALESCE(SUM(total_amount) FILTER (WHERE status IN ('sent', 'partial')), 0) as outstanding,
+        COUNT(*) FILTER (WHERE status IN ('sent', 'paid', 'partial')) as invoice_count,
+        COUNT(*) FILTER (WHERE status = 'paid') as paid_count,
+        COUNT(*) FILTER (WHERE status IN ('sent', 'partial') AND due_date < CURRENT_DATE) as overdue_count,
+        COALESCE(SUM(total_amount) FILTER (WHERE status IN ('sent', 'partial') AND due_date < CURRENT_DATE), 0) as overdue_amount
+      FROM invoices
+      WHERE invoice_date >= $1
+        AND deleted_at IS NULL
+        AND ($2::UUID IS NULL OR organization_id = $2)
+    `, [startDate, organizationId]);
+
+    res.json({
+      period,
+      startDate: startDate.toISOString().split('T')[0],
+      ...result.rows[0]
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // CA mensuel détaillé
 router.get('/monthly', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

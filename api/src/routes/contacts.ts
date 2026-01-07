@@ -112,6 +112,31 @@ router.get('/deleted', authenticateToken, requireOrganization, async (req: AuthR
   }
 });
 
+// Get contact statistics
+router.get('/stats', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+
+    const stats = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE deleted_at IS NULL) as total,
+        COUNT(*) FILTER (WHERE type = 'lead' AND deleted_at IS NULL) as leads,
+        COUNT(*) FILTER (WHERE type = 'prospect' AND deleted_at IS NULL) as prospects,
+        COUNT(*) FILTER (WHERE type = 'customer' AND deleted_at IS NULL) as customers,
+        COUNT(*) FILTER (WHERE type = 'contact' AND deleted_at IS NULL) as contacts,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days' AND deleted_at IS NULL) as new_this_month,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days' AND deleted_at IS NULL) as new_this_week
+      FROM contacts
+      WHERE organization_id = $1
+    `, [orgId]);
+
+    res.json(stats.rows[0]);
+  } catch (err: any) {
+    console.error('Error fetching contact stats:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get contact by ID
 router.get('/:id', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {

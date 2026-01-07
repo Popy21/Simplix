@@ -5,6 +5,41 @@ import { sendEmail, generateReminderEmailHTML, getCompanyProfile, logEmail } fro
 
 const router = express.Router();
 
+// GET / - Liste toutes les relances (historique récent)
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+    const { page = 1, limit = 50 } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    const result = await db.query(`
+      SELECT pr.*,
+        i.invoice_number,
+        c.name as customer_name
+      FROM payment_reminders pr
+      LEFT JOIN invoices i ON pr.invoice_id = i.id
+      LEFT JOIN customers c ON pr.customer_id = c.id
+      WHERE ($1::UUID IS NULL OR pr.organization_id = $1)
+      ORDER BY pr.sent_at DESC
+      LIMIT $2 OFFSET $3
+    `, [organizationId, limit, offset]);
+
+    const countResult = await db.query(`
+      SELECT COUNT(*) as total FROM payment_reminders
+      WHERE ($1::UUID IS NULL OR organization_id = $1)
+    `, [organizationId]);
+
+    res.json({
+      reminders: result.rows,
+      total: parseInt(countResult.rows[0].total),
+      page: Number(page),
+      limit: Number(limit)
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Récupérer les paramètres de relance
 router.get('/settings', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

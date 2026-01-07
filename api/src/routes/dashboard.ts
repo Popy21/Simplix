@@ -276,6 +276,74 @@ router.get('/quick-stats', authenticateToken, async (req: AuthRequest, res: Resp
   }
 });
 
+// GET /api/dashboard/stats - General dashboard statistics
+router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id;
+    const period = (req.query.period as string) || 'month';
+    const { startDate, endDate } = getDateRange(period);
+
+    // Get comprehensive stats
+    const [contacts, deals, invoices, quotes, products] = await Promise.all([
+      db.query(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE type = 'lead') as leads,
+          COUNT(*) FILTER (WHERE type = 'customer') as customers,
+          COUNT(*) FILTER (WHERE created_at >= $2) as new_period
+        FROM contacts WHERE organization_id = $1 AND deleted_at IS NULL
+      `, [organizationId, startDate]),
+
+      db.query(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE status = 'won') as won,
+          COUNT(*) FILTER (WHERE status = 'lost') as lost,
+          COALESCE(SUM(amount) FILTER (WHERE status = 'won'), 0) as won_value
+        FROM deals WHERE organization_id = $1 AND deleted_at IS NULL AND created_at >= $2
+      `, [organizationId, startDate]),
+
+      db.query(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE status = 'paid') as paid,
+          COUNT(*) FILTER (WHERE status = 'pending' OR status = 'sent') as pending,
+          COALESCE(SUM(total_amount) FILTER (WHERE status = 'paid'), 0) as revenue,
+          COALESCE(SUM(total_amount) FILTER (WHERE status IN ('pending', 'sent')), 0) as outstanding
+        FROM invoices WHERE organization_id = $1 AND deleted_at IS NULL AND invoice_date >= $2
+      `, [organizationId, startDate]),
+
+      db.query(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE status = 'accepted') as accepted,
+          COUNT(*) FILTER (WHERE status = 'pending' OR status = 'sent') as pending,
+          COALESCE(SUM(total_amount) FILTER (WHERE status = 'accepted'), 0) as accepted_value
+        FROM quotes WHERE organization_id = $1 AND deleted_at IS NULL AND created_at >= $2
+      `, [organizationId, startDate]),
+
+      db.query(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE track_stock = true AND stock_quantity <= COALESCE(stock_min_alert, 0)) as low_stock
+        FROM products WHERE organization_id = $1 AND deleted_at IS NULL
+      `, [organizationId])
+    ]);
+
+    res.json({
+      period,
+      contacts: contacts.rows[0],
+      deals: deals.rows[0],
+      invoices: invoices.rows[0],
+      quotes: quotes.rows[0],
+      products: products.rows[0]
+    });
+  } catch (error: any) {
+    console.error('Error fetching dashboard stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/dashboard/kpis
 router.get('/kpis', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
@@ -336,7 +404,7 @@ router.get('/kpis', authenticateToken, async (req: AuthRequest, res: Response) =
     // Payment delay KPI
     const paymentDelayQuery = await db.query(`
       SELECT
-        AVG(EXTRACT(DAY FROM (p.payment_date - i.due_date))) as avg_delay
+        AVG(p.payment_date - i.due_date) as avg_delay
       FROM invoices i
       JOIN payments p ON p.invoice_id = i.id
       WHERE i.organization_id = $1 AND i.invoice_date >= $2 AND i.invoice_date <= $3 AND i.deleted_at IS NULL
@@ -490,7 +558,7 @@ router.get('/invoices-metrics', authenticateToken, async (req: AuthRequest, res:
 
     // Average payment delay
     const delayQuery = await db.query(`
-      SELECT AVG(EXTRACT(DAY FROM (p.payment_date - i.due_date))) as avg_delay
+      SELECT AVG(p.payment_date - i.due_date) as avg_delay
       FROM invoices i
       JOIN payments p ON p.invoice_id = i.id
       WHERE i.organization_id = $1 AND i.invoice_date >= $2 AND i.invoice_date <= $3 AND i.deleted_at IS NULL

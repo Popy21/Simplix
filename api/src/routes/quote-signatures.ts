@@ -10,6 +10,60 @@ const router = express.Router();
 // ROUTES AUTHENTIFIÉES (pour l'entreprise)
 // ==========================================
 
+// GET / - Liste des signatures de devis (alias pour /pending)
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+    const { status, page = 1, limit = 50 } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    let whereClause = `q.deleted_at IS NULL AND ($1::UUID IS NULL OR q.organization_id = $1)`;
+
+    if (status === 'pending') {
+      whereClause += ` AND q.signature_token IS NOT NULL AND q.signed_at IS NULL`;
+    } else if (status === 'signed') {
+      whereClause += ` AND q.signed_at IS NOT NULL`;
+    }
+
+    const result = await db.query(`
+      SELECT
+        q.id,
+        q.quote_number,
+        q.title,
+        q.total_amount,
+        q.status,
+        q.valid_until,
+        q.signature_url,
+        q.signed_at,
+        q.signed_by_name,
+        q.signed_by_email,
+        q.created_at,
+        c.name as customer_name,
+        c.email as customer_email,
+        (SELECT COUNT(*) FROM quote_signature_events WHERE quote_id = q.id AND event_type = 'link_opened') as times_viewed,
+        (SELECT MAX(created_at) FROM quote_signature_events WHERE quote_id = q.id AND event_type = 'link_opened') as last_viewed
+      FROM quotes q
+      LEFT JOIN customers c ON q.customer_id = c.id
+      WHERE ${whereClause}
+      ORDER BY q.created_at DESC
+      LIMIT $2 OFFSET $3
+    `, [organizationId, limit, offset]);
+
+    const countResult = await db.query(`
+      SELECT COUNT(*) as total FROM quotes q WHERE ${whereClause}
+    `, [organizationId]);
+
+    res.json({
+      signatures: result.rows,
+      total: parseInt(countResult.rows[0].total),
+      page: Number(page),
+      limit: Number(limit)
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Générer un lien de signature pour un devis
 router.post('/:quoteId/generate-link', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

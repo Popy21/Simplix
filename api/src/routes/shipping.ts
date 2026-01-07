@@ -8,6 +8,27 @@ const router = express.Router();
 // TARIFS DE LIVRAISON
 // ==========================================
 
+// GET /methods - Alias pour /rates (méthodes de livraison)
+router.get('/methods', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+
+    const result = await db.query(`
+      SELECT
+        id, name, carrier, description, calculation_type,
+        fixed_rate, rate_per_kg, free_above_amount,
+        delivery_days_min, delivery_days_max, is_default, is_active
+      FROM shipping_rates
+      WHERE organization_id = $1 AND is_active = true
+      ORDER BY is_default DESC, name
+    `, [organizationId]);
+
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Liste des tarifs
 router.get('/rates', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

@@ -10,6 +10,52 @@ const upload = multer({ storage: multer.memoryStorage() });
 // COMPTES BANCAIRES
 // ==========================================
 
+// GET / - Vue d'ensemble du rapprochement bancaire
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+
+    // Comptes bancaires
+    const accountsResult = await db.query(`
+      SELECT
+        id, name, bank_name, iban, currency, current_balance, is_default
+      FROM bank_accounts
+      WHERE organization_id = $1 AND is_active = true
+      ORDER BY is_default DESC, name
+    `, [organizationId]);
+
+    // Stats globales
+    const statsResult = await db.query(`
+      SELECT
+        COUNT(*) as total_transactions,
+        COUNT(*) FILTER (WHERE status = 'pending') as pending_count,
+        COUNT(*) FILTER (WHERE status = 'matched') as matched_count,
+        COALESCE(SUM(CASE WHEN type = 'credit' AND status = 'pending' THEN amount ELSE 0 END), 0) as pending_credits,
+        COALESCE(SUM(CASE WHEN type = 'debit' AND status = 'pending' THEN amount ELSE 0 END), 0) as pending_debits
+      FROM bank_transactions
+      WHERE organization_id = $1
+    `, [organizationId]);
+
+    // Derniers imports
+    const importsResult = await db.query(`
+      SELECT id, filename, imported_at, total_transactions, pending_count, matched_count
+      FROM bank_imports
+      WHERE organization_id = $1
+      ORDER BY imported_at DESC
+      LIMIT 5
+    `, [organizationId]);
+
+    res.json({
+      accounts: accountsResult.rows,
+      statistics: statsResult.rows[0],
+      recent_imports: importsResult.rows,
+      total_balance: accountsResult.rows.reduce((sum: number, acc: any) => sum + parseFloat(acc.current_balance || 0), 0)
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Récupérer tous les comptes bancaires
 router.get('/accounts', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

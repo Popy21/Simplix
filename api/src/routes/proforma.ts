@@ -8,6 +8,56 @@ const router = express.Router();
 // FACTURES PROFORMA
 // ==========================================
 
+// Liste des factures proforma
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+    const { page = 1, limit = 20, status, customer_id } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    let whereClause = `i.organization_id = $1 AND i.invoice_type = 'proforma' AND i.deleted_at IS NULL`;
+    const params: any[] = [organizationId];
+
+    if (status) {
+      params.push(status);
+      whereClause += ` AND i.status = $${params.length}`;
+    }
+
+    if (customer_id) {
+      params.push(customer_id);
+      whereClause += ` AND i.customer_id = $${params.length}`;
+    }
+
+    const result = await db.query(`
+      SELECT
+        i.*,
+        c.name as customer_name,
+        c.email as customer_email
+      FROM invoices i
+      LEFT JOIN customers c ON i.customer_id = c.id
+      WHERE ${whereClause}
+      ORDER BY i.created_at DESC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+    `, [...params, limit, offset]);
+
+    const countResult = await db.query(`
+      SELECT COUNT(*) as total FROM invoices i WHERE ${whereClause}
+    `, params);
+
+    res.json({
+      data: result.rows,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: parseInt(countResult.rows[0].total),
+        pages: Math.ceil(parseInt(countResult.rows[0].total) / Number(limit))
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Créer une facture proforma à partir d'un devis
 router.post('/from-quote/:quoteId', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

@@ -8,6 +8,51 @@ const router = express.Router();
 // CONFIGURATION FACTUR-X
 // ==========================================
 
+// GET /status - Statut rapide de Factur-X
+router.get('/status', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+
+    const settingsResult = await db.query(
+      'SELECT is_enabled, profile, seller_siret, seller_tva_intracom FROM facturx_settings WHERE organization_id = $1',
+      [organizationId]
+    );
+
+    const settings = settingsResult.rows[0];
+
+    // Compter les factures avec Factur-X généré
+    const statsResult = await db.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE facturx_xml IS NOT NULL) as generated_count,
+        COUNT(*) as total_invoices
+      FROM invoices
+      WHERE organization_id = $1 AND deleted_at IS NULL AND status NOT IN ('draft', 'cancelled')
+    `, [organizationId]);
+
+    const stats = statsResult.rows[0];
+
+    res.json({
+      enabled: settings?.is_enabled || false,
+      profile: settings?.profile || 'EN16931',
+      configured: !!(settings?.seller_siret && settings?.seller_tva_intracom),
+      statistics: {
+        generated: parseInt(stats.generated_count || 0),
+        total: parseInt(stats.total_invoices || 0),
+        percentage: stats.total_invoices > 0
+          ? Math.round((stats.generated_count / stats.total_invoices) * 100)
+          : 0
+      },
+      deadlines: {
+        large_companies: '2026-09-01',
+        mid_companies: '2027-09-01',
+        small_companies: '2028-09-01'
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Récupérer la configuration
 router.get('/settings', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
