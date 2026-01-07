@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,15 @@ import {
   Platform,
   TextInput,
   Switch,
+  RefreshControl,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { UsersIcon, TrendingUpIcon } from '../components/Icons';
 import { withGlassLayout } from '../components/withGlassLayout';
+import { emailsService, contactService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 type EmailsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -24,148 +28,345 @@ interface EmailTemplate {
   id: string;
   name: string;
   subject: string;
-  preview: string;
-  category: string;
+  html_content: string;
+  text_content?: string;
+  category?: string;
   variables: string[];
-  usageCount: number;
-  lastUsed: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
-interface ScheduledEmail {
+interface EmailCampaign {
   id: string;
-  template: string;
-  recipients: number;
-  sendDate: string;
-  status: 'pending' | 'scheduled' | 'sent';
+  name: string;
+  template_name?: string;
+  subject: string;
+  status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'paused';
+  scheduled_at?: string;
+  sent_at?: string;
+  total_recipients: number;
+  sent_count: number;
+  delivered_count: number;
+  opened_count: number;
+  clicked_count: number;
+  bounced_count: number;
+  open_rate?: number;
+  click_rate?: number;
+  created_at: string;
 }
 
 interface EmailLog {
   id: string;
-  recipient: string;
+  to_email: string;
+  to_name?: string;
   subject: string;
-  sendDate: string;
-  status: 'sent' | 'delivered' | 'opened' | 'clicked';
-  openCount: number;
-  clickCount: number;
+  status: 'pending' | 'sent' | 'delivered' | 'opened' | 'clicked' | 'bounced' | 'complained';
+  sent_at?: string;
+  delivered_at?: string;
+  opened_at?: string;
+  clicked_at?: string;
+  open_count: number;
+  click_count: number;
+  campaign_name?: string;
+  created_at: string;
+}
+
+interface Contact {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
 }
 
 function EmailsScreen({ navigation }: EmailsScreenProps) {
-  const [activeTab, setActiveTab] = useState<'templates' | 'scheduled' | 'logs'>('templates');
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<'templates' | 'campaigns' | 'logs'>('templates');
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
-  const [scheduled, setScheduled] = useState<ScheduledEmail[]>([]);
+  const [campaigns, setCampaigns] = useState<EmailCampaign[]>([]);
   const [logs, setLogs] = useState<EmailLog[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   const [templateModalVisible, setTemplateModalVisible] = useState(false);
-  const [bulkModalVisible, setBulkModalVisible] = useState(false);
+  const [campaignModalVisible, setCampaignModalVisible] = useState(false);
+
+  const [templateForm, setTemplateForm] = useState({
+    name: '',
+    subject: '',
+    html_content: '',
+    text_content: '',
+    category: 'general',
+  });
+
+  const [campaignForm, setCampaignForm] = useState({
+    template_id: '',
+    name: '',
+    subject: '',
+    from_email: user?.email || '',
+    from_name: user?.first_name + ' ' + user?.last_name || '',
+    reply_to: user?.email || '',
+    scheduled_at: '',
+    immediate: false,
+    selected_contacts: [] as string[],
+  });
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [activeTab]);
 
-  const loadData = () => {
-    // Templates mock data
-    const mockTemplates: EmailTemplate[] = [
-      {
-        id: 't1',
-        name: 'Bienvenue Client',
-        subject: 'Bienvenue chez {{company}}',
-        preview: 'Bonjour {{firstName}}, merci de votre confiance...',
-        category: 'welcome',
-        variables: ['firstName', 'lastName', 'company', 'email'],
-        usageCount: 45,
-        lastUsed: '2025-11-19',
-      },
-      {
-        id: 't2',
-        name: 'Suivi Devis',
-        subject: 'Votre devis de {{value}}€ - {{company}}',
-        preview: 'Bonjour {{firstName}}, suite à notre échange...',
-        category: 'quote',
-        variables: ['firstName', 'company', 'value', 'deadline'],
-        usageCount: 32,
-        lastUsed: '2025-11-18',
-      },
-      {
-        id: 't3',
-        name: 'Relance Deal',
-        subject: 'Relance: {{dealTitle}} pour {{company}}',
-        preview: 'Bonjour {{firstName}}, nous souhaitions...',
-        category: 'sales',
-        variables: ['firstName', 'dealTitle', 'company', 'amount'],
-        usageCount: 28,
-        lastUsed: '2025-11-17',
-      },
-      {
-        id: 't4',
-        name: 'Facture Envoyée',
-        subject: 'Facture #{{invoiceId}} - {{amount}}€',
-        preview: 'Veuillez trouver ci-joint votre facture...',
-        category: 'invoice',
-        variables: ['invoiceId', 'amount', 'dueDate'],
-        usageCount: 156,
-        lastUsed: '2025-11-19',
-      },
-    ];
+  const loadData = async () => {
+    try {
+      setLoading(true);
 
-    const mockScheduled: ScheduledEmail[] = [
-      {
-        id: 's1',
-        template: 'Bienvenue Client',
-        recipients: 12,
-        sendDate: '2025-11-25',
-        status: 'scheduled',
-      },
-      {
-        id: 's2',
-        template: 'Suivi Devis',
-        recipients: 5,
-        sendDate: '2025-11-23',
-        status: 'scheduled',
-      },
-    ];
+      if (activeTab === 'templates') {
+        await loadTemplates();
+      } else if (activeTab === 'campaigns') {
+        await loadCampaigns();
+      } else if (activeTab === 'logs') {
+        await loadLogs();
+      }
+    } catch (error: any) {
+      console.error('Error loading data:', error);
+      Alert.alert('Erreur', 'Impossible de charger les données');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const mockLogs: EmailLog[] = [
-      {
-        id: 'l1',
-        recipient: 'jean.dupont@techcorp.fr',
-        subject: 'Bienvenue chez TechCorp',
-        sendDate: '2025-11-19',
-        status: 'opened',
-        openCount: 3,
-        clickCount: 1,
-      },
-      {
-        id: 'l2',
-        recipient: 'marie.martin@globalsol.fr',
-        subject: 'Votre devis de 32000€',
-        sendDate: '2025-11-18',
-        status: 'clicked',
-        openCount: 2,
-        clickCount: 2,
-      },
-      {
-        id: 'l3',
-        recipient: 'pierre.leroy@startupxyz.fr',
-        subject: 'Relance: Solution E-commerce',
-        sendDate: '2025-11-17',
-        status: 'delivered',
-        openCount: 0,
-        clickCount: 0,
-      },
-      {
-        id: 'l4',
-        recipient: 'sophie.durand@enterprise.fr',
-        subject: 'Facture #001 - 75000€',
-        sendDate: '2025-11-16',
-        status: 'opened',
-        openCount: 1,
-        clickCount: 0,
-      },
-    ];
+  const loadTemplates = async () => {
+    try {
+      const response = await emailsService.getTemplates();
+      setTemplates(response.data || []);
+    } catch (error) {
+      console.error('Error loading templates:', error);
+    }
+  };
 
-    setTemplates(mockTemplates);
-    setScheduled(mockScheduled);
-    setLogs(mockLogs);
+  const loadCampaigns = async () => {
+    try {
+      const response = await emailsService.getCampaigns();
+      setCampaigns(response.data || []);
+    } catch (error) {
+      console.error('Error loading campaigns:', error);
+    }
+  };
+
+  const loadLogs = async () => {
+    try {
+      const response = await emailsService.getLogs({ limit: 100 });
+      setLogs(response.data || []);
+    } catch (error) {
+      console.error('Error loading logs:', error);
+    }
+  };
+
+  const loadContacts = async () => {
+    try {
+      const response = await contactService.getAll({ limit: 1000 });
+      setContacts(response.data.contacts || []);
+    } catch (error) {
+      console.error('Error loading contacts:', error);
+    }
+  };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  }, [activeTab]);
+
+  const handleCreateTemplate = async () => {
+    if (!templateForm.name || !templateForm.subject || !templateForm.html_content) {
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs requis');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      if (selectedTemplate) {
+        await emailsService.updateTemplate(selectedTemplate.id, {
+          name: templateForm.name,
+          subject: templateForm.subject,
+          html_content: templateForm.html_content,
+          text_content: templateForm.text_content,
+          category: templateForm.category,
+        });
+        Alert.alert('Succès', 'Template mis à jour');
+      } else {
+        await emailsService.createTemplate({
+          name: templateForm.name,
+          subject: templateForm.subject,
+          html_content: templateForm.html_content,
+          text_content: templateForm.text_content,
+          category: templateForm.category,
+        });
+        Alert.alert('Succès', 'Template créé');
+      }
+
+      setTemplateModalVisible(false);
+      resetTemplateForm();
+      await loadTemplates();
+    } catch (error: any) {
+      Alert.alert('Erreur', error.response?.data?.error || 'Impossible de sauvegarder le template');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (id: string) => {
+    Alert.alert(
+      'Confirmation',
+      'Voulez-vous vraiment supprimer ce template ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await emailsService.deleteTemplate(id);
+              Alert.alert('Succès', 'Template supprimé');
+              await loadTemplates();
+            } catch (error: any) {
+              Alert.alert('Erreur', error.response?.data?.error || 'Impossible de supprimer le template');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleCreateCampaign = async () => {
+    if (!campaignForm.name || !campaignForm.subject || !campaignForm.from_email) {
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs requis');
+      return;
+    }
+
+    if (campaignForm.selected_contacts.length === 0) {
+      Alert.alert('Erreur', 'Veuillez sélectionner au moins un destinataire');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const response = await emailsService.createCampaign({
+        template_id: campaignForm.template_id || undefined,
+        name: campaignForm.name,
+        subject: campaignForm.subject,
+        from_email: campaignForm.from_email,
+        from_name: campaignForm.from_name,
+        reply_to: campaignForm.reply_to,
+        scheduled_at: campaignForm.immediate ? undefined : campaignForm.scheduled_at,
+      });
+
+      const campaignId = response.data.id;
+
+      // Envoyer immédiatement si demandé
+      if (campaignForm.immediate) {
+        await emailsService.sendCampaign(campaignId, {
+          contact_ids: campaignForm.selected_contacts,
+        });
+        Alert.alert('Succès', `Campagne envoyée à ${campaignForm.selected_contacts.length} destinataires`);
+      } else {
+        Alert.alert('Succès', 'Campagne créée et planifiée');
+      }
+
+      setCampaignModalVisible(false);
+      resetCampaignForm();
+      await loadCampaigns();
+    } catch (error: any) {
+      Alert.alert('Erreur', error.response?.data?.error || 'Impossible de créer la campagne');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendCampaign = async (campaign: EmailCampaign) => {
+    await loadContacts();
+
+    Alert.alert(
+      'Envoyer la campagne',
+      `Voulez-vous envoyer "${campaign.name}" maintenant ?`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Envoyer',
+          onPress: () => {
+            setCampaignForm({
+              ...campaignForm,
+              template_id: '',
+              name: campaign.name,
+              subject: campaign.subject,
+              immediate: true,
+            });
+            setCampaignModalVisible(true);
+          },
+        },
+      ]
+    );
+  };
+
+  const handlePauseCampaign = async (id: string) => {
+    try {
+      await emailsService.pauseCampaign(id);
+      Alert.alert('Succès', 'Campagne mise en pause');
+      await loadCampaigns();
+    } catch (error: any) {
+      Alert.alert('Erreur', error.response?.data?.error || 'Impossible de mettre en pause');
+    }
+  };
+
+  const resetTemplateForm = () => {
+    setTemplateForm({
+      name: '',
+      subject: '',
+      html_content: '',
+      text_content: '',
+      category: 'general',
+    });
+    setSelectedTemplate(null);
+  };
+
+  const resetCampaignForm = () => {
+    setCampaignForm({
+      template_id: '',
+      name: '',
+      subject: '',
+      from_email: user?.email || '',
+      from_name: user?.first_name + ' ' + user?.last_name || '',
+      reply_to: user?.email || '',
+      scheduled_at: '',
+      immediate: false,
+      selected_contacts: [],
+    });
+  };
+
+  const openTemplateModal = (template?: EmailTemplate) => {
+    if (template) {
+      setSelectedTemplate(template);
+      setTemplateForm({
+        name: template.name,
+        subject: template.subject,
+        html_content: template.html_content,
+        text_content: template.text_content || '',
+        category: template.category || 'general',
+      });
+    } else {
+      resetTemplateForm();
+    }
+    setTemplateModalVisible(true);
+  };
+
+  const openCampaignModal = async () => {
+    await loadContacts();
+    resetCampaignForm();
+    setCampaignModalVisible(true);
   };
 
   const getCategoryColor = (category: string) => {
@@ -174,6 +375,7 @@ function EmailsScreen({ navigation }: EmailsScreenProps) {
       quote: '#007AFF',
       sales: '#FF9500',
       invoice: '#5856D6',
+      general: '#8E8E93',
     };
     return colors[category] || '#8E8E93';
   };
@@ -184,41 +386,59 @@ function EmailsScreen({ navigation }: EmailsScreenProps) {
       quote: 'Devis',
       sales: 'Commercial',
       invoice: 'Facturation',
+      general: 'Général',
     };
     return labels[category] || category;
   };
 
   const getStatusColor = (status: string) => {
     const colors: { [key: string]: string } = {
-      sent: '#8E8E93',
+      draft: '#8E8E93',
+      scheduled: '#5856D6',
+      sending: '#FF9500',
+      sent: '#34C759',
+      paused: '#FF3B30',
+      pending: '#8E8E93',
       delivered: '#007AFF',
       opened: '#34C759',
       clicked: '#FF9500',
-      scheduled: '#5856D6',
-      pending: '#FF3B30',
+      bounced: '#FF3B30',
+      complained: '#FF3B30',
     };
     return colors[status] || '#8E8E93';
   };
 
   const getStatusLabel = (status: string) => {
     const labels: { [key: string]: string } = {
+      draft: 'Brouillon',
+      scheduled: 'Planifié',
+      sending: 'En cours',
       sent: 'Envoyé',
+      paused: 'En pause',
+      pending: 'En attente',
       delivered: 'Livré',
       opened: 'Ouvert',
       clicked: 'Cliqué',
-      scheduled: 'Planifié',
-      pending: 'En attente',
+      bounced: 'Échoué',
+      complained: 'Signalé',
     };
     return labels[status] || status;
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
   };
 
   const renderTemplateCard = ({ item: template }: { item: EmailTemplate }) => (
     <TouchableOpacity
       style={styles.templateCard}
-      onPress={() => {
-        setSelectedTemplate(template);
-        setTemplateModalVisible(true);
-      }}
+      onPress={() => openTemplateModal(template)}
     >
       <View style={styles.templateCardHeader}>
         <View style={styles.templateInfo}>
@@ -227,62 +447,104 @@ function EmailsScreen({ navigation }: EmailsScreenProps) {
             {template.subject}
           </Text>
         </View>
-        <View style={[styles.categoryBadge, { backgroundColor: `${getCategoryColor(template.category)}20` }]}>
-          <Text style={[styles.categoryBadgeText, { color: getCategoryColor(template.category) }]}>
-            {getCategoryLabel(template.category)}
+        <View style={[styles.categoryBadge, { backgroundColor: `${getCategoryColor(template.category || 'general')}20` }]}>
+          <Text style={[styles.categoryBadgeText, { color: getCategoryColor(template.category || 'general') }]}>
+            {getCategoryLabel(template.category || 'general')}
           </Text>
         </View>
       </View>
 
       <Text style={styles.templatePreview} numberOfLines={2}>
-        {template.preview}
+        {template.html_content.replace(/<[^>]*>/g, '').substring(0, 100)}...
       </Text>
+
+      {template.variables && template.variables.length > 0 && (
+        <View style={styles.variablesRow}>
+          <Text style={styles.variablesLabel}>Variables:</Text>
+          {template.variables.slice(0, 3).map((variable, index) => (
+            <Text key={index} style={styles.variableTag}>
+              {`{{${variable}}}`}
+            </Text>
+          ))}
+          {template.variables.length > 3 && (
+            <Text style={styles.variableTag}>+{template.variables.length - 3}</Text>
+          )}
+        </View>
+      )}
 
       <View style={styles.templateFooter}>
         <View style={styles.usageStats}>
-          <Text style={styles.usageLabel}>Utilisation</Text>
-          <Text style={styles.usageValue}>{template.usageCount}</Text>
+          <Text style={styles.usageLabel}>Créé le</Text>
+          <Text style={styles.usageValue}>{formatDate(template.created_at)}</Text>
         </View>
-        <View style={styles.usageStats}>
-          <Text style={styles.usageLabel}>Dernière</Text>
-          <Text style={styles.usageValue}>{template.lastUsed}</Text>
-        </View>
-        <TouchableOpacity style={styles.sendButton}>
-          <Text style={styles.sendButtonText}>Envoyer</Text>
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => handleDeleteTemplate(template.id)}
+        >
+          <Text style={styles.deleteButtonText}>Supprimer</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
 
-  const renderScheduledCard = ({ item: email }: { item: ScheduledEmail }) => (
-    <TouchableOpacity style={styles.scheduledCard}>
-      <View style={styles.scheduledHeader}>
-        <Text style={styles.scheduledTemplate}>{email.template}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(email.status)}20` }]}>
-          <Text style={[styles.statusBadgeText, { color: getStatusColor(email.status) }]}>
-            {getStatusLabel(email.status)}
+  const renderCampaignCard = ({ item: campaign }: { item: EmailCampaign }) => (
+    <TouchableOpacity style={styles.campaignCard}>
+      <View style={styles.campaignHeader}>
+        <Text style={styles.campaignName}>{campaign.name}</Text>
+        <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(campaign.status)}20` }]}>
+          <Text style={[styles.statusBadgeText, { color: getStatusColor(campaign.status) }]}>
+            {getStatusLabel(campaign.status)}
           </Text>
         </View>
       </View>
 
-      <View style={styles.scheduledInfo}>
-        <View style={styles.infoItem}>
-          <Text style={styles.infoLabel}>Destinataires</Text>
-          <Text style={styles.infoValue}>{email.recipients}</Text>
+      <Text style={styles.campaignSubject} numberOfLines={1}>
+        {campaign.subject}
+      </Text>
+
+      {campaign.template_name && (
+        <Text style={styles.campaignTemplate}>Template: {campaign.template_name}</Text>
+      )}
+
+      <View style={styles.campaignStats}>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{campaign.total_recipients || 0}</Text>
+          <Text style={styles.statLabel}>Destinataires</Text>
         </View>
-        <View style={styles.infoItem}>
-          <Text style={styles.infoLabel}>Date d'envoi</Text>
-          <Text style={styles.infoValue}>{email.sendDate}</Text>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{campaign.sent_count || 0}</Text>
+          <Text style={styles.statLabel}>Envoyés</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{campaign.opened_count || 0}</Text>
+          <Text style={styles.statLabel}>Ouverts</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{campaign.open_rate || 0}%</Text>
+          <Text style={styles.statLabel}>Taux</Text>
         </View>
       </View>
 
-      <View style={styles.scheduledActions}>
-        <TouchableOpacity style={styles.actionButton}>
-          <Text style={styles.actionButtonText}>Éditer</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionButton, styles.actionButtonDanger]}>
-          <Text style={[styles.actionButtonText, styles.actionButtonTextDanger]}>Supprimer</Text>
-        </TouchableOpacity>
+      <View style={styles.campaignActions}>
+        {campaign.status === 'draft' && (
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => handleSendCampaign(campaign)}
+          >
+            <Text style={styles.actionButtonText}>Envoyer</Text>
+          </TouchableOpacity>
+        )}
+        {campaign.status === 'sending' && (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.actionButtonDanger]}
+            onPress={() => handlePauseCampaign(campaign.id)}
+          >
+            <Text style={[styles.actionButtonText, styles.actionButtonTextDanger]}>Pause</Text>
+          </TouchableOpacity>
+        )}
+        <Text style={styles.campaignDate}>
+          {campaign.sent_at ? `Envoyé le ${formatDate(campaign.sent_at)}` : `Créé le ${formatDate(campaign.created_at)}`}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -291,8 +553,13 @@ function EmailsScreen({ navigation }: EmailsScreenProps) {
     <TouchableOpacity style={styles.logCard}>
       <View style={styles.logHeader}>
         <View style={styles.logInfo}>
-          <Text style={styles.logRecipient}>{log.recipient}</Text>
+          <Text style={styles.logRecipient}>
+            {log.to_name || log.to_email}
+          </Text>
           <Text style={styles.logSubject} numberOfLines={1}>{log.subject}</Text>
+          {log.campaign_name && (
+            <Text style={styles.logCampaign}>Campagne: {log.campaign_name}</Text>
+          )}
         </View>
         <View style={[styles.logStatusBadge, { backgroundColor: `${getStatusColor(log.status)}20` }]}>
           <Text style={[styles.logStatusText, { color: getStatusColor(log.status) }]}>
@@ -304,135 +571,186 @@ function EmailsScreen({ navigation }: EmailsScreenProps) {
       <View style={styles.logStats}>
         <View style={styles.logStatItem}>
           <Text style={styles.logStatIcon}>👁</Text>
-          <Text style={styles.logStatValue}>{log.openCount}</Text>
+          <Text style={styles.logStatValue}>{log.open_count}</Text>
         </View>
         <View style={styles.logStatItem}>
           <Text style={styles.logStatIcon}>🖱</Text>
-          <Text style={styles.logStatValue}>{log.clickCount}</Text>
+          <Text style={styles.logStatValue}>{log.click_count}</Text>
         </View>
         <View style={styles.logStatItem}>
-          <Text style={styles.logStatLabel}>{log.sendDate}</Text>
+          <Text style={styles.logStatLabel}>{formatDate(log.sent_at || log.created_at)}</Text>
         </View>
       </View>
     </TouchableOpacity>
   );
+
+  const renderContactItem = ({ item }: { item: Contact }) => {
+    const isSelected = campaignForm.selected_contacts.includes(item.id);
+
+    return (
+      <TouchableOpacity
+        style={[styles.contactItem, isSelected && styles.contactItemSelected]}
+        onPress={() => {
+          if (isSelected) {
+            setCampaignForm({
+              ...campaignForm,
+              selected_contacts: campaignForm.selected_contacts.filter(id => id !== item.id),
+            });
+          } else {
+            setCampaignForm({
+              ...campaignForm,
+              selected_contacts: [...campaignForm.selected_contacts, item.id],
+            });
+          }
+        }}
+      >
+        <View style={styles.contactInfo}>
+          <Text style={styles.contactName}>
+            {item.first_name} {item.last_name}
+          </Text>
+          <Text style={styles.contactEmail}>{item.email}</Text>
+        </View>
+        {isSelected && <Text style={styles.checkmark}>✓</Text>}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>📧 Email</Text>
-        <Text style={styles.headerSubtitle}>Gérez templates, envois et suivi</Text>
+        <Text style={styles.headerSubtitle}>Gérez templates, campagnes et suivi</Text>
       </View>
 
       {/* Tabs */}
       <View style={styles.tabsContainer}>
-        {['templates', 'scheduled', 'logs'].map(tab => (
+        {['templates', 'campaigns', 'logs'].map(tab => (
           <TouchableOpacity
             key={tab}
             style={[styles.tab, activeTab === tab && styles.tabActive]}
             onPress={() => setActiveTab(tab as typeof activeTab)}
           >
             <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-              {tab === 'templates' ? '📝 Templates' : tab === 'scheduled' ? '⏰ Planifiés' : '📊 Logs'}
+              {tab === 'templates' ? '📝 Templates' : tab === 'campaigns' ? '📬 Campagnes' : '📊 Logs'}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
       {/* Content */}
-      {activeTab === 'templates' && (
-        <View style={styles.content}>
-          <View style={styles.actionBar}>
-            <Text style={styles.contentTitle}>
-              {templates.length} Templates
-            </Text>
-            <TouchableOpacity
-              style={styles.createButton}
-              onPress={() => {
-                setSelectedTemplate(null);
-                setTemplateModalVisible(true);
-              }}
-            >
-              <Text style={styles.createButtonText}>+ Nouveau</Text>
-            </TouchableOpacity>
-          </View>
-
-          <FlatList
-            data={templates}
-            renderItem={renderTemplateCard}
-            keyExtractor={item => item.id}
-            contentContainerStyle={styles.listContent}
-            scrollEnabled={false}
-          />
+      {loading && !refreshing ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
         </View>
-      )}
+      ) : (
+        <>
+          {activeTab === 'templates' && (
+            <View style={styles.content}>
+              <View style={styles.actionBar}>
+                <Text style={styles.contentTitle}>
+                  {templates.length} Template{templates.length > 1 ? 's' : ''}
+                </Text>
+                <TouchableOpacity
+                  style={styles.createButton}
+                  onPress={() => openTemplateModal()}
+                >
+                  <Text style={styles.createButtonText}>+ Nouveau</Text>
+                </TouchableOpacity>
+              </View>
 
-      {activeTab === 'scheduled' && (
-        <View style={styles.content}>
-          <View style={styles.actionBar}>
-            <Text style={styles.contentTitle}>
-              {scheduled.length} Campagnes Planifiées
-            </Text>
-            <TouchableOpacity
-              style={styles.createButton}
-              onPress={() => setBulkModalVisible(true)}
-            >
-              <Text style={styles.createButtonText}>+ Planifier</Text>
-            </TouchableOpacity>
-          </View>
-
-          {scheduled.length > 0 ? (
-            <FlatList
-              data={scheduled}
-              renderItem={renderScheduledCard}
-              keyExtractor={item => item.id}
-              contentContainerStyle={styles.listContent}
-              scrollEnabled={false}
-            />
-          ) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>Aucun email planifié</Text>
+              <FlatList
+                data={templates}
+                renderItem={renderTemplateCard}
+                keyExtractor={item => item.id}
+                contentContainerStyle={styles.listContent}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+                ListEmptyComponent={
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>Aucun template</Text>
+                  </View>
+                }
+              />
             </View>
           )}
-        </View>
-      )}
 
-      {activeTab === 'logs' && (
-        <View style={styles.content}>
-          <View style={styles.statsRow}>
-            <View style={styles.statBox}>
-              <Text style={styles.statBoxValue}>{logs.length}</Text>
-              <Text style={styles.statBoxLabel}>Envoyés</Text>
-            </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statBoxValue}>
-                {logs.filter(l => l.status === 'opened' || l.status === 'clicked').length}
-              </Text>
-              <Text style={styles.statBoxLabel}>Ouverts</Text>
-            </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statBoxValue}>
-                {logs.filter(l => l.status === 'clicked').length}
-              </Text>
-              <Text style={styles.statBoxLabel}>Cliqués</Text>
-            </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statBoxValue}>
-                {((logs.filter(l => l.status === 'opened' || l.status === 'clicked').length / logs.length) * 100).toFixed(0)}%
-              </Text>
-              <Text style={styles.statBoxLabel}>Taux</Text>
-            </View>
-          </View>
+          {activeTab === 'campaigns' && (
+            <View style={styles.content}>
+              <View style={styles.actionBar}>
+                <Text style={styles.contentTitle}>
+                  {campaigns.length} Campagne{campaigns.length > 1 ? 's' : ''}
+                </Text>
+                <TouchableOpacity
+                  style={styles.createButton}
+                  onPress={openCampaignModal}
+                >
+                  <Text style={styles.createButtonText}>+ Nouvelle</Text>
+                </TouchableOpacity>
+              </View>
 
-          <FlatList
-            data={logs}
-            renderItem={renderLogCard}
-            keyExtractor={item => item.id}
-            contentContainerStyle={styles.listContent}
-            scrollEnabled={false}
-          />
-        </View>
+              <FlatList
+                data={campaigns}
+                renderItem={renderCampaignCard}
+                keyExtractor={item => item.id}
+                contentContainerStyle={styles.listContent}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+                ListEmptyComponent={
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>Aucune campagne</Text>
+                  </View>
+                }
+              />
+            </View>
+          )}
+
+          {activeTab === 'logs' && (
+            <View style={styles.content}>
+              <View style={styles.statsRow}>
+                <View style={styles.statBox}>
+                  <Text style={styles.statBoxValue}>{logs.length}</Text>
+                  <Text style={styles.statBoxLabel}>Envoyés</Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Text style={styles.statBoxValue}>
+                    {logs.filter(l => l.status === 'opened' || l.status === 'clicked').length}
+                  </Text>
+                  <Text style={styles.statBoxLabel}>Ouverts</Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Text style={styles.statBoxValue}>
+                    {logs.filter(l => l.status === 'clicked').length}
+                  </Text>
+                  <Text style={styles.statBoxLabel}>Cliqués</Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Text style={styles.statBoxValue}>
+                    {logs.length > 0 ? ((logs.filter(l => l.status === 'opened' || l.status === 'clicked').length / logs.length) * 100).toFixed(0) : 0}%
+                  </Text>
+                  <Text style={styles.statBoxLabel}>Taux</Text>
+                </View>
+              </View>
+
+              <FlatList
+                data={logs}
+                renderItem={renderLogCard}
+                keyExtractor={item => item.id}
+                contentContainerStyle={styles.listContent}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+                ListEmptyComponent={
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>Aucun log</Text>
+                  </View>
+                }
+              />
+            </View>
+          )}
+        </>
       )}
 
       {/* Template Modal */}
@@ -446,7 +764,7 @@ function EmailsScreen({ navigation }: EmailsScreenProps) {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {selectedTemplate ? selectedTemplate.name : 'Nouveau Template'}
+                {selectedTemplate ? 'Modifier Template' : 'Nouveau Template'}
               </Text>
               <TouchableOpacity onPress={() => setTemplateModalVisible(false)}>
                 <Text style={styles.closeButton}>✕</Text>
@@ -455,38 +773,41 @@ function EmailsScreen({ navigation }: EmailsScreenProps) {
 
             <ScrollView style={styles.modalBody}>
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Nom du Template</Text>
+                <Text style={styles.formLabel}>Nom du Template *</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="Ex: Bienvenue Client"
-                  defaultValue={selectedTemplate?.name}
+                  value={templateForm.name}
+                  onChangeText={(text) => setTemplateForm({ ...templateForm, name: text })}
                 />
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Sujet</Text>
+                <Text style={styles.formLabel}>Sujet *</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="Ex: Bienvenue chez {{company}}"
-                  defaultValue={selectedTemplate?.subject}
+                  value={templateForm.subject}
+                  onChangeText={(text) => setTemplateForm({ ...templateForm, subject: text })}
                 />
               </View>
 
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Catégorie</Text>
                 <View style={styles.categorySelect}>
-                  {['welcome', 'quote', 'sales', 'invoice'].map(cat => (
+                  {['general', 'welcome', 'quote', 'sales', 'invoice'].map(cat => (
                     <TouchableOpacity
                       key={cat}
                       style={[
                         styles.categoryOption,
-                        selectedTemplate?.category === cat && styles.categoryOptionActive,
+                        templateForm.category === cat && styles.categoryOptionActive,
                       ]}
+                      onPress={() => setTemplateForm({ ...templateForm, category: cat })}
                     >
                       <Text
                         style={[
                           styles.categoryOptionText,
-                          selectedTemplate?.category === cat && styles.categoryOptionTextActive,
+                          templateForm.category === cat && styles.categoryOptionTextActive,
                         ]}
                       >
                         {getCategoryLabel(cat)}
@@ -497,99 +818,175 @@ function EmailsScreen({ navigation }: EmailsScreenProps) {
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Contenu</Text>
+                <Text style={styles.formLabel}>Contenu HTML *</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
-                  placeholder="Votre contenu d'email..."
+                  placeholder="<p>Bonjour {{first_name}},</p><p>Bienvenue...</p>"
                   multiline
-                  numberOfLines={6}
-                  defaultValue={selectedTemplate?.preview}
+                  numberOfLines={8}
+                  value={templateForm.html_content}
+                  onChangeText={(text) => setTemplateForm({ ...templateForm, html_content: text })}
                 />
               </View>
 
-              {selectedTemplate && (
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>Variables disponibles</Text>
-                  <View style={styles.variablesContainer}>
-                    {selectedTemplate.variables.map(variable => (
-                      <TouchableOpacity
-                        key={variable}
-                        style={styles.variableBadge}
-                        onPress={() => {}}
-                      >
-                        <Text style={styles.variableBadgeText}>{`{{${variable}}}`}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              )}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Contenu Texte</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Version texte brut (optionnel)"
+                  multiline
+                  numberOfLines={6}
+                  value={templateForm.text_content}
+                  onChangeText={(text) => setTemplateForm({ ...templateForm, text_content: text })}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Variables disponibles</Text>
+                <Text style={styles.helpText}>
+                  Utilisez {`{{first_name}}`}, {`{{last_name}}`}, {`{{email}}`}, etc.
+                </Text>
+              </View>
             </ScrollView>
 
             <View style={styles.modalFooter}>
-              <TouchableOpacity style={[styles.button, styles.buttonSecondary]}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonSecondary]}
+                onPress={() => setTemplateModalVisible(false)}
+              >
                 <Text style={styles.buttonSecondaryText}>Annuler</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, styles.buttonPrimary]}>
-                <Text style={styles.buttonPrimaryText}>Enregistrer</Text>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleCreateTemplate}
+                disabled={loading}
+              >
+                <Text style={styles.buttonPrimaryText}>
+                  {loading ? 'Enregistrement...' : 'Enregistrer'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* Bulk Send Modal */}
+      {/* Campaign Modal */}
       <Modal
-        visible={bulkModalVisible}
+        visible={campaignModalVisible}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setBulkModalVisible(false)}
+        onRequestClose={() => setCampaignModalVisible(false)}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Planifier un Envoi</Text>
-              <TouchableOpacity onPress={() => setBulkModalVisible(false)}>
+              <Text style={styles.modalTitle}>Nouvelle Campagne</Text>
+              <TouchableOpacity onPress={() => setCampaignModalVisible(false)}>
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.modalBody}>
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Sélectionner Template</Text>
-                <View style={styles.templateSelect}>
-                  {templates.map(template => (
-                    <TouchableOpacity key={template.id} style={styles.templateSelectOption}>
-                      <Text style={styles.templateSelectName}>{template.name}</Text>
-                      <Text style={styles.templateSelectCategory}>
-                        {getCategoryLabel(template.category)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Destinataires</Text>
+                <Text style={styles.formLabel}>Nom de la campagne *</Text>
                 <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="Sélectionner les destinataires..."
-                  multiline
-                  numberOfLines={4}
+                  style={styles.input}
+                  placeholder="Ex: Newsletter Janvier 2025"
+                  value={campaignForm.name}
+                  onChangeText={(text) => setCampaignForm({ ...campaignForm, name: text })}
                 />
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Date d'envoi</Text>
+                <Text style={styles.formLabel}>Template (optionnel)</Text>
+                <ScrollView horizontal style={styles.templateSelect}>
+                  {templates.map(template => (
+                    <TouchableOpacity
+                      key={template.id}
+                      style={[
+                        styles.templateSelectOption,
+                        campaignForm.template_id === template.id && styles.templateSelectOptionActive,
+                      ]}
+                      onPress={() => {
+                        setCampaignForm({
+                          ...campaignForm,
+                          template_id: template.id,
+                          subject: template.subject,
+                        });
+                      }}
+                    >
+                      <Text style={styles.templateSelectName}>{template.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Sujet *</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="YYYY-MM-DD"
+                  placeholder="Sujet de l'email"
+                  value={campaignForm.subject}
+                  onChangeText={(text) => setCampaignForm({ ...campaignForm, subject: text })}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>De (Email) *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="votre@email.com"
+                  value={campaignForm.from_email}
+                  onChangeText={(text) => setCampaignForm({ ...campaignForm, from_email: text })}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>De (Nom)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Votre Nom"
+                  value={campaignForm.from_name}
+                  onChangeText={(text) => setCampaignForm({ ...campaignForm, from_name: text })}
                 />
               </View>
 
               <View style={styles.formGroup}>
                 <View style={styles.switchRow}>
-                  <Text style={styles.formLabel}>Imédiatement</Text>
-                  <Switch value={false} />
+                  <Text style={styles.formLabel}>Envoyer immédiatement</Text>
+                  <Switch
+                    value={campaignForm.immediate}
+                    onValueChange={(value) => setCampaignForm({ ...campaignForm, immediate: value })}
+                  />
+                </View>
+              </View>
+
+              {!campaignForm.immediate && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Date d'envoi</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="YYYY-MM-DD HH:MM"
+                    value={campaignForm.scheduled_at}
+                    onChangeText={(text) => setCampaignForm({ ...campaignForm, scheduled_at: text })}
+                  />
+                </View>
+              )}
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>
+                  Destinataires * ({campaignForm.selected_contacts.length} sélectionné{campaignForm.selected_contacts.length > 1 ? 's' : ''})
+                </Text>
+                <View style={styles.contactsList}>
+                  <FlatList
+                    data={contacts}
+                    renderItem={renderContactItem}
+                    keyExtractor={item => item.id}
+                    style={styles.contactsListInner}
+                    nestedScrollEnabled
+                  />
                 </View>
               </View>
             </ScrollView>
@@ -597,12 +994,18 @@ function EmailsScreen({ navigation }: EmailsScreenProps) {
             <View style={styles.modalFooter}>
               <TouchableOpacity
                 style={[styles.button, styles.buttonSecondary]}
-                onPress={() => setBulkModalVisible(false)}
+                onPress={() => setCampaignModalVisible(false)}
               >
                 <Text style={styles.buttonSecondaryText}>Annuler</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, styles.buttonPrimary]}>
-                <Text style={styles.buttonPrimaryText}>Planifier</Text>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleCreateCampaign}
+                disabled={loading}
+              >
+                <Text style={styles.buttonPrimaryText}>
+                  {loading ? 'Création...' : campaignForm.immediate ? 'Envoyer' : 'Planifier'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -665,6 +1068,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   actionBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -688,7 +1096,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   listContent: {
-    gap: 8,
     paddingBottom: 20,
   },
   templateCard: {
@@ -737,6 +1144,26 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     lineHeight: 16,
   },
+  variablesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 8,
+    gap: 4,
+  },
+  variablesLabel: {
+    fontSize: 10,
+    color: '#8E8E93',
+    marginRight: 4,
+  },
+  variableTag: {
+    fontSize: 9,
+    color: '#007AFF',
+    backgroundColor: '#007AFF20',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
   templateFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -746,7 +1173,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#F2F2F7',
   },
   usageStats: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   usageLabel: {
     fontSize: 10,
@@ -758,18 +1185,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#000000',
   },
-  sendButton: {
-    backgroundColor: '#34C759',
+  deleteButton: {
+    backgroundColor: '#FF3B3020',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
   },
-  sendButtonText: {
+  deleteButtonText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#FF3B30',
   },
-  scheduledCard: {
+  campaignCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 12,
@@ -780,16 +1207,28 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  scheduledHeader: {
+  campaignHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  scheduledTemplate: {
+  campaignName: {
     fontSize: 13,
     fontWeight: '700',
     color: '#000000',
+    flex: 1,
+    marginRight: 8,
+  },
+  campaignSubject: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginBottom: 4,
+  },
+  campaignTemplate: {
+    fontSize: 11,
+    color: '#007AFF',
+    marginBottom: 8,
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -800,39 +1239,38 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-  scheduledInfo: {
+  campaignStats: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 8,
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: '#F2F2F7',
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  infoItem: {
-    flex: 1,
+  statItem: {
     alignItems: 'center',
   },
-  infoLabel: {
-    fontSize: 10,
-    color: '#8E8E93',
-    marginBottom: 2,
-  },
-  infoValue: {
-    fontSize: 12,
+  statValue: {
+    fontSize: 14,
     fontWeight: '700',
     color: '#000000',
+    marginBottom: 2,
   },
-  scheduledActions: {
+  statLabel: {
+    fontSize: 10,
+    color: '#8E8E93',
+  },
+  campaignActions: {
     flexDirection: 'row',
-    gap: 8,
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   actionButton: {
-    flex: 1,
-    paddingVertical: 8,
-    backgroundColor: '#007AFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#34C759',
     borderRadius: 6,
-    alignItems: 'center',
   },
   actionButtonDanger: {
     backgroundColor: '#FF3B3020',
@@ -844,6 +1282,10 @@ const styles = StyleSheet.create({
   },
   actionButtonTextDanger: {
     color: '#FF3B30',
+  },
+  campaignDate: {
+    fontSize: 10,
+    color: '#8E8E93',
   },
   statsRow: {
     flexDirection: 'row',
@@ -897,6 +1339,11 @@ const styles = StyleSheet.create({
   logSubject: {
     fontSize: 11,
     color: '#8E8E93',
+    marginBottom: 2,
+  },
+  logCampaign: {
+    fontSize: 10,
+    color: '#007AFF',
   },
   logStatusBadge: {
     paddingHorizontal: 8,
@@ -952,7 +1399,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 20,
-    maxHeight: '95%',
+    maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -970,7 +1417,7 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
   },
   modalBody: {
-    maxHeight: 400,
+    maxHeight: 500,
   },
   formGroup: {
     marginBottom: 16,
@@ -980,6 +1427,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#8E8E93',
     marginBottom: 8,
+  },
+  helpText: {
+    fontSize: 11,
+    color: '#8E8E93',
+    fontStyle: 'italic',
   },
   input: {
     borderWidth: 1,
@@ -993,6 +1445,7 @@ const styles = StyleSheet.create({
   textArea: {
     textAlignVertical: 'top',
     paddingTop: 10,
+    minHeight: 80,
   },
   categorySelect: {
     flexDirection: 'row',
@@ -1016,45 +1469,68 @@ const styles = StyleSheet.create({
   categoryOptionTextActive: {
     color: '#FFFFFF',
   },
-  variablesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  variableBadge: {
-    backgroundColor: '#007AFF20',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  variableBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#007AFF',
-  },
   templateSelect: {
-    gap: 8,
+    flexDirection: 'row',
+    maxHeight: 80,
   },
   templateSelectOption: {
     paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: '#F2F2F7',
     borderRadius: 8,
+    marginRight: 8,
+  },
+  templateSelectOptionActive: {
+    backgroundColor: '#007AFF',
   },
   templateSelectName: {
     fontSize: 12,
     fontWeight: '600',
     color: '#000000',
-    marginBottom: 2,
-  },
-  templateSelectCategory: {
-    fontSize: 11,
-    color: '#8E8E93',
   },
   switchRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  contactsList: {
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 8,
+  },
+  contactsListInner: {
+    maxHeight: 200,
+  },
+  contactItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  contactItemSelected: {
+    backgroundColor: '#007AFF10',
+  },
+  contactInfo: {
+    flex: 1,
+  },
+  contactName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#000000',
+    marginBottom: 2,
+  },
+  contactEmail: {
+    fontSize: 11,
+    color: '#8E8E93',
+  },
+  checkmark: {
+    fontSize: 16,
+    color: '#007AFF',
+    fontWeight: '700',
   },
   modalFooter: {
     flexDirection: 'row',

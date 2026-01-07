@@ -546,6 +546,7 @@ function generateDocumentHTML(document: any, items: any[], type: string): string
   }
 
   const isInvoice = type === 'FACTURE';
+  const isCreditNote = type === 'AVOIR';
 
   const total_ht = items.reduce((sum, item) => sum + (parseFloat(item.quantity) * parseFloat(item.unit_price)), 0);
   const total_tva = total_ht * 0.20;
@@ -1081,6 +1082,424 @@ function generateDocumentHTML(document: any, items: any[], type: string): string
     // L'utilisateur peut imprimer manuellement avec Ctrl+P ou Cmd+P
     // En désactivant "En-têtes et pieds de page" dans les options d'impression
   </script>
+</body>
+</html>
+  `;
+}
+
+// ============================================================================
+// CREDIT NOTES (AVOIRS) PDF ROUTES
+// ============================================================================
+
+// GET /api/credit-notes/:id/pdf - Preview credit note as HTML
+router.get('/credit-notes/:id/pdf', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const creditNoteResult = await pool.query(`
+      SELECT
+        cn.*,
+        c.name as customer_name,
+        c.email as customer_email,
+        c.company as customer_company,
+        c.address as customer_address,
+        i.invoice_number as original_invoice_number,
+        t.*,
+        cp.company_name as profile_company_name,
+        cp.company_legal_form as profile_company_legal_form,
+        cp.company_phone as profile_company_phone,
+        cp.company_email as profile_company_email,
+        cp.company_siret as profile_company_siret,
+        cp.company_tva as profile_company_tva,
+        cp.company_rcs as profile_company_rcs,
+        cp.company_capital as profile_company_capital,
+        cp.is_micro_entreprise as profile_is_micro_entreprise,
+        cp.logo_url as profile_logo_url,
+        cp.footer_text as profile_footer_text,
+        (cp.company_street || ', ' || cp.company_postal_code || ', ' || cp.company_city || ', ' || cp.company_country) as profile_company_address
+      FROM credit_notes cn
+      LEFT JOIN customers c ON cn.customer_id = c.id
+      LEFT JOIN invoices i ON cn.invoice_id = i.id
+      LEFT JOIN invoice_templates t ON cn.template_id = t.id
+      LEFT JOIN company_profiles cp ON cp.id = (SELECT id FROM company_profiles LIMIT 1)
+      WHERE cn.id = $1 AND cn.deleted_at IS NULL
+    `, [id]);
+
+    if (creditNoteResult.rows.length === 0) {
+      res.status(404).json({ error: 'Credit note not found' });
+      return;
+    }
+
+    const creditNote = creditNoteResult.rows[0];
+
+    const documentData = {
+      ...creditNote,
+      invoice_number: creditNote.credit_note_number,
+      invoice_date: creditNote.credit_note_date,
+      company_name: creditNote.profile_company_name || creditNote.company_name,
+      company_legal_form: creditNote.profile_company_legal_form || creditNote.company_legal_form,
+      company_address: creditNote.profile_company_address || creditNote.company_address,
+      company_phone: creditNote.profile_company_phone || creditNote.company_phone,
+      company_email: creditNote.profile_company_email || creditNote.company_email,
+      company_siret: creditNote.profile_company_siret || creditNote.company_siret,
+      company_tva: creditNote.profile_company_tva || creditNote.company_tva,
+      company_rcs: creditNote.profile_company_rcs || creditNote.company_rcs,
+      company_capital: creditNote.profile_company_capital || creditNote.company_capital,
+      is_micro_entreprise: creditNote.profile_is_micro_entreprise !== null ? creditNote.profile_is_micro_entreprise : creditNote.is_micro_entreprise,
+      logo_url: creditNote.profile_logo_url || creditNote.logo_url,
+      footer_text: creditNote.profile_footer_text || creditNote.footer_text,
+      original_invoice_number: creditNote.original_invoice_number,
+      reason: creditNote.reason,
+      reason_details: creditNote.reason_details,
+    };
+
+    const itemsResult = await pool.query(`
+      SELECT * FROM credit_note_items WHERE credit_note_id = $1 ORDER BY line_order
+    `, [id]);
+
+    const html = generateCreditNoteHTML(documentData, itemsResult.rows);
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error: any) {
+    console.error('Error generating credit note PDF:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/credit-notes/:id/download - Download credit note as PDF
+router.get('/credit-notes/:id/download', async (req: Request, res: Response) => {
+  let browser;
+  try {
+    const { id } = req.params;
+
+    const creditNoteResult = await pool.query(`
+      SELECT
+        cn.*,
+        c.name as customer_name,
+        c.email as customer_email,
+        c.company as customer_company,
+        c.address as customer_address,
+        i.invoice_number as original_invoice_number,
+        t.*,
+        cp.company_name as profile_company_name,
+        cp.company_legal_form as profile_company_legal_form,
+        cp.company_phone as profile_company_phone,
+        cp.company_email as profile_company_email,
+        cp.company_siret as profile_company_siret,
+        cp.company_tva as profile_company_tva,
+        cp.company_rcs as profile_company_rcs,
+        cp.company_capital as profile_company_capital,
+        cp.is_micro_entreprise as profile_is_micro_entreprise,
+        cp.logo_url as profile_logo_url,
+        cp.footer_text as profile_footer_text,
+        (cp.company_street || ', ' || cp.company_postal_code || ', ' || cp.company_city || ', ' || cp.company_country) as profile_company_address
+      FROM credit_notes cn
+      LEFT JOIN customers c ON cn.customer_id = c.id
+      LEFT JOIN invoices i ON cn.invoice_id = i.id
+      LEFT JOIN invoice_templates t ON cn.template_id = t.id
+      LEFT JOIN company_profiles cp ON cp.id = (SELECT id FROM company_profiles LIMIT 1)
+      WHERE cn.id = $1 AND cn.deleted_at IS NULL
+    `, [id]);
+
+    if (creditNoteResult.rows.length === 0) {
+      res.status(404).json({ error: 'Credit note not found' });
+      return;
+    }
+
+    const creditNote = creditNoteResult.rows[0];
+
+    const documentData = {
+      ...creditNote,
+      invoice_number: creditNote.credit_note_number,
+      invoice_date: creditNote.credit_note_date,
+      company_name: creditNote.profile_company_name || creditNote.company_name,
+      company_address: creditNote.profile_company_address || creditNote.company_address,
+      company_phone: creditNote.profile_company_phone || creditNote.company_phone,
+      company_email: creditNote.profile_company_email || creditNote.company_email,
+      company_siret: creditNote.profile_company_siret || creditNote.company_siret,
+      company_tva: creditNote.profile_company_tva || creditNote.company_tva,
+      logo_url: creditNote.profile_logo_url || creditNote.logo_url,
+      footer_text: creditNote.profile_footer_text || creditNote.footer_text,
+      original_invoice_number: creditNote.original_invoice_number,
+      reason: creditNote.reason,
+      reason_details: creditNote.reason_details,
+    };
+
+    const itemsResult = await pool.query(`
+      SELECT * FROM credit_note_items WHERE credit_note_id = $1 ORDER BY line_order
+    `, [id]);
+
+    const html = generateCreditNoteHTML(documentData, itemsResult.rows);
+
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '12mm', right: '15mm', bottom: '12mm', left: '15mm' },
+      preferCSSPageSize: true,
+    });
+
+    await browser.close();
+
+    const filename = `Avoir_${creditNote.credit_note_number}_${documentData.customer_name || 'Client'}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdfBuffer);
+  } catch (error: any) {
+    console.error('Error generating credit note PDF download:', error);
+    if (browser) await browser.close();
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Helper function to generate credit note HTML
+function generateCreditNoteHTML(document: any, items: any[]): string {
+  const primaryColor = '#DC3545'; // Rouge pour les avoirs
+  const companyName = document.company_name || 'Nom de l\'entreprise';
+
+  let logoUrl = document.logo_url || '';
+  if (logoUrl && !logoUrl.startsWith('http')) {
+    logoUrl = `http://localhost:3000${logoUrl}`;
+  }
+
+  const total_ht = items.reduce((sum, item) => sum + (parseFloat(item.quantity) * parseFloat(item.unit_price)), 0);
+  const total_tva = items.reduce((sum, item) => sum + parseFloat(item.tax_amount || 0), 0);
+  const total_ttc = total_ht + total_tva;
+
+  const reasonLabels: Record<string, string> = {
+    'refund': 'Remboursement',
+    'discount': 'Remise accordée',
+    'error': 'Erreur de facturation',
+    'return': 'Retour de marchandise',
+    'cancellation': 'Annulation',
+    'price_adjustment': 'Ajustement de prix',
+    'duplicate': 'Doublon de facture',
+    'other': 'Autre'
+  };
+
+  return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AVOIR - ${document.invoice_number}</title>
+  <style>
+    @page { size: A4; margin: 12mm 15mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Helvetica', 'Arial', sans-serif;
+      font-size: 8.5pt;
+      line-height: 1.25;
+      color: #1a1a1a;
+      background: white;
+    }
+    .document { max-width: 210mm; margin: 0 auto; background: white; }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding-bottom: 12px;
+      border-bottom: 3px solid ${primaryColor};
+      margin-bottom: 12px;
+    }
+    .logo { width: 55px; height: 55px; object-fit: contain; border-radius: 4px; }
+    .company-info { flex: 1; margin-left: 14px; }
+    .company-name { font-size: 13pt; font-weight: 700; color: #000; margin-bottom: 3px; }
+    .company-detail { font-size: 8.5pt; color: #4a4a4a; line-height: 1.3; margin-bottom: 1px; }
+    .document-info { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+    .document-type {
+      font-size: 20pt;
+      font-weight: 700;
+      color: ${primaryColor};
+      margin-bottom: 5px;
+      letter-spacing: -0.5pt;
+    }
+    .document-number { font-size: 10.5pt; font-weight: 600; color: #000; margin-bottom: 3px; }
+    .document-date { font-size: 8.5pt; color: #666; line-height: 1.3; }
+    .credit-note-badge {
+      display: inline-block;
+      background: ${primaryColor};
+      color: white;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 8pt;
+      font-weight: 700;
+      margin-top: 5px;
+      text-transform: uppercase;
+    }
+    .client-info {
+      background: linear-gradient(135deg, #fff5f5 0%, #fee);
+      padding: 10px;
+      border-radius: 4px;
+      border: 1px solid #fcc;
+      max-width: 48%;
+    }
+    .client-label {
+      font-size: 8pt;
+      font-weight: 700;
+      color: ${primaryColor};
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .client-name { font-size: 10.5pt; font-weight: 700; color: #000; margin-bottom: 3px; }
+    .client-detail { font-size: 8.5pt; color: #4a4a4a; line-height: 1.3; }
+    .reason-box {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-left: 4px solid #ffc107;
+      padding: 10px;
+      border-radius: 4px;
+      margin: 12px 0;
+    }
+    .reason-title { font-weight: 700; color: #856404; margin-bottom: 4px; }
+    .reason-text { color: #856404; font-size: 8.5pt; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 8.5pt;
+      border: 1px solid #e0e0e0;
+    }
+    thead { background: linear-gradient(180deg, ${primaryColor} 0%, ${primaryColor}dd 100%); color: white; }
+    th { padding: 8px 6px; text-align: left; font-size: 8.5pt; font-weight: 700; text-transform: uppercase; }
+    th:nth-child(2), th:nth-child(3), th:nth-child(4) { text-align: right; }
+    tbody tr { border-bottom: 1px solid #e8e8e8; }
+    tbody tr:nth-child(even) { background: #fff8f8; }
+    td { padding: 5px 6px; font-size: 8pt; color: #1a1a1a; }
+    td:nth-child(2), td:nth-child(3), td:nth-child(4) { text-align: right; font-weight: 500; }
+    .totals {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      margin-top: 12px;
+      padding: 10px;
+      background: #fff5f5;
+      border-radius: 4px;
+      border: 1px solid #fcc;
+    }
+    .total-row { display: flex; justify-content: space-between; min-width: 240px; padding: 4px 0; font-size: 9.5pt; }
+    .total-label { color: #666; font-weight: 500; }
+    .total-value { font-weight: 600; color: ${primaryColor}; }
+    .total-final {
+      border-top: 2px solid ${primaryColor};
+      margin-top: 6px;
+      padding-top: 8px;
+      background: white;
+      padding: 8px;
+      border-radius: 3px;
+    }
+    .total-final .total-label { font-size: 12pt; font-weight: 700; color: #000; }
+    .total-final .total-value { font-size: 14pt; font-weight: 700; color: ${primaryColor}; }
+    .original-invoice {
+      margin-top: 12px;
+      padding: 8px;
+      background: #f8f9fa;
+      border-radius: 4px;
+      border: 1px solid #e9ecef;
+      font-size: 8.5pt;
+    }
+    .original-invoice-title { font-weight: 700; color: #495057; margin-bottom: 4px; }
+    .footer {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 2px solid #e8e8e8;
+      text-align: center;
+      font-size: 7.5pt;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <div class="document">
+    <div class="header">
+      ${logoUrl ? `<img src="${logoUrl}" alt="Logo" class="logo">` : ''}
+      <div class="company-info">
+        <div class="company-name">${companyName}</div>
+        ${document.company_address ? `<div class="company-detail">${document.company_address}</div>` : ''}
+        ${document.company_phone ? `<div class="company-detail">Tél: ${document.company_phone}</div>` : ''}
+        ${document.company_email ? `<div class="company-detail">Email: ${document.company_email}</div>` : ''}
+        ${document.company_siret ? `<div class="company-detail">SIRET: ${document.company_siret}</div>` : ''}
+        ${document.company_tva ? `<div class="company-detail">TVA: ${document.company_tva}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="document-info">
+      <div>
+        <div class="document-type">AVOIR</div>
+        <div class="document-number">${document.invoice_number}</div>
+        <div class="document-date">Date: ${new Date(document.invoice_date).toLocaleDateString('fr-FR')}</div>
+        <span class="credit-note-badge">Note de crédit</span>
+      </div>
+      <div class="client-info">
+        <div class="client-label">Client</div>
+        <div class="client-name">${document.customer_company || document.customer_name || 'Client'}</div>
+        ${document.customer_name && document.customer_company ? `<div class="client-detail">${document.customer_name}</div>` : ''}
+        ${document.customer_address ? `<div class="client-detail">${document.customer_address}</div>` : ''}
+        ${document.customer_email ? `<div class="client-detail">${document.customer_email}</div>` : ''}
+      </div>
+    </div>
+
+    ${document.original_invoice_number ? `
+      <div class="original-invoice">
+        <div class="original-invoice-title">Facture d'origine</div>
+        <div>Référence: ${document.original_invoice_number}</div>
+      </div>
+    ` : ''}
+
+    <div class="reason-box">
+      <div class="reason-title">Motif de l'avoir</div>
+      <div class="reason-text">${reasonLabels[document.reason] || document.reason}</div>
+      ${document.reason_details ? `<div class="reason-text" style="margin-top: 4px; font-style: italic;">${document.reason_details}</div>` : ''}
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th>Quantité</th>
+          <th>Prix unitaire</th>
+          <th>Total HT</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map((item, index) => `
+          <tr>
+            <td>${item.description || `Article ${index + 1}`}</td>
+            <td>${item.quantity || 1}</td>
+            <td>${parseFloat(item.unit_price || 0).toFixed(2)} €</td>
+            <td style="font-weight: 600;">-${(parseFloat(item.quantity || 1) * parseFloat(item.unit_price || 0)).toFixed(2)} €</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+
+    <div class="totals">
+      <div class="total-row">
+        <span class="total-label">Total HT:</span>
+        <span class="total-value">-${total_ht.toFixed(2)} €</span>
+      </div>
+      <div class="total-row">
+        <span class="total-label">TVA:</span>
+        <span class="total-value">-${total_tva.toFixed(2)} €</span>
+      </div>
+      <div class="total-row total-final">
+        <span class="total-label">Montant de l'avoir TTC:</span>
+        <span class="total-value">-${total_ttc.toFixed(2)} €</span>
+      </div>
+    </div>
+
+    ${document.footer_text ? `<div class="footer">${document.footer_text}</div>` : ''}
+  </div>
 </body>
 </html>
   `;

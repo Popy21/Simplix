@@ -310,39 +310,6 @@ export default function AnalyticsScreen({ navigation }: AnalyticsScreenProps) {
           </View>
         </View>
 
-        {/* Lead Scoring Distribution */}
-        <View style={styles.chartContainer}>
-          <Text style={styles.chartTitle}>Distribution Scoring Leads</Text>
-          <View style={styles.scoringDistribution}>
-            {[
-              { label: 'Hot (80-100)', count: 12, color: '#FF3B30' },
-              { label: 'Warm (50-79)', count: 28, color: '#FF9500' },
-              { label: 'Cold (0-49)', count: 45, color: '#8E8E93' },
-            ].map((item, index) => (
-              <View key={index} style={styles.scoringItem}>
-                <View style={styles.scoringHeader}>
-                  <View
-                    style={[styles.scoringDot, { backgroundColor: item.color }]}
-                  />
-                  <Text style={styles.scoringLabel}>{item.label}</Text>
-                </View>
-                <View style={styles.scoringBar}>
-                  <View
-                    style={[
-                      styles.scoringBarFill,
-                      {
-                        width: `${(item.count / 85) * 100}%`,
-                        backgroundColor: item.color,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.scoringCount}>{item.count}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
         {/* Export Section */}
         <View style={styles.exportSection}>
           <TouchableOpacity style={styles.exportButton}>

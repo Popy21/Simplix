@@ -19,16 +19,13 @@ import {
   DollarIcon,
   ChartIcon,
   UsersIcon,
-  PackageIcon,
   FileTextIcon,
   TrendingUpIcon,
   AlertTriangleIcon,
   ActivityIcon,
   CheckCircleIcon,
-  XCircleIcon,
   ClockIcon,
   TrendingDownIcon,
-  CalendarIcon,
   MailIcon,
 } from '../components/Icons';
 
@@ -61,7 +58,8 @@ interface QuickStats {
   invoicesPendingValue: number;
 }
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
+const isWeb = Platform.OS === 'web';
 
 export default function DashboardScreen({ navigation }: DashboardScreenProps) {
   const { user } = useAuth();
@@ -79,7 +77,6 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
     invoicesPendingValue: 0,
   });
   const [error, setError] = useState<string | null>(null);
-  const [leadScores, setLeadScores] = useState<any[]>([]);
   const [pipelineStages, setPipelineStages] = useState<any[]>([]);
   const [isAdvancedMode, setIsAdvancedMode] = useState(false);
   const [pendingQuotes, setPendingQuotes] = useState<any[]>([]);
@@ -113,7 +110,6 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
         forecastingResponse,
         contextualNotificationsResponse,
         quickStatsResponse,
-        leadScoresResponse,
         pipelineStagesResponse,
       ] = await Promise.all([
         analyticsService.getDashboard(),
@@ -130,7 +126,6 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
         analyticsService.getForecasting(),
         notificationsService.getContextual(),
         analyticsService.getQuickStats(),
-        analyticsService.getLeadScores(5),
         analyticsService.getPipelineStages(),
       ]);
 
@@ -157,9 +152,6 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
       setActivitySummary(activitySummaryResponse.data || {});
       setForecasting(forecastingResponse.data || null);
       setContextualNotifications(contextualNotificationsResponse.data?.notifications || []);
-
-      // Real Lead Scores from database
-      setLeadScores(leadScoresResponse.data || []);
 
       // Real Pipeline Stages from database
       setPipelineStages(pipelineStagesResponse.data || []);
@@ -246,25 +238,25 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
     <>
       {/* Métriques Principales - Compacte */}
       <View style={styles.simpleMetrics}>
-        <TouchableOpacity style={styles.simpleMetricCard} onPress={() => navigation.navigate('Sales')}>
+        <TouchableOpacity style={styles.simpleMetricCard} onPress={() => navigation.navigate('Sales' as any)}>
           <DollarIcon size={24} color="#34C759" />
           <Text style={styles.simpleMetricValue}>{formatCurrency(dashboardData.totalRevenue)}</Text>
           <Text style={styles.simpleMetricLabel}>Revenus</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.simpleMetricCard} onPress={() => navigation.navigate('Sales')}>
+        <TouchableOpacity style={styles.simpleMetricCard} onPress={() => navigation.navigate('Sales' as any)}>
           <ChartIcon size={24} color="#007AFF" />
           <Text style={styles.simpleMetricValue}>{formatNumber(dashboardData.totalSales)}</Text>
           <Text style={styles.simpleMetricLabel}>Ventes</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.simpleMetricCard} onPress={() => navigation.navigate('Customers')}>
+        <TouchableOpacity style={styles.simpleMetricCard} onPress={() => navigation.navigate('Customers' as any)}>
           <UsersIcon size={24} color="#FF9500" />
           <Text style={styles.simpleMetricValue}>{formatNumber(dashboardData.totalCustomers)}</Text>
           <Text style={styles.simpleMetricLabel}>Clients</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.simpleMetricCard} onPress={() => navigation.navigate('Pipeline')}>
+        <TouchableOpacity style={styles.simpleMetricCard} onPress={() => navigation.navigate('Pipeline' as any)}>
           <TrendingUpIcon size={24} color="#AF52DE" />
           <Text style={styles.simpleMetricValue}>{formatCurrency(quickStats.pipelineValue)}</Text>
           <Text style={styles.simpleMetricLabel}>Pipeline</Text>
@@ -275,7 +267,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
       <View style={styles.simpleSection}>
         <View style={styles.sectionHeader}>
           <Text style={styles.simpleSectionTitle}>Activité récente</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Sales')}>
+          <TouchableOpacity onPress={() => navigation.navigate('Sales' as any)}>
             <Text style={styles.seeAllText}>Voir tout →</Text>
           </TouchableOpacity>
         </View>
@@ -358,7 +350,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
                     {notif.action === 'create_quote' && (
                       <TouchableOpacity
                         style={styles.notificationActionButton}
-                        onPress={() => navigation.navigate('Invoices', {
+                        onPress={() => navigation.navigate('Invoices' as any, {
                           action: 'createQuote',
                           customerId: notif.data?.contact_id || notif.data?.customer_id,
                         })}
@@ -396,7 +388,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
         <View style={styles.simpleSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.simpleSectionTitle}>Devis en attente</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Invoices')}>
+            <TouchableOpacity onPress={() => navigation.navigate('Invoices' as any)}>
               <Text style={styles.seeAllText}>Voir tout →</Text>
             </TouchableOpacity>
           </View>
@@ -405,7 +397,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
               <TouchableOpacity
                 key={quote.id}
                 style={styles.actionableItem}
-                onPress={() => navigation.navigate('Invoices', { quoteId: quote.id })}
+                onPress={() => navigation.navigate('Invoices' as any, { quoteId: quote.id })}
               >
                 <View style={styles.itemLeft}>
                   <View style={[styles.statusDot, { backgroundColor: quote.status === 'sent' ? '#FF9500' : '#8E8E93' }]} />
@@ -420,7 +412,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
                     style={styles.quickActionBtn}
                     onPress={(e) => {
                       e.stopPropagation();
-                      navigation.navigate('Invoices', { action: 'sendQuote', quoteId: quote.id });
+                      navigation.navigate('Invoices' as any, { action: 'sendQuote', quoteId: quote.id });
                     }}
                   >
                     <MailIcon size={14} color="#007AFF" />
@@ -437,7 +429,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
         <View style={styles.simpleSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.simpleSectionTitle}>Tâches à faire aujourd'hui</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Tasks')}>
+            <TouchableOpacity onPress={() => navigation.navigate('Tasks' as any)}>
               <Text style={styles.seeAllText}>Voir tout →</Text>
             </TouchableOpacity>
           </View>
@@ -448,9 +440,9 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
                 style={styles.actionableItem}
                 onPress={() => {
                   if (task.contact_id) {
-                    navigation.navigate('Contacts', { customerId: task.contact_id });
+                    navigation.navigate('Contacts' as any, { customerId: task.contact_id });
                   } else {
-                    navigation.navigate('Tasks');
+                    navigation.navigate('Tasks' as any);
                   }
                 }}
               >
@@ -481,7 +473,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
         <View style={styles.simpleSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.simpleSectionTitle}>Meilleurs clients</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Contacts')}>
+            <TouchableOpacity onPress={() => navigation.navigate('Contacts' as any)}>
               <Text style={styles.seeAllText}>Voir tout →</Text>
             </TouchableOpacity>
           </View>
@@ -490,7 +482,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
               <TouchableOpacity
                 key={customer.id}
                 style={styles.actionableItem}
-                onPress={() => navigation.navigate('Contacts', { customerId: customer.id })}
+                onPress={() => navigation.navigate('Contacts' as any, { customerId: customer.id })}
               >
                 <View style={styles.itemLeft}>
                   <View style={styles.rankBadge}>
@@ -509,7 +501,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
                     style={styles.quickActionBtn}
                     onPress={(e) => {
                       e.stopPropagation();
-                      navigation.navigate('Invoices', {
+                      navigation.navigate('Invoices' as any, {
                         action: 'createQuote',
                         customerId: customer.id,
                         customerType: 'customer'
@@ -530,7 +522,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
         <View style={styles.simpleSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.simpleSectionTitle}>🔮 Prévisions & Insights</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Analytics')}>
+            <TouchableOpacity onPress={() => navigation.navigate('Analytics' as any)}>
               <Text style={styles.seeAllText}>Voir plus →</Text>
             </TouchableOpacity>
           </View>
@@ -538,7 +530,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
             <View style={styles.forecastRow}>
               <TouchableOpacity
                 style={styles.forecastItem}
-                onPress={() => navigation.navigate('Invoices')}
+                onPress={() => navigation.navigate('Invoices' as any)}
               >
                 <Text style={styles.forecastLabel}>CA Prévisionnel</Text>
                 <Text style={styles.forecastValue}>{formatCurrency(forecasting.forecasted_revenue || 0)}</Text>
@@ -548,7 +540,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.forecastItem}
-                onPress={() => navigation.navigate('Analytics')}
+                onPress={() => navigation.navigate('Analytics' as any)}
               >
                 <Text style={styles.forecastLabel}>Taux de conversion</Text>
                 <Text style={styles.forecastValue}>{((forecasting.conversion_rate || 0) * 100).toFixed(1)}%</Text>
@@ -561,7 +553,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
             <View style={styles.forecastRow}>
               <TouchableOpacity
                 style={styles.forecastItem}
-                onPress={() => navigation.navigate('Analytics')}
+                onPress={() => navigation.navigate('Analytics' as any)}
               >
                 <Text style={styles.forecastLabel}>Croissance</Text>
                 <Text style={[styles.forecastValue, forecasting.growth_rate >= 0 ? styles.positiveGrowth : styles.negativeGrowth]}>
@@ -571,7 +563,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.forecastItem}
-                onPress={() => navigation.navigate('Invoices')}
+                onPress={() => navigation.navigate('Invoices' as any)}
               >
                 <Text style={styles.forecastLabel}>Délai paiement</Text>
                 <Text style={styles.forecastValue}>{Math.round(forecasting.avg_payment_delay_days || 0)}j</Text>
@@ -584,7 +576,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
             {forecasting.top_customer && (
               <TouchableOpacity
                 style={styles.topCustomerHighlight}
-                onPress={() => navigation.navigate('Contacts', { customerId: forecasting.top_customer.id })}
+                onPress={() => navigation.navigate('Contacts' as any, { customerId: forecasting.top_customer.id })}
               >
                 <Text style={styles.topCustomerLabel}>🏆 Meilleur client du mois</Text>
                 <Text style={styles.topCustomerName}>{forecasting.top_customer.customer_name}</Text>
@@ -600,14 +592,14 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
         <View style={styles.simpleSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.simpleSectionTitle}>Conversion</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Analytics')}>
+            <TouchableOpacity onPress={() => navigation.navigate('Analytics' as any)}>
               <Text style={styles.seeAllText}>Voir plus →</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.card}>
             <TouchableOpacity
               style={styles.funnelStep}
-              onPress={() => navigation.navigate('Contacts')}
+              onPress={() => navigation.navigate('Contacts' as any)}
             >
               <View style={styles.funnelStepInfo}>
                 <UsersIcon size={16} color="#007AFF" />
@@ -618,7 +610,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
             <View style={styles.funnelArrow}><Text style={styles.funnelArrowText}>↓</Text></View>
             <TouchableOpacity
               style={styles.funnelStep}
-              onPress={() => navigation.navigate('Invoices')}
+              onPress={() => navigation.navigate('Invoices' as any)}
             >
               <View style={styles.funnelStepInfo}>
                 <FileTextIcon size={16} color="#FF9500" />
@@ -629,7 +621,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
             <View style={styles.funnelArrow}><Text style={styles.funnelArrowText}>↓</Text></View>
             <TouchableOpacity
               style={styles.funnelStep}
-              onPress={() => navigation.navigate('Invoices')}
+              onPress={() => navigation.navigate('Invoices' as any)}
             >
               <View style={styles.funnelStepInfo}>
                 <CheckCircleIcon size={16} color="#34C759" />
@@ -652,7 +644,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
       <View style={styles.simpleSection}>
         <View style={styles.sectionHeader}>
           <Text style={styles.simpleSectionTitle}>Top clients</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Contacts')}>
+          <TouchableOpacity onPress={() => navigation.navigate('Contacts' as any)}>
             <Text style={styles.seeAllText}>Voir tout →</Text>
           </TouchableOpacity>
         </View>
@@ -665,7 +657,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
                 <TouchableOpacity
                   key={`customer-simple-${customer.id || index}`}
                   style={styles.simpleListItem}
-                  onPress={() => navigation.navigate('Contacts', { customerId: customer.id })}
+                  onPress={() => navigation.navigate('Contacts' as any, { customerId: customer.id })}
                 >
                   <Text style={styles.simpleListName}>{customer.name}</Text>
                   <Text style={styles.simpleListAmount}>{formatCurrency(parseFloat(customer.total_revenue) || 0)}</Text>
@@ -697,7 +689,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
       <View style={styles.kibanaKpiGrid}>
         <TouchableOpacity
           style={styles.kibanaKpiCard}
-          onPress={() => navigation.navigate('Sales')}
+          onPress={() => navigation.navigate('Sales' as any)}
         >
           <Text style={styles.kibanaKpiLabel}>Revenu Total</Text>
           <Text style={styles.kibanaKpiValue}>{formatCurrency(dashboardData.totalRevenue)}</Text>
@@ -711,7 +703,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 
         <TouchableOpacity
           style={styles.kibanaKpiCard}
-          onPress={() => navigation.navigate('Sales')}
+          onPress={() => navigation.navigate('Sales' as any)}
         >
           <Text style={styles.kibanaKpiLabel}>Sales Count</Text>
           <Text style={styles.kibanaKpiValue}>{formatNumber(dashboardData.totalSales)}</Text>
@@ -725,7 +717,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 
         <TouchableOpacity
           style={styles.kibanaKpiCard}
-          onPress={() => navigation.navigate('Pipeline')}
+          onPress={() => navigation.navigate('Pipeline' as any)}
         >
           <Text style={styles.kibanaKpiLabel}>Valeur Pipeline</Text>
           <Text style={styles.kibanaKpiValue}>{formatCurrency(quickStats.pipelineValue)}</Text>
@@ -737,7 +729,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 
         <TouchableOpacity
           style={styles.kibanaKpiCard}
-          onPress={() => navigation.navigate('Analytics')}
+          onPress={() => navigation.navigate('Analytics' as any)}
         >
           <Text style={styles.kibanaKpiLabel}>Taux de Conversion</Text>
           <Text style={styles.kibanaKpiValue}>{quotesStats.rate.toFixed(1)}%</Text>
@@ -762,7 +754,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
           <View style={styles.kibanaPanel}>
             <View style={styles.kibanaPanelHeader}>
               <Text style={styles.kibanaPanelTitle}>Étapes du Pipeline</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Pipeline')}>
+              <TouchableOpacity onPress={() => navigation.navigate('Pipeline' as any)}>
                 <Text style={styles.seeAllText}>Voir →</Text>
               </TouchableOpacity>
             </View>
@@ -771,7 +763,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
                 <TouchableOpacity
                   key={stage.id}
                   style={styles.kibanaBarItem}
-                  onPress={() => navigation.navigate('Invoices')}
+                  onPress={() => navigation.navigate('Invoices' as any)}
                 >
                   <View style={styles.kibanaBarHeader}>
                     <Text style={styles.kibanaBarLabel}>{stage.name}</Text>
@@ -784,34 +776,6 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
                     }]} />
                   </View>
                   <Text style={styles.kibanaBarCount}>{stage.count} devis</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Heat Map - Lead Scores */}
-          <View style={styles.kibanaPanel}>
-            <View style={styles.kibanaPanelHeader}>
-              <Text style={styles.kibanaPanelTitle}>Score des Prospects</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Contacts')}>
-                <Text style={styles.seeAllText}>Voir →</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.kibanaHeatmap}>
-              {leadScores.map((lead) => (
-                <TouchableOpacity
-                  key={lead.id}
-                  style={[
-                  styles.kibanaHeatCell,
-                  { backgroundColor: lead.score >= 75 ? '#00BFB320' : lead.score >= 60 ? '#F6640020' : '#98A2B320' }
-                ]}
-                  onPress={() => navigation.navigate('Contacts', { customerId: lead.id })}
-                >
-                  <Text style={styles.kibanaHeatName}>{lead.name}</Text>
-                  <Text style={[
-                    styles.kibanaHeatScore,
-                    { color: lead.score >= 75 ? '#00BFB3' : lead.score >= 60 ? '#F66' : '#98A2B3' }
-                  ]}>{lead.score}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -982,171 +946,220 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7F8FA',
+    backgroundColor: '#f0f4f8',
+    // Mesh gradient background effect via CSS on web
+    ...(isWeb ? {
+      background: `
+        radial-gradient(at 20% 20%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+        radial-gradient(at 80% 10%, rgba(236, 72, 153, 0.12) 0px, transparent 50%),
+        radial-gradient(at 10% 80%, rgba(6, 182, 212, 0.1) 0px, transparent 50%),
+        radial-gradient(at 90% 90%, rgba(139, 92, 246, 0.1) 0px, transparent 50%),
+        linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)
+      `,
+    } : {}),
   },
   header: {
-    backgroundColor: '#FFFFFF',
     paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
+    paddingTop: 20,
+    paddingBottom: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    // Transparent glass effect
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.25)',
+      backdropFilter: 'blur(20px) saturate(180%)',
+      borderBottom: '1px solid rgba(255, 255, 255, 0.15)',
+      boxShadow: '0 4px 30px rgba(0, 0, 0, 0.08)',
+    } : {
+      backgroundColor: 'rgba(255, 255, 255, 0.85)',
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+    }),
   },
   greeting: {
-    fontSize: 24,
-    fontWeight: '300',
-    color: '#1A1A1A',
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#0f172a',
     marginBottom: 4,
-    letterSpacing: -0.3,
+    letterSpacing: -1,
   },
   subtitle: {
-    fontSize: 13,
-    color: '#6B6B6B',
-    fontWeight: '400',
-    letterSpacing: 0,
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '500',
+    letterSpacing: -0.2,
   },
   modeToggle: {
-    backgroundColor: '#007AFF',
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 16,
+    // Glass button effect
+    ...(isWeb ? {
+      background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+      boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.3)',
+    } : {
+      backgroundColor: '#6366f1',
+    }),
   },
   modeToggleText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   mainScroll: {
     flex: 1,
   },
   contentPadding: {
-    padding: 16,
+    padding: 20,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAFAFA',
     padding: 24,
+    ...(isWeb ? {
+      background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+    } : {
+      backgroundColor: '#f8fafc',
+    }),
   },
   loadingText: {
     marginTop: 16,
-    fontSize: 15,
-    color: '#6B6B6B',
-    fontWeight: '400',
+    fontSize: 16,
+    color: '#64748b',
+    fontWeight: '500',
   },
   errorText: {
     fontSize: 15,
-    color: '#FF3B30',
+    color: '#ef4444',
     textAlign: 'center',
     marginTop: 16,
     marginBottom: 24,
-    fontWeight: '400',
+    fontWeight: '500',
   },
   retryButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 28,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 16,
+    ...(isWeb ? {
+      background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+      boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)',
+    } : {
+      backgroundColor: '#6366f1',
+    }),
   },
   retryButtonText: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '500',
+    fontWeight: '600',
   },
 
-  // SIMPLE MODE STYLES
+  // SIMPLE MODE STYLES - Ultra Glass Design
   simpleMetrics: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 20,
+    gap: 16,
+    marginBottom: 24,
   },
   simpleMetricCard: {
     flex: 1,
-    minWidth: (width / 2) - 24,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
+    minWidth: (width / 2) - 28,
+    borderRadius: 24,
+    padding: 24,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    // Transparent glass effect
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.25)',
+      backdropFilter: 'blur(24px) saturate(180%)',
+      border: '1px solid rgba(255, 255, 255, 0.2)',
+      boxShadow: `
+        0 8px 32px rgba(0, 0, 0, 0.1),
+        0 2px 8px rgba(0, 0, 0, 0.05),
+        inset 0 1px 1px rgba(255, 255, 255, 0.3)
+      `,
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    } : {
+      backgroundColor: 'rgba(255, 255, 255, 0.85)',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.1,
+      shadowRadius: 32,
+      elevation: 8,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.3)',
+    }),
   },
   simpleMetricValue: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginTop: 12,
-    marginBottom: 4,
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginTop: 16,
+    marginBottom: 6,
+    letterSpacing: -1.5,
   },
   simpleMetricLabel: {
-    fontSize: 13,
-    color: '#8E8E8E',
-    fontWeight: '500',
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '600',
   },
   simpleSection: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   simpleSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 12,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 16,
+    letterSpacing: -0.5,
   },
   simpleActivityItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: 'rgba(0, 0, 0, 0.04)',
   },
   simpleActivityIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 14,
   },
   simpleActivityContent: {
     flex: 1,
   },
   simpleActivityTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1A1A1A',
-    marginBottom: 2,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0f172a',
+    marginBottom: 3,
   },
   simpleActivityTime: {
-    fontSize: 12,
-    color: '#8E8E8E',
+    fontSize: 13,
+    color: '#94a3b8',
   },
   simpleListItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: 'rgba(0, 0, 0, 0.04)',
   },
   simpleListName: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1A1A1A',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0f172a',
     flex: 1,
   },
   simpleListAmount: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#34C759',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#10b981',
   },
 
   // KIBANA ADVANCED MODE STYLES
@@ -1462,34 +1475,46 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    borderRadius: 24,
+    padding: 20,
+    // Transparent glass card effect
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.25)',
+      backdropFilter: 'blur(24px) saturate(180%)',
+      border: '1px solid rgba(255, 255, 255, 0.2)',
+      boxShadow: `
+        0 8px 32px rgba(0, 0, 0, 0.1),
+        0 2px 8px rgba(0, 0, 0, 0.05),
+        inset 0 1px 1px rgba(255, 255, 255, 0.3)
+      `,
+    } : {
+      backgroundColor: 'rgba(255, 255, 255, 0.85)',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.1,
+      shadowRadius: 32,
+      elevation: 8,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.3)',
+    }),
   },
   emptyText: {
-    fontSize: 13,
-    color: '#8E8E8E',
+    fontSize: 14,
+    color: '#94a3b8',
     textAlign: 'center',
-    paddingVertical: 16,
-    fontWeight: '400',
+    paddingVertical: 20,
+    fontWeight: '500',
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   seeAllText: {
-    fontSize: 13,
-    color: '#007AFF',
-    fontWeight: '500',
+    fontSize: 14,
+    color: '#6366f1',
+    fontWeight: '600',
   },
   actionableItem: {
     flexDirection: 'row',
@@ -1663,35 +1688,53 @@ const styles = StyleSheet.create({
     color: '#FF9500',
   },
   notificationBadge: {
-    backgroundColor: '#FF3B30',
     borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    minWidth: 24,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    minWidth: 26,
     alignItems: 'center',
     justifyContent: 'center',
+    ...(isWeb ? {
+      background: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
+      boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
+    } : {
+      backgroundColor: '#ef4444',
+    }),
   },
   notificationBadgeText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
   },
   notificationItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-    backgroundColor: '#F9F9F9',
-    borderLeftWidth: 3,
-    borderLeftColor: '#8E8E93',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    marginBottom: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#94a3b8',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.5)',
+      backdropFilter: 'blur(20px)',
+    } : {
+      backgroundColor: 'rgba(249, 250, 251, 0.95)',
+    }),
   },
   notificationItemHigh: {
-    borderLeftColor: '#FF3B30',
-    backgroundColor: '#FFF5F5',
+    borderLeftColor: '#ef4444',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(254, 226, 226, 0.6)',
+    } : {
+      backgroundColor: 'rgba(254, 226, 226, 0.95)',
+    }),
   },
   notificationItemMedium: {
-    borderLeftColor: '#FF9500',
-    backgroundColor: '#FFF9F0',
+    borderLeftColor: '#f59e0b',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(254, 243, 199, 0.6)',
+    } : {
+      backgroundColor: 'rgba(254, 243, 199, 0.95)',
+    }),
   },
   notificationHeader: {
     marginBottom: 8,
@@ -1699,51 +1742,61 @@ const styles = StyleSheet.create({
   notificationTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   notificationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#8E8E93',
-    marginRight: 8,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#94a3b8',
+    marginRight: 10,
   },
   notificationTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#1C1C1E',
+    color: '#0f172a',
     flex: 1,
   },
   priorityBadge: {
-    backgroundColor: '#FF3B30',
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    ...(isWeb ? {
+      background: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
+    } : {
+      backgroundColor: '#ef4444',
+    }),
   },
   priorityBadgeText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '700',
     color: '#FFFFFF',
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   notificationMessage: {
-    fontSize: 12,
-    color: '#6B6B6B',
-    lineHeight: 16,
+    fontSize: 13,
+    color: '#64748b',
+    lineHeight: 18,
   },
   notificationActions: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
+    gap: 10,
+    marginTop: 10,
   },
   notificationActionButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    ...(isWeb ? {
+      background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+      boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
+    } : {
+      backgroundColor: '#6366f1',
+    }),
   },
   notificationActionText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: '#FFFFFF',
   },

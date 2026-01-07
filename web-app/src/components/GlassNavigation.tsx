@@ -48,6 +48,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const NAV_WIDTH = SCREEN_WIDTH > 768 ? 280 : 72;
 const IS_LARGE_SCREEN = SCREEN_WIDTH > 768;
+const isWeb = Platform.OS === 'web';
 
 interface NavModule {
   id: string;
@@ -170,15 +171,21 @@ export default function GlassNavigation() {
     const isHovered = hoverIndex === index;
     // Animation disabled to avoid React hooks violations when used in .map()
 
+    const touchableProps: any = {
+      key: item.id,
+      onPress: () => navigation.navigate(item.name as any),
+      style: styles.navItem,
+      activeOpacity: 0.7,
+    };
+
+    // Add mouse events only on web
+    if (Platform.OS === 'web') {
+      touchableProps.onMouseEnter = () => setHoverIndex(index);
+      touchableProps.onMouseLeave = () => setHoverIndex(null);
+    }
+
     return (
-      <TouchableOpacity
-        key={item.id}
-        onPress={() => navigation.navigate(item.name)}
-        onMouseEnter={() => Platform.OS === 'web' && setHoverIndex(index)}
-        onMouseLeave={() => Platform.OS === 'web' && setHoverIndex(null)}
-        style={styles.navItem}
-        activeOpacity={0.7}
-      >
+      <TouchableOpacity {...touchableProps}>
         <View
           style={[
             styles.navItemContent,
@@ -292,7 +299,7 @@ export default function GlassNavigation() {
                   activeOpacity={0.8}
                 >
                   <LinearGradient
-                    colors={[...module.gradient.map((c) => c + '15')]}
+                    colors={module.gradient as [string, string]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={StyleSheet.absoluteFill}
@@ -348,10 +355,27 @@ export default function GlassNavigation() {
         />
       ) : (
         <View
-          style={[
+          // @ts-ignore - className and web styles
+          {...(Platform.OS === 'web' && {
+            className: 'glass-blur-bg',
+            style: {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: glassTheme.glass.frosted.backgroundColor,
+              backdropFilter: 'blur(40px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+              borderRadius: 0,
+            },
+          })}
+          style={Platform.OS !== 'web' ? [
             StyleSheet.absoluteFill,
-            { backgroundColor: glassTheme.glass.frosted.backgroundColor },
-          ]}
+            {
+              backgroundColor: glassTheme.glass.frosted.backgroundColor,
+            },
+          ] : undefined}
         />
       )}
 
@@ -359,7 +383,7 @@ export default function GlassNavigation() {
         {/* Header with Home Button */}
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => navigation.navigate('Home')}
+            onPress={() => navigation.navigate('Home' as any)}
             style={styles.homeButton}
             activeOpacity={0.8}
           >
@@ -404,7 +428,7 @@ export default function GlassNavigation() {
 
           {/* Profile */}
           <TouchableOpacity
-            onPress={() => navigation.navigate('Profile')}
+            onPress={() => navigation.navigate('Profile' as any)}
             style={styles.profileButton}
             activeOpacity={0.8}
           >
@@ -445,9 +469,16 @@ const styles = StyleSheet.create({
   container: {
     width: NAV_WIDTH,
     height: '100%',
-    borderRightWidth: 1,
-    borderRightColor: 'rgba(0, 0, 0, 0.06)',
     overflow: 'hidden',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+      backdropFilter: 'blur(24px) saturate(180%)',
+      borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+      boxShadow: '4px 0 30px rgba(0, 0, 0, 0.05)',
+    } : {
+      borderRightWidth: 1,
+      borderRightColor: 'rgba(0, 0, 0, 0.06)',
+    }),
   },
   containerCollapsed: {
     width: 72,
@@ -609,21 +640,37 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
 
-  // Modal
+  // Modal - Transparent Glass Effect
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: glassTheme.spacing.lg,
+    ...(isWeb ? {
+      backgroundColor: 'rgba(0, 0, 0, 0.3)',
+      backdropFilter: 'blur(8px)',
+    } : {
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    }),
   },
   modalContainer: {
     width: '100%',
     maxWidth: 600,
     maxHeight: '80%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: 'hidden',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.25)',
+      backdropFilter: 'blur(40px) saturate(180%)',
+      border: '1px solid rgba(255, 255, 255, 0.2)',
+      boxShadow: `
+        0 25px 50px rgba(0, 0, 0, 0.15),
+        0 10px 20px rgba(0, 0, 0, 0.1),
+        inset 0 1px 1px rgba(255, 255, 255, 0.4)
+      `,
+    } : {
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    }),
   },
   modalHeader: {
     flexDirection: 'row',
@@ -631,7 +678,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: glassTheme.spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.06)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.15)',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    } : {}),
   },
   modalTitle: {
     ...glassTheme.typography.h1,
@@ -641,9 +691,14 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
     justifyContent: 'center',
     alignItems: 'center',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      backdropFilter: 'blur(10px)',
+    } : {
+      backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    }),
   },
   closeButtonText: {
     fontSize: 24,
@@ -652,11 +707,14 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
 
-  // Categories
+  // Categories - Glass chips
   categoriesScroll: {
     maxHeight: 50,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.06)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    } : {}),
   },
   categoriesContent: {
     paddingHorizontal: glassTheme.spacing.lg,
@@ -667,10 +725,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+    } : {
+      backgroundColor: 'rgba(0, 0, 0, 0.04)',
+    }),
   },
   categoryChipActive: {
-    backgroundColor: glassTheme.colors.primary,
+    ...(isWeb ? {
+      backgroundColor: 'rgba(0, 122, 255, 0.8)',
+      boxShadow: '0 4px 12px rgba(0, 122, 255, 0.3)',
+    } : {
+      backgroundColor: glassTheme.colors.primary,
+    }),
   },
   categoryChipText: {
     ...glassTheme.typography.bodySmall,
@@ -682,9 +750,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Modules Grid
+  // Modules Grid - Glass Cards
   modulesScroll: {
     flex: 1,
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    } : {}),
   },
   modulesGrid: {
     padding: glassTheme.spacing.lg,
@@ -698,14 +769,28 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: glassTheme.spacing.md,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'rgba(0, 0, 0, 0.06)',
     justifyContent: 'center',
     alignItems: 'center',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+      backdropFilter: 'blur(10px)',
+      border: '1px solid rgba(255, 255, 255, 0.15)',
+      boxShadow: '0 4px 15px rgba(0, 0, 0, 0.08)',
+      transition: 'all 0.3s ease',
+    } : {
+      borderWidth: 2,
+      borderColor: 'rgba(0, 0, 0, 0.06)',
+    }),
   },
   moduleCardPinned: {
-    borderColor: glassTheme.colors.primary,
-    borderWidth: 2,
+    ...(isWeb ? {
+      borderColor: 'rgba(0, 122, 255, 0.5)',
+      border: '2px solid rgba(0, 122, 255, 0.5)',
+      boxShadow: '0 4px 20px rgba(0, 122, 255, 0.2)',
+    } : {
+      borderColor: glassTheme.colors.primary,
+      borderWidth: 2,
+    }),
   },
   moduleIcon: {
     width: 56,
@@ -733,14 +818,17 @@ const styles = StyleSheet.create({
     backgroundColor: glassTheme.colors.primary,
   },
 
-  // Modal Footer
+  // Modal Footer - Glass
   modalFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: glassTheme.spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.06)',
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    } : {}),
   },
   footerText: {
     ...glassTheme.typography.body,
@@ -750,7 +838,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(0, 122, 255, 0.2)',
+      backdropFilter: 'blur(10px)',
+      border: '1px solid rgba(0, 122, 255, 0.2)',
+    } : {
+      backgroundColor: 'rgba(0, 122, 255, 0.1)',
+    }),
   },
   resetButtonText: {
     ...glassTheme.typography.bodySmall,

@@ -23,7 +23,7 @@ import {
   TrendingDownIcon,
   UsersIcon,
 } from '../components/Icons';
-import { leadsService, contactService } from '../services/api';
+import { leadsService, contactService, dealsService } from '../services/api';
 import { withGlassLayout } from '../components/withGlassLayout';
 
 type LeadsScreenProps = {
@@ -89,25 +89,54 @@ function LeadsScreen({ navigation }: LeadsScreenProps) {
     try {
       setLoading(true);
 
-      // Fetch real leads data from API
-      const response = await contactService.getAll({ type: 'lead' });
-      const contacts = response.data.data || response.data;
+      // Fetch contacts, deals, and activities in parallel
+      const [contactsResponse, dealsResponse] = await Promise.all([
+        contactService.getAll({ type: 'lead' }),
+        dealsService.getAll().catch(() => ({ data: [] })),
+      ]);
 
-      // Transform API data to Lead format
-      const apiLeads: Lead[] = contacts.map((contact: any) => ({
-        id: contact.id,
-        name: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.full_name || 'N/A',
-        company: contact.company_name || 'N/A',
-        email: contact.email || '',
-        phone: contact.phone || '',
-        score: contact.score || 0,
-        trend: contact.score >= 70 ? 'up' : contact.score >= 40 ? 'flat' : 'down',
-        contacts: 0, // Could be calculated from activities
-        lastActivity: 'N/A',
-        status: contact.score >= 70 ? 'hot' : contact.score >= 40 ? 'warm' : 'cold',
-        deals: 0, // Could be fetched from deals API
-        activities: 0, // Could be fetched from activities API
-      }));
+      const contacts = contactsResponse.data.data || contactsResponse.data;
+      const allDeals = dealsResponse.data.data || dealsResponse.data || [];
+
+      // Transform API data to Lead format with integrated deals and activities
+      const apiLeads: Lead[] = contacts.map((contact: any) => {
+        // Count deals for this contact
+        const contactDeals = allDeals.filter((deal: any) =>
+          deal.contact_id === contact.id || deal.company_id === contact.company_id
+        );
+
+        // Calculate score based on multiple factors
+        let calculatedScore = contact.score || 0;
+
+        // Boost score based on completeness
+        if (contact.email) calculatedScore += 10;
+        if (contact.phone) calculatedScore += 10;
+        if (contact.company_name) calculatedScore += 10;
+        if (contact.linkedin_url) calculatedScore += 5;
+
+        // Boost score based on engagement
+        if (contact.type === 'customer') calculatedScore += 20;
+        if (contact.source === 'referral') calculatedScore += 15;
+        if (contactDeals.length > 0) calculatedScore += contactDeals.length * 10;
+
+        // Cap score at 100
+        calculatedScore = Math.min(100, calculatedScore);
+
+        return {
+          id: contact.id,
+          name: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.full_name || 'N/A',
+          company: contact.company_name || 'N/A',
+          email: contact.email || '',
+          phone: contact.phone || '',
+          score: calculatedScore,
+          trend: calculatedScore >= 70 ? 'up' : calculatedScore >= 40 ? 'flat' : 'down',
+          contacts: 1,
+          lastActivity: contact.updated_at ? getTimeAgo(contact.updated_at) : 'N/A',
+          status: calculatedScore >= 70 ? 'hot' : calculatedScore >= 40 ? 'warm' : 'cold',
+          deals: contactDeals.length,
+          activities: contact.activities_count || 0,
+        };
+      });
 
       setLeads(apiLeads);
       setLoading(false);
@@ -204,6 +233,19 @@ function LeadsScreen({ navigation }: LeadsScreenProps) {
       setLeads(mockLeads);
       setLoading(false);
     }
+  };
+
+  const getTimeAgo = (dateString: string) => {
+    const now = new Date();
+    const past = new Date(dateString);
+    const diffMs = now.getTime() - past.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 60) return `${diffMins} min`;
+    if (diffHours < 24) return `${diffHours}h`;
+    return `${diffDays}j`;
   };
 
   const filterAndSortLeads = () => {

@@ -17,14 +17,16 @@ import {
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
+const isWeb = Platform.OS === 'web';
+
 const navigationItems = [
-  { name: 'Dashboard', label: 'Dashboard', icon: ChartIcon },
-  { name: 'Pipeline', label: 'Pipeline', icon: TrendingUpIcon },
-  { name: 'Tasks', label: 'Tâches', icon: CheckCircleIcon },
-  { name: 'Contacts', label: 'Contacts', icon: UsersIcon },
-  { name: 'Products', label: 'Produits', icon: PackageIcon },
-  { name: 'Sales', label: 'Ventes', icon: DollarIcon },
-  { name: 'Profile', label: 'Mon Profil', icon: UserIcon },
+  { name: 'Dashboard', label: 'Dashboard', icon: ChartIcon, color: '#6366f1' },
+  { name: 'Pipeline', label: 'Pipeline', icon: TrendingUpIcon, color: '#8b5cf6' },
+  { name: 'Tasks', label: 'Tâches', icon: CheckCircleIcon, color: '#f59e0b' },
+  { name: 'Contacts', label: 'Contacts', icon: UsersIcon, color: '#10b981' },
+  { name: 'Products', label: 'Produits', icon: PackageIcon, color: '#ec4899' },
+  { name: 'Sales', label: 'Ventes', icon: DollarIcon, color: '#14b8a6' },
+  { name: 'Profile', label: 'Mon Profil', icon: UserIcon, color: '#64748b' },
 ];
 
 export default function Navigation() {
@@ -63,6 +65,9 @@ export default function Navigation() {
 
   return (
     <View style={styles.container}>
+      {/* Glass background layer */}
+      <View style={styles.glassBackground} />
+
       <View style={styles.nav}>
         {navigationItems.map((item) => {
           const Icon = item.icon;
@@ -75,10 +80,26 @@ export default function Navigation() {
               onPress={() => navigation.navigate(item.name as keyof RootStackParamList)}
               activeOpacity={0.7}
             >
-              <Icon size={18} color={isActive ? '#007AFF' : '#6B6B6B'} />
-              <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>
+              {/* Active indicator glow */}
+              {isActive && <View style={[styles.activeGlow, { backgroundColor: item.color + '30' }]} />}
+
+              <View style={[
+                styles.iconWrapper,
+                isActive && { backgroundColor: item.color + '20' }
+              ]}>
+                <Icon size={18} color={isActive ? item.color : '#64748b'} />
+              </View>
+              <Text style={[
+                styles.navLabel,
+                isActive && { color: item.color, fontWeight: '700' }
+              ]}>
                 {item.label}
               </Text>
+
+              {/* Active dot indicator */}
+              {isActive && (
+                <View style={[styles.activeDot, { backgroundColor: item.color }]} />
+              )}
             </TouchableOpacity>
           );
         })}
@@ -97,49 +118,111 @@ export default function Navigation() {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
     paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    position: 'relative',
+    overflow: 'hidden',
+    // Ultra transparent glass effect
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.25)',
+      backdropFilter: 'blur(24px) saturate(180%)',
+      borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
+      boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.3)',
+    } : {
+      backgroundColor: 'rgba(255, 255, 255, 0.85)',
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+    }),
+  },
+  glassBackground: {
+    ...StyleSheet.absoluteFillObject,
+    ...(isWeb ? {
+      background: `
+        linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%)
+      `,
+    } : {}),
   },
   nav: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 6,
     alignItems: 'center',
+    position: 'relative',
+    zIndex: 1,
   },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 6,
-    backgroundColor: 'transparent',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    gap: 8,
+    position: 'relative',
+    overflow: 'hidden',
+    // Glass item effect
+    ...(isWeb ? {
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    } : {}),
   },
   navItemActive: {
-    backgroundColor: '#F0F5FF',
+    // Active glass effect - more transparent
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.35)',
+      boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.4)',
+      transform: [{ scale: 1.02 }],
+    } : {
+      backgroundColor: 'rgba(255, 255, 255, 0.7)',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 15,
+      elevation: 4,
+    }),
+  },
+  activeGlow: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 14,
+    opacity: 0.5,
+  },
+  iconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   navLabel: {
     fontSize: 13,
-    fontWeight: '500',
-    color: '#6B6B6B',
-    letterSpacing: -0.1,
+    fontWeight: '600',
+    color: '#64748b',
+    letterSpacing: -0.2,
   },
-  navLabelActive: {
-    color: '#007AFF',
+  activeDot: {
+    position: 'absolute',
+    bottom: 4,
+    left: '50%',
+    marginLeft: -3,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   logoutButton: {
     marginLeft: 'auto',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#FF3B30',
-    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 14,
+    // Gradient logout button
+    ...(isWeb ? {
+      background: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
+      boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.2)',
+    } : {
+      backgroundColor: '#ef4444',
+    }),
   },
   logoutText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
 });

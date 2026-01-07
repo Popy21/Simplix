@@ -10,7 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { api } from '../services/api';
-import { BarChartIcon, TrendingUpIcon, DollarIcon, UsersIcon, FileTextIcon, AlertCircleIcon } from '../components/Icons';
+import { BarChartIcon, TrendingUpIcon, DollarIcon, UsersIcon, FileTextIcon, XCircleIcon } from '../components/Icons';
 
 const { width } = Dimensions.get('window');
 
@@ -328,7 +328,7 @@ export default function PilotageScreen() {
       </View>
       {invoicesMetrics.averagePaymentDelay > 0 && (
         <View style={styles.paymentDelayBanner}>
-          <AlertCircleIcon size={16} color="#FF9500" />
+          <XCircleIcon size={16} color="#FF9500" />
           <Text style={styles.paymentDelayText}>
             Délai moyen de paiement: {invoicesMetrics.averagePaymentDelay} jours
           </Text>

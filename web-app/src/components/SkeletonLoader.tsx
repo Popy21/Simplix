@@ -21,7 +21,7 @@ export default function SkeletonLoader({
       style={[
         styles.container,
         {
-          width,
+          width: width as any, // Support both string and number
           height,
           borderRadius,
         },
@@ -46,7 +46,7 @@ interface SkeletonCardProps {
 
 export function SkeletonCard({ style }: SkeletonCardProps) {
   return (
-    <View style={[styles.card, style]}>
+    <View style={[skeletonStyles.card, style]}>
       <SkeletonLoader width="40%" height={24} style={{ marginBottom: 12 }} />
       <SkeletonLoader width="100%" height={16} style={{ marginBottom: 8 }} />
       <SkeletonLoader width="80%" height={16} style={{ marginBottom: 8 }} />
@@ -57,8 +57,8 @@ export function SkeletonCard({ style }: SkeletonCardProps) {
 
 export function SkeletonKPICard({ style }: SkeletonCardProps) {
   return (
-    <View style={[styles.kpiCard, style]}>
-      <View style={styles.kpiHeader}>
+    <View style={[skeletonStyles.kpiCard, style]}>
+      <View style={skeletonStyles.kpiHeader}>
         <SkeletonLoader width={40} height={40} borderRadius={20} />
         <SkeletonLoader width="60%" height={16} style={{ marginLeft: 12 }} />
       </View>
@@ -72,9 +72,9 @@ export function SkeletonList({ count = 3, style }: { count?: number; style?: Vie
   return (
     <View style={style}>
       {Array.from({ length: count }).map((_, index) => (
-        <View key={index} style={styles.listItem}>
+        <View key={index} style={skeletonStyles.listItem}>
           <SkeletonLoader width={48} height={48} borderRadius={24} />
-          <View style={styles.listItemContent}>
+          <View style={skeletonStyles.listItemContent}>
             <SkeletonLoader width="70%" height={16} style={{ marginBottom: 8 }} />
             <SkeletonLoader width="40%" height={14} />
           </View>
@@ -86,9 +86,9 @@ export function SkeletonList({ count = 3, style }: { count?: number; style?: Vie
 
 export function SkeletonChart({ style }: SkeletonCardProps) {
   return (
-    <View style={[styles.chart, style]}>
+    <View style={[skeletonStyles.chart, style]}>
       <SkeletonLoader width="40%" height={20} style={{ marginBottom: 20 }} />
-      <View style={styles.chartBars}>
+      <View style={skeletonStyles.chartBars}>
         <SkeletonLoader width="100%" height={8} style={{ marginBottom: 12 }} />
         <SkeletonLoader width="80%" height={8} style={{ marginBottom: 12 }} />
         <SkeletonLoader width="60%" height={8} style={{ marginBottom: 12 }} />
@@ -139,5 +139,3 @@ const skeletonStyles = StyleSheet.create({
     marginTop: glassTheme.spacing.md,
   },
 });
-
-Object.assign(styles, skeletonStyles);

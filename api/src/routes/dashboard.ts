@@ -281,6 +281,7 @@ router.get('/kpis', authenticateToken, async (req: AuthRequest, res: Response) =
   try {
     const period = (req.query.period as string) || 'month';
     const { startDate, endDate } = getDateRange(period);
+    const organizationId = req.user?.organization_id;
 
     // Calculate key KPIs
     const kpis = [];
@@ -290,14 +291,14 @@ router.get('/kpis', authenticateToken, async (req: AuthRequest, res: Response) =
       SELECT
         COALESCE(SUM(total_amount), 0) as current_revenue
       FROM invoices
-      WHERE invoice_date >= $1 AND invoice_date <= $2 AND status = 'paid'
-    `, [startDate, endDate]);
+      WHERE organization_id = $1 AND invoice_date >= $2 AND invoice_date <= $3 AND status = 'paid' AND deleted_at IS NULL
+    `, [organizationId, startDate, endDate]);
 
     const previousRevenue = await db.query(`
       SELECT COALESCE(SUM(total_amount), 0) as previous_revenue
       FROM invoices
-      WHERE invoice_date >= $1 AND invoice_date < $2 AND status = 'paid'
-    `, [new Date(startDate.getTime() - (endDate.getTime() - startDate.getTime())), startDate]);
+      WHERE organization_id = $1 AND invoice_date >= $2 AND invoice_date < $3 AND status = 'paid' AND deleted_at IS NULL
+    `, [organizationId, new Date(startDate.getTime() - (endDate.getTime() - startDate.getTime())), startDate]);
 
     kpis.push({
       id: 'revenue',
@@ -313,14 +314,14 @@ router.get('/kpis', authenticateToken, async (req: AuthRequest, res: Response) =
     const invoiceCountQuery = await db.query(`
       SELECT COUNT(*) as count
       FROM invoices
-      WHERE invoice_date >= $1 AND invoice_date <= $2
-    `, [startDate, endDate]);
+      WHERE organization_id = $1 AND invoice_date >= $2 AND invoice_date <= $3 AND deleted_at IS NULL
+    `, [organizationId, startDate, endDate]);
 
     const previousInvoiceCount = await db.query(`
       SELECT COUNT(*) as count
       FROM invoices
-      WHERE invoice_date >= $1 AND invoice_date < $2
-    `, [new Date(startDate.getTime() - (endDate.getTime() - startDate.getTime())), startDate]);
+      WHERE organization_id = $1 AND invoice_date >= $2 AND invoice_date < $3 AND deleted_at IS NULL
+    `, [organizationId, new Date(startDate.getTime() - (endDate.getTime() - startDate.getTime())), startDate]);
 
     kpis.push({
       id: 'invoices',
@@ -338,8 +339,8 @@ router.get('/kpis', authenticateToken, async (req: AuthRequest, res: Response) =
         AVG(EXTRACT(DAY FROM (p.payment_date - i.due_date))) as avg_delay
       FROM invoices i
       JOIN payments p ON p.invoice_id = i.id
-      WHERE i.invoice_date >= $1 AND i.invoice_date <= $2
-    `, [startDate, endDate]);
+      WHERE i.organization_id = $1 AND i.invoice_date >= $2 AND i.invoice_date <= $3 AND i.deleted_at IS NULL
+    `, [organizationId, startDate, endDate]);
 
     kpis.push({
       id: 'payment_delay',
@@ -355,8 +356,8 @@ router.get('/kpis', authenticateToken, async (req: AuthRequest, res: Response) =
     const customerCountQuery = await db.query(`
       SELECT COUNT(DISTINCT customer_id) as count
       FROM invoices
-      WHERE invoice_date >= $1 AND invoice_date <= $2
-    `, [startDate, endDate]);
+      WHERE organization_id = $1 AND invoice_date >= $2 AND invoice_date <= $3 AND deleted_at IS NULL
+    `, [organizationId, startDate, endDate]);
 
     kpis.push({
       id: 'customers',
@@ -475,6 +476,7 @@ router.get('/invoices-metrics', authenticateToken, async (req: AuthRequest, res:
   try {
     const period = (req.query.period as string) || 'month';
     const { startDate, endDate } = getDateRange(period);
+    const organizationId = req.user?.organization_id;
 
     const metrics = await db.query(`
       SELECT
@@ -483,22 +485,22 @@ router.get('/invoices-metrics', authenticateToken, async (req: AuthRequest, res:
         COUNT(*) FILTER (WHERE status IN ('sent', 'pending')) as pending,
         COUNT(*) FILTER (WHERE status = 'overdue' OR (status NOT IN ('paid', 'cancelled') AND due_date < CURRENT_DATE)) as overdue
       FROM invoices
-      WHERE invoice_date >= $1 AND invoice_date <= $2
-    `, [startDate, endDate]);
+      WHERE organization_id = $1 AND invoice_date >= $2 AND invoice_date <= $3 AND deleted_at IS NULL
+    `, [organizationId, startDate, endDate]);
 
     // Average payment delay
     const delayQuery = await db.query(`
       SELECT AVG(EXTRACT(DAY FROM (p.payment_date - i.due_date))) as avg_delay
       FROM invoices i
       JOIN payments p ON p.invoice_id = i.id
-      WHERE i.invoice_date >= $1 AND i.invoice_date <= $2
-    `, [startDate, endDate]);
+      WHERE i.organization_id = $1 AND i.invoice_date >= $2 AND i.invoice_date <= $3 AND i.deleted_at IS NULL
+    `, [organizationId, startDate, endDate]);
 
     res.json({
-      total: parseInt(metrics.rows[0].total),
-      paid: parseInt(metrics.rows[0].paid),
-      pending: parseInt(metrics.rows[0].pending),
-      overdue: parseInt(metrics.rows[0].overdue),
+      total: parseInt(metrics.rows[0].total || 0),
+      paid: parseInt(metrics.rows[0].paid || 0),
+      pending: parseInt(metrics.rows[0].pending || 0),
+      overdue: parseInt(metrics.rows[0].overdue || 0),
       averagePaymentDelay: Math.round(parseFloat(delayQuery.rows[0].avg_delay || 0)),
     });
   } catch (error: any) {

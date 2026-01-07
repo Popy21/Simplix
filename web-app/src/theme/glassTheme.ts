@@ -52,38 +52,38 @@ export const glassTheme = {
     info: '#007AFF',
   },
 
-  // Glassmorphism effects
+  // Glassmorphism effects - Ultra Transparent
   glass: {
     // Light glass (for bright backgrounds)
     light: {
-      backgroundColor: 'rgba(255, 255, 255, 0.72)',
-      backdropFilter: 'blur(40px) saturate(180%)',
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      backdropFilter: 'blur(24px) saturate(180%)',
       borderWidth: 1,
-      borderColor: 'rgba(255, 255, 255, 0.18)',
+      borderColor: 'rgba(255, 255, 255, 0.15)',
     },
 
     // Medium glass
     medium: {
-      backgroundColor: 'rgba(255, 255, 255, 0.5)',
-      backdropFilter: 'blur(30px) saturate(160%)',
+      backgroundColor: 'rgba(255, 255, 255, 0.18)',
+      backdropFilter: 'blur(20px) saturate(160%)',
       borderWidth: 1,
       borderColor: 'rgba(255, 255, 255, 0.1)',
     },
 
     // Dark glass
     dark: {
-      backgroundColor: 'rgba(0, 0, 0, 0.15)',
+      backgroundColor: 'rgba(0, 0, 0, 0.1)',
       backdropFilter: 'blur(20px) saturate(140%)',
       borderWidth: 1,
       borderColor: 'rgba(255, 255, 255, 0.05)',
     },
 
-    // Frosted glass
+    // Frosted glass - More transparent
     frosted: {
-      backgroundColor: 'rgba(242, 242, 247, 0.88)',
-      backdropFilter: 'blur(50px) saturate(200%)',
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      backdropFilter: 'blur(24px) saturate(180%)',
       borderWidth: 1,
-      borderColor: 'rgba(255, 255, 255, 0.3)',
+      borderColor: 'rgba(255, 255, 255, 0.15)',
     },
   },
 

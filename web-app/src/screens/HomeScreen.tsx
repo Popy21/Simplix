@@ -223,7 +223,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           {menuItems.map((item, index) => {
             const Icon = item.icon;
             return (
-              <TouchableOpacity key={index} style={styles.menuCard} onPress={() => navigation.navigate(item.screen)} activeOpacity={0.7}>
+              <TouchableOpacity key={index} style={styles.menuCard} onPress={() => navigation.navigate(item.screen as any)} activeOpacity={0.7}>
                 <View style={[styles.menuIconContainer, { backgroundColor: `${item.color}20` }]}>
                   <Icon size={28} color={item.color} />
                 </View>
@@ -236,7 +236,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       </View>
       <View style={styles.settingsSection}>
         <Text style={styles.sectionLabel}>PARAMÈTRES</Text>
-        <TouchableOpacity style={styles.settingsCard} onPress={() => navigation.navigate('Profile')} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.settingsCard} onPress={() => navigation.navigate('Profile' as any)} activeOpacity={0.7}>
           <View style={styles.settingsIcon}><Text style={styles.lockEmoji}>👤</Text></View>
           <View style={styles.settingsContent}>
             <Text style={styles.settingsTitle}>Mon Profil d'Entreprise</Text>
@@ -244,7 +244,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.settingsCard} onPress={() => navigation.navigate('ChangePassword')} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.settingsCard} onPress={() => navigation.navigate('ChangePassword' as any)} activeOpacity={0.7}>
           <View style={styles.settingsIcon}><Text style={styles.lockEmoji}>🔒</Text></View>
           <View style={styles.settingsContent}>
             <Text style={styles.settingsTitle}>Changer le Mot de Passe</Text>
@@ -252,7 +252,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.settingsCard} onPress={() => navigation.navigate('TestAll')} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.settingsCard} onPress={() => navigation.navigate('TestAll' as any)} activeOpacity={0.7}>
           <View style={styles.settingsIcon}><Text style={styles.lockEmoji}>🧪</Text></View>
           <View style={styles.settingsContent}>
             <Text style={styles.settingsTitle}>Tests API</Text>

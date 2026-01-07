@@ -201,7 +201,7 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
 
   const handleSendQuote = async (quoteId: string) => {
     try {
-      await quoteService.sendEmail(quoteId);
+      await invoicesService.sendEmail(quoteId);
       await fetchQuotes();
       Platform.OS === 'web' ? alert('Devis envoyé avec succès') : Alert.alert('Succès', 'Devis envoyé par email');
     } catch (error) {
@@ -676,7 +676,7 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
           </Text>
           <TouchableOpacity
             style={styles.onboardingButton}
-            onPress={() => navigation.navigate('Templates')}
+            onPress={() => navigation.navigate('Templates' as any)}
           >
             <FileTextIcon size={24} color="#FFFFFF" />
             <Text style={styles.onboardingButtonText}>Créer mon premier template</Text>
@@ -738,7 +738,7 @@ export default function InvoicesScreen({ navigation }: InvoicesScreenProps) {
                     <TouchableOpacity onPress={() => {
                       if (selectedItem.customer_id) {
                         setDetailModalVisible(false);
-                        navigation.navigate('Contacts', { customerId: selectedItem.customer_id });
+                        navigation.navigate('Contacts' as any, { customerId: selectedItem.customer_id });
                       }
                     }}>
                       <Text style={styles.modalSubtitle}>
@@ -2134,7 +2134,7 @@ const styles = StyleSheet.create({
   previewTitle: { fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
   closeButtonContainer: { padding: 4 },
   closeButton: { fontSize: 32, color: '#FFFFFF', fontWeight: '300', lineHeight: 32 },
-  iframeContainer: { flex: 1, backgroundColor: '#525659', padding: 20, alignItems: 'center', overflow: 'auto' },
+  iframeContainer: { flex: 1, backgroundColor: '#525659', padding: 20, alignItems: 'center', overflow: 'hidden' },
   readOnlyBadge: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFF3CD', padding: 8, borderTopWidth: 1, borderTopColor: '#FFE69C', zIndex: 10 },
   readOnlyText: { fontSize: 13, color: '#856404', textAlign: 'center', fontWeight: '600' },
   // Payment section styles

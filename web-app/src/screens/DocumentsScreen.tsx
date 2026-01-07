@@ -9,11 +9,16 @@ import {
   ScrollView,
   Platform,
   Alert,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { UsersIcon, TrendingUpIcon } from '../components/Icons';
+import { UsersIcon } from '../components/Icons';
 import { withGlassLayout } from '../components/withGlassLayout';
+import { documentsService } from '../services/api';
+import * as DocumentPicker from 'expo-document-picker';
+import { uploadService } from '../services/api';
 
 type DocumentsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -21,227 +26,298 @@ type DocumentsScreenProps = {
 
 interface DocumentVersion {
   id: string;
-  version: number;
-  uploadDate: string;
-  size: string;
-  uploadedBy: string;
+  version_number: number;
+  created_at: string;
+  file_size?: number;
+  created_by_name: string;
+  filename: string;
 }
 
 interface Document {
   id: string;
-  name: string;
-  type: string;
-  size: string;
-  uploadDate: string;
-  lastModified: string;
-  uploadedBy: string;
-  versions: DocumentVersion[];
-  sharedWith: number;
-  status: 'active' | 'archived';
-  category: string;
+  title: string;
+  description?: string;
+  file_url: string;
+  file_name: string;
+  file_size?: number;
+  mime_type?: string;
+  document_type?: string;
+  uploaded_by_name?: string;
+  version_count?: number;
+  tags?: string[];
+  created_at: string;
+  updated_at: string;
 }
 
 function DocumentsScreen({ navigation }: DocumentsScreenProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
+  const [uploadVisible, setUploadVisible] = useState(false);
   const [filterCategory, setFilterCategory] = useState('all');
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [versions, setVersions] = useState<DocumentVersion[]>([]);
+
+  // Upload form state
+  const [uploadTitle, setUploadTitle] = useState('');
+  const [uploadDescription, setUploadDescription] = useState('');
+  const [uploadType, setUploadType] = useState('general');
+  const [selectedFile, setSelectedFile] = useState<any>(null);
 
   useEffect(() => {
     loadDocuments();
   }, []);
 
-  const loadDocuments = () => {
-    const mockDocs: Document[] = [
-      {
-        id: 'd1',
-        name: 'Contrat_Acme_Corp_2025.pdf',
-        type: 'PDF',
-        size: '2.4 MB',
-        uploadDate: '2025-11-15',
-        lastModified: '2025-11-18',
-        uploadedBy: 'Sophie Durand',
-        versions: [
-          { id: 'v1', version: 3, uploadDate: '2025-11-18', size: '2.4 MB', uploadedBy: 'Sophie Durand' },
-          { id: 'v2', version: 2, uploadDate: '2025-11-16', size: '2.3 MB', uploadedBy: 'Laurent Michel' },
-          { id: 'v3', version: 1, uploadDate: '2025-11-15', size: '2.1 MB', uploadedBy: 'Sophie Durand' },
-        ],
-        sharedWith: 5,
-        status: 'active',
-        category: 'contracts',
-      },
-      {
-        id: 'd2',
-        name: 'Facture_001_Nov2025.pdf',
-        type: 'PDF',
-        size: '1.1 MB',
-        uploadDate: '2025-11-10',
-        lastModified: '2025-11-10',
-        uploadedBy: 'Marie Martin',
-        versions: [
-          { id: 'v1', version: 1, uploadDate: '2025-11-10', size: '1.1 MB', uploadedBy: 'Marie Martin' },
-        ],
-        sharedWith: 3,
-        status: 'active',
-        category: 'invoices',
-      },
-      {
-        id: 'd3',
-        name: 'Proposition_Technique_v2.docx',
-        type: 'DOCX',
-        size: '3.2 MB',
-        uploadDate: '2025-11-12',
-        lastModified: '2025-11-19',
-        uploadedBy: 'Jean Dupont',
-        versions: [
-          { id: 'v1', version: 2, uploadDate: '2025-11-19', size: '3.2 MB', uploadedBy: 'Jean Dupont' },
-          { id: 'v2', version: 1, uploadDate: '2025-11-12', size: '3.0 MB', uploadedBy: 'Jean Dupont' },
-        ],
-        sharedWith: 7,
-        status: 'active',
-        category: 'proposals',
-      },
-      {
-        id: 'd4',
-        name: 'Devis_StartupXYZ_58k.pdf',
-        type: 'PDF',
-        size: '1.8 MB',
-        uploadDate: '2025-11-08',
-        lastModified: '2025-11-08',
-        uploadedBy: 'Pierre Leroy',
-        versions: [
-          { id: 'v1', version: 1, uploadDate: '2025-11-08', size: '1.8 MB', uploadedBy: 'Pierre Leroy' },
-        ],
-        sharedWith: 2,
-        status: 'archived',
-        category: 'quotes',
-      },
-      {
-        id: 'd5',
-        name: 'Présentation_CRM_2025.pptx',
-        type: 'PPTX',
-        size: '5.6 MB',
-        uploadDate: '2025-11-05',
-        lastModified: '2025-11-17',
-        uploadedBy: 'Sophie Durand',
-        versions: [
-          { id: 'v1', version: 3, uploadDate: '2025-11-17', size: '5.6 MB', uploadedBy: 'Sophie Durand' },
-          { id: 'v2', version: 2, uploadDate: '2025-11-10', size: '5.3 MB', uploadedBy: 'Marie Martin' },
-          { id: 'v3', version: 1, uploadDate: '2025-11-05', size: '5.1 MB', uploadedBy: 'Sophie Durand' },
-        ],
-        sharedWith: 12,
-        status: 'active',
-        category: 'presentations',
-      },
-      {
-        id: 'd6',
-        name: 'Rapport_Analyse_Q4.xlsx',
-        type: 'XLSX',
-        size: '2.9 MB',
-        uploadDate: '2025-11-01',
-        lastModified: '2025-11-19',
-        uploadedBy: 'Laurent Michel',
-        versions: [
-          { id: 'v1', version: 2, uploadDate: '2025-11-19', size: '2.9 MB', uploadedBy: 'Laurent Michel' },
-          { id: 'v2', version: 1, uploadDate: '2025-11-01', size: '2.5 MB', uploadedBy: 'Laurent Michel' },
-        ],
-        sharedWith: 4,
-        status: 'active',
-        category: 'reports',
-      },
-    ];
-
-    setDocuments(mockDocs);
+  const loadDocuments = async () => {
+    try {
+      setLoading(true);
+      const response = await documentsService.getAll();
+      setDocuments(response.data);
+    } catch (error: any) {
+      console.error('Error loading documents:', error);
+      Alert.alert('Erreur', 'Impossible de charger les documents');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const getFileIcon = (type: string) => {
-    const icons: { [key: string]: string } = {
-      PDF: '📄',
-      DOCX: '📝',
-      XLSX: '📊',
-      PPTX: '🎯',
-      default: '📁',
-    };
-    return icons[type] || icons.default;
+  const loadVersions = async (docId: string) => {
+    try {
+      const response = await documentsService.getVersions(docId);
+      setVersions(response.data);
+    } catch (error) {
+      console.error('Error loading versions:', error);
+    }
   };
 
-  const getCategoryLabel = (category: string) => {
+  const handleDocumentPick = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const file = result.assets[0];
+      setSelectedFile(file);
+      setUploadTitle(file.name);
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Erreur', 'Impossible de sélectionner le fichier');
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile || !uploadTitle.trim()) {
+      Alert.alert('Erreur', 'Veuillez sélectionner un fichier et entrer un titre');
+      return;
+    }
+
+    try {
+      setUploading(true);
+
+      // Upload file first
+      const formData = new FormData();
+      formData.append('file', {
+        uri: selectedFile.uri,
+        type: selectedFile.mimeType || 'application/octet-stream',
+        name: selectedFile.name,
+      } as any);
+
+      const uploadResponse = await uploadService.uploadFile(formData);
+      const fileUrl = uploadResponse.data.url;
+
+      // Create document record
+      const docData = {
+        title: uploadTitle.trim(),
+        description: uploadDescription.trim() || undefined,
+        file_url: fileUrl,
+        file_name: selectedFile.name,
+        file_size: selectedFile.size,
+        mime_type: selectedFile.mimeType,
+        document_type: uploadType,
+      };
+
+      await documentsService.create(docData);
+
+      Alert.alert('Succès', 'Document uploadé avec succès');
+      setUploadVisible(false);
+      resetUploadForm();
+      loadDocuments();
+    } catch (error: any) {
+      console.error('Error uploading document:', error);
+      Alert.alert('Erreur', error.response?.data?.error || 'Impossible d\'uploader le document');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const resetUploadForm = () => {
+    setUploadTitle('');
+    setUploadDescription('');
+    setUploadType('general');
+    setSelectedFile(null);
+  };
+
+  const handleDeleteDocument = async (docId: string) => {
+    Alert.alert(
+      'Supprimer le document',
+      'Êtes-vous sûr de vouloir supprimer ce document ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await documentsService.delete(docId);
+              Alert.alert('Succès', 'Document supprimé');
+              setDetailsVisible(false);
+              loadDocuments();
+            } catch (error) {
+              Alert.alert('Erreur', 'Impossible de supprimer le document');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const getFileIcon = (mimeType?: string, fileName?: string) => {
+    if (!mimeType && fileName) {
+      const ext = fileName.split('.').pop()?.toLowerCase();
+      if (ext === 'pdf') return '📄';
+      if (['doc', 'docx'].includes(ext || '')) return '📝';
+      if (['xls', 'xlsx'].includes(ext || '')) return '📊';
+      if (['ppt', 'pptx'].includes(ext || '')) return '🎯';
+      if (['jpg', 'jpeg', 'png', 'gif'].includes(ext || '')) return '🖼️';
+      if (['zip', 'rar', '7z'].includes(ext || '')) return '📦';
+    }
+
+    if (mimeType?.includes('pdf')) return '📄';
+    if (mimeType?.includes('word') || mimeType?.includes('document')) return '📝';
+    if (mimeType?.includes('spreadsheet') || mimeType?.includes('excel')) return '📊';
+    if (mimeType?.includes('presentation') || mimeType?.includes('powerpoint')) return '🎯';
+    if (mimeType?.includes('image')) return '🖼️';
+    if (mimeType?.includes('zip') || mimeType?.includes('compressed')) return '📦';
+    return '📁';
+  };
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return 'N/A';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('fr-FR', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  const getCategoryLabel = (category?: string) => {
     const labels: { [key: string]: string } = {
-      contracts: 'Contrats',
-      invoices: 'Factures',
-      proposals: 'Propositions',
-      quotes: 'Devis',
-      presentations: 'Présentations',
-      reports: 'Rapports',
+      general: 'Général',
+      contract: 'Contrats',
+      invoice: 'Factures',
+      proposal: 'Propositions',
+      quote: 'Devis',
+      presentation: 'Présentations',
+      report: 'Rapports',
+      other: 'Autre',
     };
-    return labels[category] || category;
+    return labels[category || 'general'] || category || 'Général';
   };
 
-  const getCategoryColor = (category: string) => {
+  const getCategoryColor = (category?: string) => {
     const colors: { [key: string]: string } = {
-      contracts: '#FF9500',
-      invoices: '#34C759',
-      proposals: '#007AFF',
-      quotes: '#5856D6',
-      presentations: '#FF3B30',
-      reports: '#00B894',
+      contract: '#FF9500',
+      invoice: '#34C759',
+      proposal: '#007AFF',
+      quote: '#5856D6',
+      presentation: '#FF3B30',
+      report: '#00B894',
+      general: '#8E8E93',
+      other: '#8E8E93',
     };
-    return colors[category] || '#8E8E93';
+    return colors[category || 'general'] || '#8E8E93';
   };
 
-  const filteredDocs = filterCategory === 'all'
-    ? documents
-    : documents.filter(doc => doc.category === filterCategory);
+  const filteredDocs =
+    filterCategory === 'all'
+      ? documents
+      : documents.filter((doc) => doc.document_type === filterCategory);
 
   const renderDocumentCard = ({ item: doc }: { item: Document }) => (
     <TouchableOpacity
       style={styles.documentCard}
       onPress={() => {
         setSelectedDoc(doc);
+        loadVersions(doc.id);
         setDetailsVisible(true);
       }}
     >
       <View style={styles.docCardContent}>
         <View style={styles.docIconSection}>
-          <Text style={styles.docIcon}>{getFileIcon(doc.type)}</Text>
-          {doc.versions.length > 1 && (
+          <Text style={styles.docIcon}>{getFileIcon(doc.mime_type, doc.file_name)}</Text>
+          {(doc.version_count || 0) > 1 && (
             <View style={styles.versionBadge}>
-              <Text style={styles.versionBadgeText}>v{doc.versions[0].version}</Text>
+              <Text style={styles.versionBadgeText}>v{doc.version_count}</Text>
             </View>
           )}
         </View>
 
         <View style={styles.docInfo}>
-          <Text style={styles.docName} numberOfLines={2}>{doc.name}</Text>
+          <Text style={styles.docName} numberOfLines={2}>
+            {doc.title}
+          </Text>
           <View style={styles.docMeta}>
-            <Text style={styles.docMetaText}>{doc.type}</Text>
+            <Text style={styles.docMetaText}>{formatFileSize(doc.file_size)}</Text>
             <Text style={styles.docMetaDot}>•</Text>
-            <Text style={styles.docMetaText}>{doc.size}</Text>
-            <Text style={styles.docMetaDot}>•</Text>
-            <Text style={styles.docMetaText}>{doc.uploadDate}</Text>
+            <Text style={styles.docMetaText}>{formatDate(doc.created_at)}</Text>
           </View>
+          {doc.uploaded_by_name && (
+            <Text style={styles.uploadedBy} numberOfLines={1}>
+              Par {doc.uploaded_by_name}
+            </Text>
+          )}
         </View>
 
-        <View style={styles.docActions}>
-          {doc.sharedWith > 0 && (
-            <View style={styles.sharedBadge}>
-              <UsersIcon size={12} color="#007AFF" />
-              <Text style={styles.sharedCount}>{doc.sharedWith}</Text>
-            </View>
-          )}
-          {doc.status === 'archived' && (
-            <View style={styles.archivedBadge}>
-              <Text style={styles.archivedBadgeText}>Archivé</Text>
-            </View>
-          )}
+        <View
+          style={[
+            styles.categoryTag,
+            { backgroundColor: `${getCategoryColor(doc.document_type)}20` },
+          ]}
+        >
+          <Text
+            style={[styles.categoryTagText, { color: getCategoryColor(doc.document_type) }]}
+          >
+            {getCategoryLabel(doc.document_type)}
+          </Text>
         </View>
       </View>
     </TouchableOpacity>
   );
 
   const renderCategoryFilter = () => {
-    const categories = ['all', 'contracts', 'invoices', 'proposals', 'quotes', 'presentations', 'reports'];
+    const categories = [
+      'all',
+      'general',
+      'contract',
+      'invoice',
+      'proposal',
+      'quote',
+      'presentation',
+      'report',
+    ];
     return (
       <ScrollView
         horizontal
@@ -249,7 +325,7 @@ function DocumentsScreen({ navigation }: DocumentsScreenProps) {
         style={styles.filterScroll}
         contentContainerStyle={styles.filterContent}
       >
-        {categories.map(cat => (
+        {categories.map((cat) => (
           <TouchableOpacity
             key={cat}
             style={[
@@ -278,11 +354,16 @@ function DocumentsScreen({ navigation }: DocumentsScreenProps) {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>📄 Documents</Text>
-          <TouchableOpacity style={styles.uploadButton}>
+          <TouchableOpacity
+            style={styles.uploadButton}
+            onPress={() => setUploadVisible(true)}
+          >
             <Text style={styles.uploadButtonText}>+ Importer</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.headerSubtitle}>Centralisez vos documents avec versioning</Text>
+        <Text style={styles.headerSubtitle}>
+          Gérez vos documents avec versioning
+        </Text>
       </View>
 
       {/* Stats */}
@@ -293,15 +374,17 @@ function DocumentsScreen({ navigation }: DocumentsScreenProps) {
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statValue}>
-            {documents.reduce((sum, doc) => sum + doc.versions.length, 0)}
+            {documents.reduce((sum, doc) => sum + (doc.version_count || 1), 0)}
           </Text>
           <Text style={styles.statLabel}>Versions</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statValue}>
-            {documents.filter(doc => doc.status === 'active').length}
+            {formatFileSize(
+              documents.reduce((sum, doc) => sum + (doc.file_size || 0), 0)
+            )}
           </Text>
-          <Text style={styles.statLabel}>Actifs</Text>
+          <Text style={styles.statLabel}>Stockage</Text>
         </View>
       </View>
 
@@ -309,18 +392,164 @@ function DocumentsScreen({ navigation }: DocumentsScreenProps) {
       {renderCategoryFilter()}
 
       {/* Documents List */}
-      <FlatList
-        data={filteredDocs}
-        renderItem={renderDocumentCard}
-        keyExtractor={item => item.id}
-        style={styles.documentsList}
-        contentContainerStyle={styles.documentsContent}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Aucun document trouvé</Text>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      ) : (
+        <FlatList
+          data={filteredDocs}
+          renderItem={renderDocumentCard}
+          keyExtractor={(item) => item.id}
+          style={styles.documentsList}
+          contentContainerStyle={styles.documentsContent}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyIcon}>📄</Text>
+              <Text style={styles.emptyText}>Aucun document</Text>
+              <TouchableOpacity
+                style={styles.emptyButton}
+                onPress={() => setUploadVisible(true)}
+              >
+                <Text style={styles.emptyButtonText}>Importer un document</Text>
+              </TouchableOpacity>
+            </View>
+          }
+        />
+      )}
+
+      {/* Upload Modal */}
+      <Modal
+        visible={uploadVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          setUploadVisible(false);
+          resetUploadForm();
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Importer un document</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setUploadVisible(false);
+                  resetUploadForm();
+                }}
+              >
+                <Text style={styles.closeButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalScroll}>
+              {/* File Picker */}
+              <TouchableOpacity
+                style={styles.filePickerButton}
+                onPress={handleDocumentPick}
+              >
+                <Text style={styles.filePickerIcon}>
+                  {selectedFile ? '✅' : '📎'}
+                </Text>
+                <View style={styles.filePickerInfo}>
+                  <Text style={styles.filePickerLabel}>
+                    {selectedFile ? selectedFile.name : 'Sélectionner un fichier'}
+                  </Text>
+                  {selectedFile && (
+                    <Text style={styles.filePickerSize}>
+                      {formatFileSize(selectedFile.size)}
+                    </Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              {/* Title */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Titre *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={uploadTitle}
+                  onChangeText={setUploadTitle}
+                  placeholder="Nom du document"
+                  placeholderTextColor="#C7C7CC"
+                />
+              </View>
+
+              {/* Description */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Description</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={uploadDescription}
+                  onChangeText={setUploadDescription}
+                  placeholder="Description du document (optionnel)"
+                  placeholderTextColor="#C7C7CC"
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+
+              {/* Document Type */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Catégorie</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.typeScroll}
+                >
+                  {[
+                    'general',
+                    'contract',
+                    'invoice',
+                    'proposal',
+                    'quote',
+                    'presentation',
+                    'report',
+                  ].map((type) => (
+                    <TouchableOpacity
+                      key={type}
+                      style={[
+                        styles.typeButton,
+                        uploadType === type && styles.typeButtonActive,
+                        { borderColor: getCategoryColor(type) },
+                      ]}
+                      onPress={() => setUploadType(type)}
+                    >
+                      <Text
+                        style={[
+                          styles.typeButtonText,
+                          uploadType === type && {
+                            color: getCategoryColor(type),
+                            fontWeight: '700',
+                          },
+                        ]}
+                      >
+                        {getCategoryLabel(type)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </ScrollView>
+
+            {/* Upload Button */}
+            <TouchableOpacity
+              style={[
+                styles.uploadSubmitButton,
+                uploading && styles.uploadSubmitButtonDisabled,
+              ]}
+              onPress={handleUpload}
+              disabled={uploading}
+            >
+              {uploading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.uploadSubmitButtonText}>Importer</Text>
+              )}
+            </TouchableOpacity>
           </View>
-        }
-      />
+        </View>
+      </Modal>
 
       {/* Details Modal */}
       <Modal
@@ -332,7 +561,9 @@ function DocumentsScreen({ navigation }: DocumentsScreenProps) {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle} numberOfLines={1}>{selectedDoc?.name}</Text>
+              <Text style={styles.modalTitle} numberOfLines={1}>
+                {selectedDoc?.title}
+              </Text>
               <TouchableOpacity onPress={() => setDetailsVisible(false)}>
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
@@ -341,101 +572,109 @@ function DocumentsScreen({ navigation }: DocumentsScreenProps) {
             <ScrollView style={styles.modalScroll}>
               {/* Document Preview */}
               <View style={styles.previewContainer}>
-                <Text style={styles.previewIcon}>{getFileIcon(selectedDoc?.type || '')}</Text>
-                <Text style={styles.previewType}>{selectedDoc?.type}</Text>
-                <Text style={styles.previewSize}>{selectedDoc?.size}</Text>
+                <Text style={styles.previewIcon}>
+                  {getFileIcon(selectedDoc?.mime_type, selectedDoc?.file_name)}
+                </Text>
+                <Text style={styles.previewType}>{selectedDoc?.file_name}</Text>
+                <Text style={styles.previewSize}>
+                  {formatFileSize(selectedDoc?.file_size)}
+                </Text>
               </View>
 
               {/* Document Info */}
               <View style={styles.infoSection}>
                 <Text style={styles.sectionTitle}>Informations</Text>
 
+                {selectedDoc?.description && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Description</Text>
+                    <Text style={styles.infoValue}>{selectedDoc.description}</Text>
+                  </View>
+                )}
+
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Catégorie</Text>
-                  <View style={[styles.categoryBadge, { backgroundColor: `${getCategoryColor(selectedDoc?.category || '')}20` }]}>
-                    <Text style={[styles.categoryBadgeText, { color: getCategoryColor(selectedDoc?.category || '') }]}>
-                      {getCategoryLabel(selectedDoc?.category || '')}
+                  <View
+                    style={[
+                      styles.categoryBadge,
+                      {
+                        backgroundColor: `${getCategoryColor(
+                          selectedDoc?.document_type
+                        )}20`,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryBadgeText,
+                        { color: getCategoryColor(selectedDoc?.document_type) },
+                      ]}
+                    >
+                      {getCategoryLabel(selectedDoc?.document_type)}
                     </Text>
                   </View>
                 </View>
 
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Chargé par</Text>
-                  <Text style={styles.infoValue}>{selectedDoc?.uploadedBy}</Text>
-                </View>
+                {selectedDoc?.uploaded_by_name && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Uploadé par</Text>
+                    <Text style={styles.infoValue}>{selectedDoc.uploaded_by_name}</Text>
+                  </View>
+                )}
 
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Date de création</Text>
-                  <Text style={styles.infoValue}>{selectedDoc?.uploadDate}</Text>
+                  <Text style={styles.infoValue}>
+                    {formatDate(selectedDoc?.created_at || '')}
+                  </Text>
                 </View>
 
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Dernière modification</Text>
-                  <Text style={styles.infoValue}>{selectedDoc?.lastModified}</Text>
-                </View>
-
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Partagé avec</Text>
-                  <View style={styles.sharedBadgeRow}>
-                    <UsersIcon size={14} color="#007AFF" />
-                    <Text style={styles.sharedCountRow}>{selectedDoc?.sharedWith} personnes</Text>
-                  </View>
+                  <Text style={styles.infoValue}>
+                    {formatDate(selectedDoc?.updated_at || '')}
+                  </Text>
                 </View>
               </View>
 
               {/* Version History */}
-              <View style={styles.versionSection}>
-                <Text style={styles.sectionTitle}>Historique des Versions</Text>
-                {selectedDoc?.versions.map((version, index) => (
-                  <TouchableOpacity
-                    key={version.id}
-                    style={[styles.versionCard, index === 0 && styles.versionCardCurrent]}
-                  >
-                    <View style={styles.versionInfo}>
-                      <Text style={styles.versionNumber}>
-                        v{version.version} {index === 0 ? '(Actuelle)' : ''}
-                      </Text>
-                      <Text style={styles.versionDate}>
-                        {version.uploadDate} • {version.size} • Par {version.uploadedBy}
-                      </Text>
+              {versions.length > 0 && (
+                <View style={styles.versionSection}>
+                  <Text style={styles.sectionTitle}>
+                    Historique des Versions ({versions.length})
+                  </Text>
+                  {versions.map((version, index) => (
+                    <View
+                      key={version.id}
+                      style={[
+                        styles.versionCard,
+                        index === 0 && styles.versionCardCurrent,
+                      ]}
+                    >
+                      <View style={styles.versionInfo}>
+                        <Text style={styles.versionNumber}>
+                          v{version.version_number} {index === 0 ? '(Actuelle)' : ''}
+                        </Text>
+                        <Text style={styles.versionDate}>
+                          {formatDate(version.created_at)} • {version.created_by_name}
+                        </Text>
+                      </View>
                     </View>
-                    <TouchableOpacity style={styles.versionAction}>
-                      <Text style={styles.versionActionText}>⬇</Text>
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                ))}
-              </View>
+                  ))}
+                </View>
+              )}
 
               {/* Actions */}
               <View style={styles.actionsSection}>
                 <Text style={styles.sectionTitle}>Actions</Text>
-                <TouchableOpacity style={styles.actionButton}>
-                  <Text style={styles.actionIcon}>👁</Text>
-                  <Text style={styles.actionText}>Aperçu</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
-                  <Text style={styles.actionIcon}>⬇</Text>
-                  <Text style={styles.actionText}>Télécharger</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
-                  <Text style={styles.actionIcon}>👥</Text>
-                  <Text style={styles.actionText}>Partager</Text>
-                </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.actionButton, styles.actionButtonDanger]}
-                  onPress={() => {
-                    Alert.alert(
-                      'Archiver le document?',
-                      'Le document sera archivé et caché de la liste principale',
-                      [
-                        { text: 'Annuler', onPress: () => {} },
-                        { text: 'Archiver', onPress: () => setDetailsVisible(false) },
-                      ]
-                    );
-                  }}
+                  onPress={() => handleDeleteDocument(selectedDoc?.id || '')}
                 >
-                  <Text style={[styles.actionIcon, styles.actionIconDanger]}>📦</Text>
-                  <Text style={[styles.actionText, styles.actionTextDanger]}>Archiver</Text>
+                  <Text style={[styles.actionIcon, styles.actionIconDanger]}>🗑️</Text>
+                  <Text style={[styles.actionText, styles.actionTextDanger]}>
+                    Supprimer
+                  </Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -602,6 +841,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginBottom: 2,
   },
   docMetaText: {
     fontSize: 11,
@@ -611,45 +851,49 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#C7C7CC',
   },
-  docActions: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
+  uploadedBy: {
+    fontSize: 10,
+    color: '#C7C7CC',
   },
-  sharedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 6,
+  categoryTag: {
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: '#007AFF20',
     borderRadius: 6,
   },
-  sharedCount: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#007AFF',
-  },
-  archivedBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    backgroundColor: '#F2F2F7',
-    borderRadius: 6,
-  },
-  archivedBadgeText: {
+  categoryTagText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#8E8E93',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
   },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
   emptyText: {
     fontSize: 14,
     color: '#C7C7CC',
     fontWeight: '500',
+    marginBottom: 16,
+  },
+  emptyButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  emptyButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   modalContainer: {
     flex: 1,
@@ -683,6 +927,88 @@ const styles = StyleSheet.create({
   },
   modalScroll: {
     maxHeight: 500,
+  },
+  filePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    gap: 12,
+  },
+  filePickerIcon: {
+    fontSize: 24,
+  },
+  filePickerInfo: {
+    flex: 1,
+  },
+  filePickerLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000000',
+    marginBottom: 2,
+  },
+  filePickerSize: {
+    fontSize: 12,
+    color: '#8E8E93',
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#000000',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#F2F2F7',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    fontSize: 14,
+    color: '#000000',
+  },
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  typeScroll: {
+    marginTop: 4,
+  },
+  typeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#C7C7CC',
+    marginRight: 8,
+  },
+  typeButtonActive: {
+    borderWidth: 2,
+  },
+  typeButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  uploadSubmitButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 20,
+  },
+  uploadSubmitButtonDisabled: {
+    opacity: 0.6,
+  },
+  uploadSubmitButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   previewContainer: {
     alignItems: 'center',
@@ -731,6 +1057,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#000000',
+    maxWidth: '60%',
+    textAlign: 'right',
   },
   categoryBadge: {
     paddingHorizontal: 8,
@@ -740,16 +1068,6 @@ const styles = StyleSheet.create({
   categoryBadgeText: {
     fontSize: 11,
     fontWeight: '600',
-  },
-  sharedBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  sharedCountRow: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#007AFF',
   },
   versionSection: {
     marginBottom: 20,
@@ -779,12 +1097,6 @@ const styles = StyleSheet.create({
   versionDate: {
     fontSize: 11,
     color: '#8E8E93',
-  },
-  versionAction: {
-    paddingHorizontal: 8,
-  },
-  versionActionText: {
-    fontSize: 14,
   },
   actionsSection: {
     marginBottom: 20,

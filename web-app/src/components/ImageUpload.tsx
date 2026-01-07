@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Platform, Alert } from 'react-native';
 import { uploadService } from '../services/api';
+import { toAbsoluteUrl } from '../utils/url';
 
 interface ImageUploadProps {
   value?: string | string[];
@@ -83,7 +84,7 @@ export default function ImageUpload({ value, onChange, multiple = false, label }
           <View style={styles.imagesGrid}>
             {images.map((url, index) => (
               <View key={index} style={styles.imageContainer}>
-                <Image source={{ uri: url }} style={styles.image} />
+                <Image source={{ uri: toAbsoluteUrl(url) }} style={styles.image} />
                 <TouchableOpacity
                   style={styles.removeButton}
                   onPress={() => handleRemove(index)}
@@ -120,7 +121,7 @@ export default function ImageUpload({ value, onChange, multiple = false, label }
         <View style={styles.imagesGrid}>
           {images.map((url, index) => (
             <View key={index} style={styles.imageContainer}>
-              <Image source={{ uri: url }} style={styles.image} />
+              <Image source={{ uri: toAbsoluteUrl(url) }} style={styles.image} />
               <TouchableOpacity
                 style={styles.removeButton}
                 onPress={() => handleRemove(index)}

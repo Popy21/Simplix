@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { pool as db } from '../database/db';
 import { Quote, QuoteItem } from '../models/types';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { sendEmail, generateQuoteEmailHTML, getCompanyProfile, logEmail } from '../services/emailService';
 
 const router = express.Router();
 
@@ -427,20 +428,64 @@ router.post('/:id/convert-to-invoice', authenticateToken, async (req: AuthReques
 router.post('/:id/send-email', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const { to, cc, bcc, subject, message } = req.body;
 
-    const result = await db.query('SELECT * FROM quotes WHERE id = $1', [id]);
+    // Récupérer le devis avec les infos client
+    const result = await db.query(`
+      SELECT q.*, c.name as customer_name, c.email as customer_email, c.company as customer_company
+      FROM quotes q
+      LEFT JOIN customers c ON q.customer_id = c.id
+      WHERE q.id = $1
+    `, [id]);
 
     if (result.rows.length === 0) {
       res.status(404).json({ error: 'Quote not found' });
       return;
     }
 
-    // TODO: Implement actual email sending logic here
-    // For now, just update the status to 'sent'
-    await db.query('UPDATE quotes SET status = $1, updated_at = NOW() WHERE id = $2', ['sent', id]);
+    const quote = result.rows[0];
+    const recipientEmail = to || quote.customer_email;
 
-    res.json({ message: 'Quote email sent successfully' });
+    if (!recipientEmail) {
+      res.status(400).json({ error: 'Aucune adresse email de destinataire' });
+      return;
+    }
+
+    // Récupérer le profil de l'entreprise
+    const companyProfile = await getCompanyProfile();
+
+    // Générer le contenu HTML de l'email
+    const htmlContent = generateQuoteEmailHTML(quote, companyProfile);
+
+    // Envoyer l'email
+    const emailResult = await sendEmail({
+      to: recipientEmail,
+      subject: subject || `Devis ${quote.quote_number} - ${companyProfile?.company_name || 'Simplix'}`,
+      html: message ? `<p>${message}</p>${htmlContent}` : htmlContent,
+      cc,
+      bcc
+    });
+
+    // Logger l'envoi
+    await logEmail('quote', parseInt(id), recipientEmail, emailResult);
+
+    if (emailResult.success) {
+      // Mettre à jour le statut du devis
+      await db.query('UPDATE quotes SET status = $1, updated_at = NOW() WHERE id = $2', ['sent', id]);
+
+      res.json({
+        message: 'Devis envoyé par email avec succès',
+        messageId: emailResult.messageId,
+        simulated: emailResult.error?.includes('simulation')
+      });
+    } else {
+      res.status(500).json({
+        error: 'Erreur lors de l\'envoi de l\'email',
+        details: emailResult.error
+      });
+    }
   } catch (err: any) {
+    console.error('Erreur envoi email devis:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -540,6 +585,93 @@ router.post('/:id/mark-as-paid', authenticateToken, async (req: AuthRequest, res
     });
   } catch (err: any) {
     console.error('Error marking quote as paid:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Dupliquer un devis
+router.post('/:id/duplicate', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = (req.user as any)?.userId || 1;
+
+    // Récupérer le devis original
+    const quoteResult = await db.query('SELECT * FROM quotes WHERE id = $1', [id]);
+
+    if (quoteResult.rows.length === 0) {
+      res.status(404).json({ error: 'Devis non trouvé' });
+      return;
+    }
+
+    const originalQuote = quoteResult.rows[0];
+
+    // Générer un nouveau numéro de devis
+    const quoteNumberResult = await db.query('SELECT COUNT(*) as count FROM quotes');
+    const quoteCount = parseInt(quoteNumberResult.rows[0].count) + 1;
+    const newQuoteNumber = `DEV-${String(quoteCount).padStart(6, '0')}`;
+
+    // Créer le nouveau devis
+    const newQuoteResult = await db.query(
+      `INSERT INTO quotes (
+        customer_id, user_id, quote_number, title, description,
+        subtotal, tax_rate, tax_amount, total_amount, status,
+        valid_until, template_id, payment_terms, notes, discount_amount
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, $11, $12, $13, $14)
+      RETURNING *`,
+      [
+        originalQuote.customer_id,
+        userId,
+        newQuoteNumber,
+        originalQuote.title + ' (copie)',
+        originalQuote.description,
+        originalQuote.subtotal,
+        originalQuote.tax_rate,
+        originalQuote.tax_amount,
+        originalQuote.total_amount,
+        originalQuote.valid_until ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : null,
+        originalQuote.template_id,
+        originalQuote.payment_terms,
+        originalQuote.notes,
+        originalQuote.discount_amount
+      ]
+    );
+
+    const newQuoteId = newQuoteResult.rows[0].id;
+
+    // Copier les lignes du devis
+    const itemsResult = await db.query('SELECT * FROM quote_items WHERE quote_id = $1', [id]);
+    for (const item of itemsResult.rows) {
+      await db.query(
+        `INSERT INTO quote_items (quote_id, product_id, description, quantity, unit_price, total_price, discount_percent, tax_rate, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          newQuoteId,
+          item.product_id,
+          item.description,
+          item.quantity,
+          item.unit_price,
+          item.total_price,
+          item.discount_percent || 0,
+          item.tax_rate,
+          item.sort_order || 0
+        ]
+      );
+    }
+
+    // Récupérer le devis complet avec les items
+    const completeQuote = await db.query(`
+      SELECT q.*, c.name as customer_name
+      FROM quotes q
+      LEFT JOIN customers c ON q.customer_id = c.id
+      WHERE q.id = $1
+    `, [newQuoteId]);
+
+    res.status(201).json({
+      ...completeQuote.rows[0],
+      message: 'Devis dupliqué avec succès'
+    });
+  } catch (err: any) {
+    console.error('Error duplicating quote:', err);
     res.status(500).json({ error: err.message });
   }
 });

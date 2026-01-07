@@ -574,7 +574,7 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
                   )}
                   <TouchableOpacity
                     style={styles.quickAction}
-                    onPress={() => navigation.navigate('Invoices', {
+                    onPress={() => navigation.navigate('Invoices' as any, {
                       action: 'createQuote',
                       customerId: contact.id,
                       customerType: 'contact'
@@ -724,7 +724,7 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
                               style={styles.historyItem}
                               onPress={() => {
                                 setContactModalVisible(false);
-                                navigation.navigate('Invoices', { quoteId: quote.id });
+                                navigation.navigate('Invoices' as any, { quoteId: quote.id });
                               }}
                             >
                               <View style={styles.historyItemLeft}>
@@ -760,7 +760,7 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
                               style={styles.historyItem}
                               onPress={() => {
                                 setContactModalVisible(false);
-                                navigation.navigate('Invoices', { invoiceId: invoice.id });
+                                navigation.navigate('Invoices' as any, { invoiceId: invoice.id });
                               }}
                             >
                               <View style={styles.historyItemLeft}>
@@ -820,7 +820,7 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
                 <View style={styles.modalActions}>
                   <TouchableOpacity style={styles.actionButtonPrimary} onPress={() => {
                     setContactModalVisible(false);
-                    navigation.navigate('Invoices', {
+                    navigation.navigate('Invoices' as any, {
                       action: 'createQuote',
                       customerId: selectedContact.id,
                       customerType: 'contact'
@@ -896,7 +896,7 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
                 <View style={styles.modalActions}>
                   <TouchableOpacity style={styles.actionButtonPrimary} onPress={() => {
                     setCompanyModalVisible(false);
-                    navigation.navigate('Invoices', {
+                    navigation.navigate('Invoices' as any, {
                       action: 'createQuote',
                       customerId: selectedCompany.id,
                       customerType: 'company'

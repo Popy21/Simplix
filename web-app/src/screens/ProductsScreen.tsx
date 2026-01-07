@@ -19,6 +19,7 @@ import { productService } from '../services/api';
 import { Product } from '../types';
 import GlassLayout from '../components/GlassLayout';
 import ImageUpload from '../components/ImageUpload';
+import { toAbsoluteUrl } from '../utils/url';
 
 interface ProductWithDetails extends Product {
   category?: string;
@@ -69,6 +70,7 @@ export default function ProductsScreen() {
     try {
       setLoading(true);
       const response = await productService.getAll();
+      const productsList = Array.isArray(response.data) ? response.data : (response.data?.data || []);
       const productsData = response.data.data || response.data;
       const productsWithDetails = productsData.map((p: Product, index: number) => ({
         ...p,
@@ -248,7 +250,7 @@ export default function ProductsScreen() {
         activeOpacity={0.7}
       >
         {firstImage && (
-          <Image source={{ uri: firstImage }} style={styles.productImage} />
+          <Image source={{ uri: toAbsoluteUrl(firstImage) }} style={styles.productImage} />
         )}
         <View style={styles.productCardHeader}>
           <View style={styles.productInfo}>

@@ -1,1 +1,1 @@
-export const API_URL = 'https://simplix.drive.paraweb.fr/api';
+export const API_URL = 'https://drive.paraweb.fr/Simplix/api';

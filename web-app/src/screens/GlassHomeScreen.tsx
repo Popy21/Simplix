@@ -45,13 +45,13 @@ import {
   PieChartIcon,
   LayersIcon,
   ShieldIcon,
-  BrainIcon,
   WebhookIcon,
   MailOpenIcon,
   CreditCard2Icon,
 } from '../components/Icons';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const isWeb = Platform.OS === 'web';
 
 type HomeScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -136,18 +136,9 @@ const menuCategories: MenuCategory[] = [
       {
         id: 'leads',
         title: 'Leads',
-        subtitle: 'Prospects qualifiés',
+        subtitle: 'Gestion des prospects',
         screen: 'Leads',
         icon: TargetIcon,
-        isNew: true,
-      },
-      {
-        id: 'ai-scoring',
-        title: 'IA Lead Scoring',
-        subtitle: 'Scoring intelligent par IA',
-        screen: 'Dashboard',
-        icon: BrainIcon,
-        isNew: true,
       },
     ],
   },
@@ -322,12 +313,12 @@ export default function GlassHomeScreen({ navigation }: HomeScreenProps) {
         activeOpacity={0.8}
         style={styles.categoryHeader}
       >
-        <GlassCard variant="frosted" elevation="md" glow glowColor={category.gradient[0]}>
+        <GlassCard variant="frosted" elevation="md" glow glowColor={category.gradient[0]} borderRadius={24} padding={20}>
           <LinearGradient
-            colors={[...category.gradient.map((c) => c + '08')]}
+            colors={[category.gradient[0] + '35', category.gradient[1] + '35'] as [string, string]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
+            style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
           />
 
           <View style={styles.categoryHeaderContent}>
@@ -338,7 +329,7 @@ export default function GlassHomeScreen({ navigation }: HomeScreenProps) {
                   { backgroundColor: category.gradient[0] + '20' },
                 ]}
               >
-                <Icon size={24} color={category.gradient[0]} />
+                <Icon size={28} color={category.gradient[0]} />
               </View>
 
               <View>
@@ -369,23 +360,25 @@ export default function GlassHomeScreen({ navigation }: HomeScreenProps) {
     return (
       <TouchableOpacity
         key={`${categoryId}-${item.id}`}
-        onPress={() => navigation.navigate(item.screen)}
+        onPress={() => navigation.navigate(item.screen as any)}
         activeOpacity={0.9}
         style={styles.menuItemWrapper}
       >
         <GlassCard
-          variant="light"
-          elevation="sm"
+          variant="frosted"
+          elevation="md"
           glow
           glowColor={categoryGradient[0]}
           animated={true}
           animationDelay={index * 50}
+          borderRadius={20}
+          padding={18}
         >
           <LinearGradient
-            colors={[...categoryGradient.map((c) => c + '05')]}
+            colors={[categoryGradient[0] + '30', categoryGradient[1] + '30'] as [string, string]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
+            style={[StyleSheet.absoluteFill, { borderRadius: 20 }]}
           />
 
           <View style={styles.menuItemContent}>
@@ -396,7 +389,7 @@ export default function GlassHomeScreen({ navigation }: HomeScreenProps) {
                   { backgroundColor: categoryGradient[0] + '15' },
                 ]}
               >
-                <Icon size={22} color={categoryGradient[0]} />
+                <Icon size={24} color={categoryGradient[0]} />
               </View>
 
               <View style={styles.menuItemText}>
@@ -466,12 +459,12 @@ export default function GlassHomeScreen({ navigation }: HomeScreenProps) {
           </View>
 
           {/* Quick Stats */}
-          <GlassCard variant="frosted" elevation="md" style={styles.statsCard}>
+          <GlassCard variant="frosted" elevation="lg" glow glowColor="#007AFF" borderRadius={24} padding={24} style={styles.statsCard}>
             <LinearGradient
-              colors={['#007AFF10', '#5AC8FA10']}
+              colors={['#007AFF15', '#5AC8FA15']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
+              style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
             />
             <View style={styles.statsContent}>
               <View style={styles.stat}>
@@ -504,6 +497,15 @@ export default function GlassHomeScreen({ navigation }: HomeScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    ...(isWeb ? {
+      background: `
+        radial-gradient(at 20% 20%, rgba(99, 102, 241, 0.2) 0px, transparent 50%),
+        radial-gradient(at 80% 10%, rgba(236, 72, 153, 0.15) 0px, transparent 50%),
+        radial-gradient(at 10% 80%, rgba(6, 182, 212, 0.12) 0px, transparent 50%),
+        radial-gradient(at 90% 90%, rgba(139, 92, 246, 0.12) 0px, transparent 50%),
+        linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 50%, #f5f0ff 100%)
+      `,
+    } : {}),
   },
   scrollView: {
     flex: 1,
@@ -513,9 +515,18 @@ const styles = StyleSheet.create({
     paddingTop: isMobile ? responsiveSpacing.md : (Platform.OS === 'ios' ? 60 : 24),
   },
 
-  // Header
+  // Header - Glass effect
   header: {
     marginBottom: responsiveSpacing.lg,
+    ...(isWeb ? {
+      padding: 24,
+      borderRadius: 24,
+      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+      backdropFilter: 'blur(30px) saturate(200%)',
+      WebkitBackdropFilter: 'blur(30px) saturate(200%)',
+      border: '1px solid rgba(255, 255, 255, 0.25)',
+      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.4)',
+    } : {}),
   },
   title: {
     fontSize: responsiveFontSizes.displayMedium,
@@ -528,9 +539,16 @@ const styles = StyleSheet.create({
     color: glassTheme.colors.text.tertiary,
   },
 
-  // Stats Card
+  // Stats Card - Glass effect
   statsCard: {
     marginBottom: glassTheme.spacing.xl,
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.12)',
+      backdropFilter: 'blur(30px) saturate(200%)',
+      WebkitBackdropFilter: 'blur(30px) saturate(200%)',
+      border: '1px solid rgba(255, 255, 255, 0.2)',
+      boxShadow: '0 12px 40px rgba(0, 102, 255, 0.08), inset 0 1px 1px rgba(255, 255, 255, 0.3)',
+    } : {}),
   },
   statsContent: {
     flexDirection: 'row',
@@ -541,6 +559,13 @@ const styles = StyleSheet.create({
   stat: {
     flex: 1,
     alignItems: 'center',
+    ...(isWeb ? {
+      padding: 12,
+      borderRadius: 16,
+      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+      backdropFilter: 'blur(10px)',
+      margin: 4,
+    } : {}),
   },
   statValue: {
     ...glassTheme.typography.displaySmall,
@@ -554,20 +579,39 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     height: 40,
-    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    ...(isWeb ? {
+      boxShadow: '0 0 8px rgba(255, 255, 255, 0.5)',
+    } : {}),
   },
 
-  // Categories
+  // Categories - Glass container
   categoriesContainer: {
     gap: glassTheme.spacing.lg,
+    ...(isWeb ? {
+      padding: 16,
+      borderRadius: 28,
+      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+      backdropFilter: 'blur(20px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+      border: '1px solid rgba(255, 255, 255, 0.15)',
+    } : {}),
   },
   categoryWrapper: {
     gap: glassTheme.spacing.sm,
+    ...(isWeb ? {
+      padding: 8,
+      borderRadius: 20,
+      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    } : {}),
   },
 
   // Category Header
   categoryHeader: {
     marginBottom: 0,
+    ...(isWeb ? {
+      transition: 'all 0.3s ease',
+    } : {}),
   },
   categoryHeaderContent: {
     flexDirection: 'row',
@@ -581,11 +625,16 @@ const styles = StyleSheet.create({
     gap: glassTheme.spacing.md,
   },
   categoryIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 60,
+    height: 60,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: 10,
+    ...(isWeb ? {
+      backdropFilter: 'blur(10px)',
+      boxShadow: 'inset 0 1px 1px rgba(255, 255, 255, 0.3)',
+    } : {}),
   },
   categoryTitle: {
     ...glassTheme.typography.h2,
@@ -597,28 +646,36 @@ const styles = StyleSheet.create({
     color: glassTheme.colors.text.tertiary,
   },
   chevron: {
-    transition: 'transform 0.3s ease',
+    marginRight: 10,
   },
   chevronText: {
     fontSize: 12,
     color: glassTheme.colors.text.tertiary,
   },
 
-  // Category Items
+  // Category Items - Glass container
   categoryItems: {
     gap: glassTheme.spacing.sm,
     paddingLeft: glassTheme.spacing.md,
+    ...(isWeb ? {
+      padding: 12,
+      borderRadius: 16,
+      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+      backdropFilter: 'blur(10px)',
+    } : {}),
   },
 
-  // Menu Item
+  // Menu Item - Glass hover effect
   menuItemWrapper: {
     width: '100%',
+    ...(isWeb ? {
+      transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+    } : {}),
   },
   menuItemContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: glassTheme.spacing.md,
   },
   menuItemLeft: {
     flexDirection: 'row',
@@ -627,11 +684,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: 10,
+    marginVertical: 8,
+    ...(isWeb ? {
+      backdropFilter: 'blur(8px)',
+      boxShadow: 'inset 0 1px 1px rgba(255, 255, 255, 0.25)',
+    } : {}),
   },
   menuItemText: {
     flex: 1,
@@ -655,6 +718,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: glassTheme.spacing.sm,
+    marginRight: 10,
   },
   badge: {
     backgroundColor: glassTheme.colors.error,
@@ -664,6 +728,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 8,
+    ...(isWeb ? {
+      backdropFilter: 'blur(8px)',
+      boxShadow: '0 2px 8px rgba(255, 59, 48, 0.3)',
+    } : {}),
   },
   badgeText: {
     ...glassTheme.typography.caption,
@@ -675,7 +743,11 @@ const styles = StyleSheet.create({
     backgroundColor: glassTheme.colors.success,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 8,
+    ...(isWeb ? {
+      backdropFilter: 'blur(8px)',
+      boxShadow: '0 2px 8px rgba(52, 199, 89, 0.3)',
+    } : {}),
   },
   newBadgeText: {
     ...glassTheme.typography.caption,
@@ -686,5 +758,8 @@ const styles = StyleSheet.create({
   arrow: {
     fontSize: 18,
     color: glassTheme.colors.text.tertiary,
+    ...(isWeb ? {
+      transition: 'transform 0.2s ease',
+    } : {}),
   },
 });

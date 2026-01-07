@@ -180,7 +180,7 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
           <GlassCard variant="frosted" elevation="lg" padding={0} glow glowColor={stat.gradient[0]}>
             {/* Gradient background */}
             <LinearGradient
-              colors={[...stat.gradient.map(c => c + '15')]}
+              colors={stat.gradient as [string, string]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
@@ -305,7 +305,7 @@ export default function GlassDashboardScreen({ navigation }: DashboardScreenProp
         >
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Pipeline</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Pipeline')}>
+            <TouchableOpacity onPress={() => navigation.navigate('Pipeline' as any)}>
               <Text style={styles.seeAllButton}>Voir tout →</Text>
             </TouchableOpacity>
           </View>

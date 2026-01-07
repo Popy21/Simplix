@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,18 +10,21 @@ import {
   Platform,
   Switch,
   TextInput,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { UsersIcon, TrendingUpIcon } from '../components/Icons';
 import { withGlassLayout } from '../components/withGlassLayout';
+import { workflowsService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 type WorkflowsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
 };
 
 interface WorkflowAction {
-  id: string;
+  id?: string;
   type: 'send_email' | 'create_task' | 'add_activity' | 'move_deal' | 'assign_contact' | 'add_tag' | 'send_notification';
   config: {
     templateId?: string;
@@ -30,19 +33,42 @@ interface WorkflowAction {
     assignTo?: string;
     tagName?: string;
     message?: string;
+    title?: string;
+    description?: string;
+    dueDate?: string;
+    to?: string;
+    subject?: string;
+    activityType?: string;
+    stageId?: string;
+    tag?: string;
+    metadata?: any;
   };
 }
 
 interface Workflow {
   id: string;
   name: string;
-  trigger: string;
-  triggerLabel: string;
+  description?: string;
+  trigger: {
+    type: 'contact_created' | 'contact_updated' | 'deal_created' | 'deal_moved' | 'activity_logged' | 'quote_accepted';
+    conditions?: any;
+  };
   actions: WorkflowAction[];
-  isActive: boolean;
-  executionCount: number;
-  lastExecuted: string;
-  category: string;
+  enabled: boolean;
+  execution_count: number;
+  last_execution_at?: string;
+}
+
+interface WorkflowExecution {
+  id: string;
+  workflow_id: string;
+  status: string;
+  trigger_data: any;
+  actions_executed: any;
+  error_message?: string;
+  started_at: string;
+  completed_at?: string;
+  duration_ms?: number;
 }
 
 const TRIGGERS = [
@@ -65,119 +91,54 @@ const ACTION_TYPES = [
 ];
 
 function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
+  const { user } = useAuth();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [builderVisible, setBuilderVisible] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(false);
   const [templatesVisible, setTemplatesVisible] = useState(false);
+  const [executions, setExecutions] = useState<WorkflowExecution[]>([]);
+  const [loadingExecutions, setLoadingExecutions] = useState(false);
+
+  // Form state
+  const [workflowName, setWorkflowName] = useState('');
+  const [workflowDescription, setWorkflowDescription] = useState('');
+  const [selectedTrigger, setSelectedTrigger] = useState('');
+  const [workflowActions, setWorkflowActions] = useState<WorkflowAction[]>([]);
+  const [isEnabled, setIsEnabled] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadWorkflows();
   }, []);
 
-  const loadWorkflows = () => {
-    const mockWorkflows: Workflow[] = [
-      {
-        id: 'w1',
-        name: 'Bienvenue Auto-Contact',
-        trigger: 'contact_created',
-        triggerLabel: 'Contact créé',
-        actions: [
-          {
-            id: 'a1',
-            type: 'send_email',
-            config: { templateId: 'welcome_template' },
-          },
-          {
-            id: 'a2',
-            type: 'create_task',
-            config: { taskTitle: 'Appel de suivi' },
-          },
-          {
-            id: 'a3',
-            type: 'add_tag',
-            config: { tagName: 'Nouveau Contact' },
-          },
-        ],
-        isActive: true,
-        executionCount: 47,
-        lastExecuted: '2025-11-19',
-        category: 'contacts',
-      },
-      {
-        id: 'w2',
-        name: 'Qualification Deal',
-        trigger: 'deal_created',
-        triggerLabel: 'Deal créé',
-        actions: [
-          {
-            id: 'a1',
-            type: 'assign_contact',
-            config: { assignTo: 'Commercial Team' },
-          },
-          {
-            id: 'a2',
-            type: 'send_notification',
-            config: { message: 'Nouveau deal créé, qualification requise' },
-          },
-        ],
-        isActive: true,
-        executionCount: 23,
-        lastExecuted: '2025-11-18',
-        category: 'deals',
-      },
-      {
-        id: 'w3',
-        name: 'Relance Deal en Attente',
-        trigger: 'deal_moved',
-        triggerLabel: 'Deal déplacé',
-        actions: [
-          {
-            id: 'a1',
-            type: 'create_task',
-            config: { taskTitle: 'Relancer le prospect' },
-          },
-          {
-            id: 'a2',
-            type: 'send_email',
-            config: { templateId: 'follow_up_template' },
-          },
-        ],
-        isActive: true,
-        executionCount: 15,
-        lastExecuted: '2025-11-17',
-        category: 'deals',
-      },
-      {
-        id: 'w4',
-        name: 'Devis Accepté',
-        trigger: 'quote_accepted',
-        triggerLabel: 'Devis accepté',
-        actions: [
-          {
-            id: 'a1',
-            type: 'move_deal',
-            config: { dealStage: 'Négociation' },
-          },
-          {
-            id: 'a2',
-            type: 'create_task',
-            config: { taskTitle: 'Créer facture proforma' },
-          },
-          {
-            id: 'a3',
-            type: 'send_email',
-            config: { templateId: 'quote_accepted_template' },
-          },
-        ],
-        isActive: false,
-        executionCount: 8,
-        lastExecuted: '2025-11-10',
-        category: 'quotes',
-      },
-    ];
+  const loadWorkflows = async () => {
+    if (!user?.organization_id) return;
 
-    setWorkflows(mockWorkflows);
+    try {
+      setLoading(true);
+      const response = await workflowsService.getAll(user.organization_id);
+      setWorkflows(response.data.workflows || []);
+    } catch (error) {
+      console.error('Error loading workflows:', error);
+      Alert.alert('Erreur', 'Impossible de charger les workflows');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadExecutions = async (workflowId: string) => {
+    try {
+      setLoadingExecutions(true);
+      const response = await workflowsService.getExecutions(workflowId, { limit: 20, offset: 0 });
+      setExecutions(response.data.executions || []);
+    } catch (error) {
+      console.error('Error loading executions:', error);
+      Alert.alert('Erreur', 'Impossible de charger l\'historique');
+    } finally {
+      setLoadingExecutions(false);
+    }
   };
 
   const getTriggerColor = (trigger: string) => {
@@ -192,81 +153,225 @@ function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
     return colors[trigger] || '#8E8E93';
   };
 
-  const toggleWorkflow = (workflowId: string) => {
-    setWorkflows(workflows.map(w =>
-      w.id === workflowId ? { ...w, isActive: !w.isActive } : w
-    ));
+  const toggleWorkflow = async (workflow: Workflow) => {
+    try {
+      await workflowsService.update(workflow.id, { enabled: !workflow.enabled });
+      setWorkflows(workflows.map(w =>
+        w.id === workflow.id ? { ...w, enabled: !w.enabled } : w
+      ));
+    } catch (error) {
+      console.error('Error toggling workflow:', error);
+      Alert.alert('Erreur', 'Impossible de modifier le workflow');
+    }
   };
 
-  const renderWorkflowCard = ({ item: workflow }: { item: Workflow }) => (
-    <TouchableOpacity
-      style={[
-        styles.workflowCard,
-        !workflow.isActive && styles.workflowCardInactive,
-      ]}
-      onPress={() => {
-        setSelectedWorkflow(workflow);
-        setBuilderVisible(true);
-      }}
-    >
-      <View style={styles.workflowCardHeader}>
-        <View style={styles.workflowTitle}>
-          <Text style={styles.workflowName} numberOfLines={1}>{workflow.name}</Text>
-          <View style={[styles.triggerBadge, { backgroundColor: `${getTriggerColor(workflow.trigger)}20` }]}>
-            <Text style={[styles.triggerBadgeText, { color: getTriggerColor(workflow.trigger) }]}>
-              {workflow.triggerLabel}
-            </Text>
-          </View>
-        </View>
-        <Switch
-          value={workflow.isActive}
-          onValueChange={() => toggleWorkflow(workflow.id)}
-          trackColor={{ false: '#E5E5EA', true: '#34C75940' }}
-          thumbColor={workflow.isActive ? '#34C759' : '#F0F0F0'}
-        />
-      </View>
+  const openBuilder = (workflow?: Workflow) => {
+    if (workflow) {
+      setSelectedWorkflow(workflow);
+      setWorkflowName(workflow.name);
+      setWorkflowDescription(workflow.description || '');
+      setSelectedTrigger(workflow.trigger.type);
+      setWorkflowActions(workflow.actions || []);
+      setIsEnabled(workflow.enabled);
+    } else {
+      setSelectedWorkflow(null);
+      setWorkflowName('');
+      setWorkflowDescription('');
+      setSelectedTrigger('');
+      setWorkflowActions([]);
+      setIsEnabled(true);
+    }
+    setBuilderVisible(true);
+  };
 
-      {/* Workflow Chain */}
-      <View style={styles.workflowChain}>
-        <View style={[styles.chainNode, { backgroundColor: `${getTriggerColor(workflow.trigger)}20` }]}>
-          <Text style={styles.chainNodeLabel}>Trigger</Text>
-        </View>
+  const closeBuilder = () => {
+    setBuilderVisible(false);
+    setSelectedWorkflow(null);
+    setWorkflowName('');
+    setWorkflowDescription('');
+    setSelectedTrigger('');
+    setWorkflowActions([]);
+    setIsEnabled(true);
+  };
 
-        {workflow.actions.map((action, index) => (
-          <React.Fragment key={action.id}>
-            <View style={styles.chainArrow}>
-              <Text style={styles.arrowText}>→</Text>
-            </View>
-            <View style={styles.chainNode}>
-              <Text style={styles.chainNodeIcon}>
-                {ACTION_TYPES.find(a => a.id === action.type)?.icon}
+  const saveWorkflow = async () => {
+    if (!workflowName.trim()) {
+      Alert.alert('Erreur', 'Le nom du workflow est requis');
+      return;
+    }
+
+    if (!selectedTrigger) {
+      Alert.alert('Erreur', 'Veuillez sélectionner un trigger');
+      return;
+    }
+
+    if (workflowActions.length === 0) {
+      Alert.alert('Erreur', 'Ajoutez au moins une action');
+      return;
+    }
+
+    if (!user?.organization_id) return;
+
+    try {
+      setSaving(true);
+
+      const workflowData = {
+        organizationId: user.organization_id,
+        name: workflowName,
+        description: workflowDescription,
+        trigger: { type: selectedTrigger },
+        actions: workflowActions,
+        enabled: isEnabled,
+      };
+
+      if (selectedWorkflow) {
+        await workflowsService.update(selectedWorkflow.id, workflowData);
+      } else {
+        await workflowsService.create(workflowData);
+      }
+
+      Alert.alert('Succès', selectedWorkflow ? 'Workflow mis à jour' : 'Workflow créé');
+      closeBuilder();
+      loadWorkflows();
+    } catch (error) {
+      console.error('Error saving workflow:', error);
+      Alert.alert('Erreur', 'Impossible de sauvegarder le workflow');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteWorkflow = async (workflowId: string) => {
+    Alert.alert(
+      'Confirmer la suppression',
+      'Êtes-vous sûr de vouloir supprimer ce workflow ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await workflowsService.delete(workflowId);
+              Alert.alert('Succès', 'Workflow supprimé');
+              loadWorkflows();
+            } catch (error) {
+              console.error('Error deleting workflow:', error);
+              Alert.alert('Erreur', 'Impossible de supprimer le workflow');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const addAction = (actionType: string) => {
+    const newAction: WorkflowAction = {
+      id: `action_${Date.now()}`,
+      type: actionType as any,
+      config: {},
+    };
+    setWorkflowActions([...workflowActions, newAction]);
+    setTemplatesVisible(false);
+  };
+
+  const removeAction = (index: number) => {
+    setWorkflowActions(workflowActions.filter((_, i) => i !== index));
+  };
+
+  const updateActionConfig = (index: number, key: string, value: string) => {
+    const updatedActions = [...workflowActions];
+    updatedActions[index].config = {
+      ...updatedActions[index].config,
+      [key]: value,
+    };
+    setWorkflowActions(updatedActions);
+  };
+
+  const renderWorkflowCard = ({ item: workflow }: { item: Workflow }) => {
+    const triggerLabel = TRIGGERS.find(t => t.id === workflow.trigger.type)?.label || workflow.trigger.type;
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.workflowCard,
+          !workflow.enabled && styles.workflowCardInactive,
+        ]}
+        onPress={() => openBuilder(workflow)}
+        onLongPress={() => deleteWorkflow(workflow.id)}
+      >
+        <View style={styles.workflowCardHeader}>
+          <View style={styles.workflowTitle}>
+            <Text style={styles.workflowName} numberOfLines={1}>{workflow.name}</Text>
+            <View style={[styles.triggerBadge, { backgroundColor: `${getTriggerColor(workflow.trigger.type)}20` }]}>
+              <Text style={[styles.triggerBadgeText, { color: getTriggerColor(workflow.trigger.type) }]}>
+                {triggerLabel}
               </Text>
             </View>
-          </React.Fragment>
-        ))}
-      </View>
+          </View>
+          <Switch
+            value={workflow.enabled}
+            onValueChange={() => toggleWorkflow(workflow)}
+            trackColor={{ false: '#E5E5EA', true: '#34C75940' }}
+            thumbColor={workflow.enabled ? '#34C759' : '#F0F0F0'}
+          />
+        </View>
 
-      <View style={styles.workflowFooter}>
-        <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Exécutions</Text>
-          <Text style={styles.statValue}>{workflow.executionCount}</Text>
+        {/* Workflow Chain */}
+        <View style={styles.workflowChain}>
+          <View style={[styles.chainNode, { backgroundColor: `${getTriggerColor(workflow.trigger.type)}20` }]}>
+            <Text style={styles.chainNodeLabel}>Trigger</Text>
+          </View>
+
+          {workflow.actions.map((action, index) => (
+            <React.Fragment key={index}>
+              <View style={styles.chainArrow}>
+                <Text style={styles.arrowText}>→</Text>
+              </View>
+              <View style={styles.chainNode}>
+                <Text style={styles.chainNodeIcon}>
+                  {ACTION_TYPES.find(a => a.id === action.type)?.icon}
+                </Text>
+              </View>
+            </React.Fragment>
+          ))}
         </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Dernière</Text>
-          <Text style={styles.statValue}>{workflow.lastExecuted}</Text>
+
+        <View style={styles.workflowFooter}>
+          <View style={styles.statItem}>
+            <Text style={styles.statLabel}>Exécutions</Text>
+            <Text style={styles.statValue}>{workflow.execution_count || 0}</Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={styles.statLabel}>Dernière</Text>
+            <Text style={styles.statValue}>
+              {workflow.last_execution_at
+                ? new Date(workflow.last_execution_at).toLocaleDateString('fr-FR')
+                : 'Jamais'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.historyButton}
+            onPress={() => {
+              setSelectedWorkflow(workflow);
+              loadExecutions(workflow.id);
+              setHistoryVisible(true);
+            }}
+          >
+            <Text style={styles.historyButtonText}>Historique</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.historyButton}
-          onPress={() => {
-            setSelectedWorkflow(workflow);
-            setHistoryVisible(true);
-          }}
-        >
-          <Text style={styles.historyButtonText}>Historique</Text>
-        </TouchableOpacity>
+      </TouchableOpacity>
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#007AFF" />
       </View>
-    </TouchableOpacity>
-  );
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -284,13 +389,13 @@ function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statCardValue}>
-            {workflows.filter(w => w.isActive).length}
+            {workflows.filter(w => w.enabled).length}
           </Text>
           <Text style={styles.statCardLabel}>Actifs</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statCardValue}>
-            {workflows.reduce((sum, w) => sum + w.executionCount, 0)}
+            {workflows.reduce((sum, w) => sum + (w.execution_count || 0), 0)}
           </Text>
           <Text style={styles.statCardLabel}>Exécutions</Text>
         </View>
@@ -299,10 +404,7 @@ function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
       {/* Create Button */}
       <TouchableOpacity
         style={styles.createButton}
-        onPress={() => {
-          setSelectedWorkflow(null);
-          setBuilderVisible(true);
-        }}
+        onPress={() => openBuilder()}
       >
         <Text style={styles.createButtonIcon}>+</Text>
         <Text style={styles.createButtonText}>Créer un Workflow</Text>
@@ -315,6 +417,14 @@ function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
         scrollEnabled={true}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>Aucun workflow configuré</Text>
+            <Text style={styles.emptyStateSubtext}>
+              Créez votre premier workflow pour automatiser vos processus
+            </Text>
+          </View>
+        }
       />
 
       {/* Workflow Builder Modal */}
@@ -322,15 +432,15 @@ function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
         visible={builderVisible}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setBuilderVisible(false)}
+        onRequestClose={closeBuilder}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {selectedWorkflow ? selectedWorkflow.name : 'Nouveau Workflow'}
+                {selectedWorkflow ? 'Modifier Workflow' : 'Nouveau Workflow'}
               </Text>
-              <TouchableOpacity onPress={() => setBuilderVisible(false)}>
+              <TouchableOpacity onPress={closeBuilder}>
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -338,30 +448,45 @@ function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
             <ScrollView style={styles.modalBody}>
               {/* Workflow Name */}
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Nom du Workflow</Text>
+                <Text style={styles.formLabel}>Nom du Workflow *</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="Ex: Bienvenue Auto-Contact"
-                  defaultValue={selectedWorkflow?.name}
+                  value={workflowName}
+                  onChangeText={setWorkflowName}
+                />
+              </View>
+
+              {/* Description */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Description</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Description du workflow..."
+                  value={workflowDescription}
+                  onChangeText={setWorkflowDescription}
+                  multiline
+                  numberOfLines={3}
                 />
               </View>
 
               {/* Trigger Selection */}
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Sélectionner le Trigger</Text>
+                <Text style={styles.formLabel}>Sélectionner le Trigger *</Text>
                 <View style={styles.triggersContainer}>
                   {TRIGGERS.map(trigger => (
                     <TouchableOpacity
                       key={trigger.id}
                       style={[
                         styles.triggerOption,
-                        selectedWorkflow?.trigger === trigger.id && styles.triggerOptionActive,
+                        selectedTrigger === trigger.id && styles.triggerOptionActive,
                       ]}
+                      onPress={() => setSelectedTrigger(trigger.id)}
                     >
                       <Text
                         style={[
                           styles.triggerOptionText,
-                          selectedWorkflow?.trigger === trigger.id && styles.triggerOptionTextActive,
+                          selectedTrigger === trigger.id && styles.triggerOptionTextActive,
                         ]}
                       >
                         {trigger.label}
@@ -374,7 +499,7 @@ function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
               {/* Actions */}
               <View style={styles.formGroup}>
                 <View style={styles.actionsHeader}>
-                  <Text style={styles.formLabel}>Actions</Text>
+                  <Text style={styles.formLabel}>Actions *</Text>
                   <TouchableOpacity
                     style={styles.addActionButton}
                     onPress={() => setTemplatesVisible(true)}
@@ -383,26 +508,48 @@ function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
                   </TouchableOpacity>
                 </View>
 
-                {selectedWorkflow?.actions && selectedWorkflow.actions.length > 0 ? (
+                {workflowActions.length > 0 ? (
                   <View style={styles.actionsChain}>
-                    {selectedWorkflow.actions.map((action, index) => (
-                      <View key={action.id} style={styles.actionRow}>
+                    {workflowActions.map((action, index) => (
+                      <View key={index} style={styles.actionRow}>
                         <Text style={styles.actionIndex}>{index + 1}</Text>
                         <View style={styles.actionContent}>
                           <Text style={styles.actionType}>
                             {ACTION_TYPES.find(a => a.id === action.type)?.label}
                           </Text>
-                          {action.config.templateId && (
-                            <Text style={styles.actionConfig}>Template: {action.config.templateId}</Text>
+
+                          {/* Dynamic config based on action type */}
+                          {action.type === 'create_task' && (
+                            <TextInput
+                              style={styles.actionInput}
+                              placeholder="Titre de la tâche"
+                              value={action.config.title || ''}
+                              onChangeText={(text) => updateActionConfig(index, 'title', text)}
+                            />
                           )}
-                          {action.config.taskTitle && (
-                            <Text style={styles.actionConfig}>Tâche: {action.config.taskTitle}</Text>
+                          {action.type === 'add_tag' && (
+                            <TextInput
+                              style={styles.actionInput}
+                              placeholder="Nom du tag"
+                              value={action.config.tag || ''}
+                              onChangeText={(text) => updateActionConfig(index, 'tag', text)}
+                            />
                           )}
-                          {action.config.tagName && (
-                            <Text style={styles.actionConfig}>Tag: {action.config.tagName}</Text>
+                          {action.type === 'send_email' && (
+                            <>
+                              <TextInput
+                                style={styles.actionInput}
+                                placeholder="Sujet de l'email"
+                                value={action.config.subject || ''}
+                                onChangeText={(text) => updateActionConfig(index, 'subject', text)}
+                              />
+                            </>
                           )}
                         </View>
-                        <TouchableOpacity style={styles.deleteActionButton}>
+                        <TouchableOpacity
+                          style={styles.deleteActionButton}
+                          onPress={() => removeAction(index)}
+                        >
                           <Text style={styles.deleteActionButtonText}>✕</Text>
                         </TouchableOpacity>
                       </View>
@@ -415,18 +562,20 @@ function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
                 )}
               </View>
 
-              {/* Conditions (Optional) */}
+              {/* Active Switch */}
               <View style={styles.formGroup}>
                 <View style={styles.conditionHeader}>
-                  <Text style={styles.formLabel}>Conditions (Optionnel)</Text>
-                  <Switch value={false} />
+                  <Text style={styles.formLabel}>Activer le workflow</Text>
+                  <Switch
+                    value={isEnabled}
+                    onValueChange={setIsEnabled}
+                    trackColor={{ false: '#E5E5EA', true: '#34C75940' }}
+                    thumbColor={isEnabled ? '#34C759' : '#F0F0F0'}
+                  />
                 </View>
-                <Text style={styles.conditionHint}>
-                  Limiter l'exécution en fonction de critères spécifiques
-                </Text>
               </View>
 
-              {/* Template Selection Modal Content */}
+              {/* Action Type Selector */}
               {templatesVisible && (
                 <View style={styles.templateSelector}>
                   <Text style={styles.formLabel}>Sélectionner une Action</Text>
@@ -435,7 +584,7 @@ function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
                       <TouchableOpacity
                         key={actionType.id}
                         style={styles.actionTypeButton}
-                        onPress={() => setTemplatesVisible(false)}
+                        onPress={() => addAction(actionType.id)}
                       >
                         <Text style={styles.actionTypeIcon}>{actionType.icon}</Text>
                         <Text style={styles.actionTypeLabel}>{actionType.label}</Text>
@@ -447,11 +596,24 @@ function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
             </ScrollView>
 
             <View style={styles.modalFooter}>
-              <TouchableOpacity style={[styles.button, styles.buttonSecondary]}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonSecondary]}
+                onPress={closeBuilder}
+              >
                 <Text style={styles.buttonSecondaryText}>Annuler</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, styles.buttonPrimary]}>
-                <Text style={styles.buttonPrimaryText}>Enregistrer</Text>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={saveWorkflow}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.buttonPrimaryText}>
+                    {selectedWorkflow ? 'Mettre à jour' : 'Créer'}
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -477,52 +639,78 @@ function WorkflowsScreen({ navigation }: WorkflowsScreenProps) {
             </View>
 
             <ScrollView style={styles.modalBody}>
-              <View style={styles.executionStats}>
-                <View style={styles.executionStatBox}>
-                  <Text style={styles.executionStatValue}>
-                    {selectedWorkflow?.executionCount}
-                  </Text>
-                  <Text style={styles.executionStatLabel}>Total</Text>
-                </View>
-                <View style={styles.executionStatBox}>
-                  <Text style={styles.executionStatValue}>98%</Text>
-                  <Text style={styles.executionStatLabel}>Succès</Text>
-                </View>
-                <View style={styles.executionStatBox}>
-                  <Text style={styles.executionStatValue}>2%</Text>
-                  <Text style={styles.executionStatLabel}>Erreur</Text>
-                </View>
-              </View>
+              {loadingExecutions ? (
+                <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 20 }} />
+              ) : (
+                <>
+                  <View style={styles.executionStats}>
+                    <View style={styles.executionStatBox}>
+                      <Text style={styles.executionStatValue}>
+                        {executions.length}
+                      </Text>
+                      <Text style={styles.executionStatLabel}>Total</Text>
+                    </View>
+                    <View style={styles.executionStatBox}>
+                      <Text style={styles.executionStatValue}>
+                        {Math.round((executions.filter(e => e.status === 'completed').length / Math.max(executions.length, 1)) * 100)}%
+                      </Text>
+                      <Text style={styles.executionStatLabel}>Succès</Text>
+                    </View>
+                    <View style={styles.executionStatBox}>
+                      <Text style={styles.executionStatValue}>
+                        {Math.round((executions.filter(e => e.status === 'failed').length / Math.max(executions.length, 1)) * 100)}%
+                      </Text>
+                      <Text style={styles.executionStatLabel}>Erreur</Text>
+                    </View>
+                  </View>
 
-              <Text style={styles.sectionTitle}>Dernières Exécutions</Text>
-              {[1, 2, 3, 4, 5].map(index => (
-                <View key={index} style={styles.executionCard}>
-                  <View style={styles.executionCardHeader}>
-                    <View>
-                      <Text style={styles.executionDate}>
-                        2025-11-{20 - index}
-                      </Text>
-                      <Text style={styles.executionTime}>14:30:45</Text>
+                  <Text style={styles.sectionTitle}>Dernières Exécutions</Text>
+                  {executions.length > 0 ? (
+                    executions.map((execution) => (
+                      <View key={execution.id} style={styles.executionCard}>
+                        <View style={styles.executionCardHeader}>
+                          <View>
+                            <Text style={styles.executionDate}>
+                              {new Date(execution.started_at).toLocaleDateString('fr-FR')}
+                            </Text>
+                            <Text style={styles.executionTime}>
+                              {new Date(execution.started_at).toLocaleTimeString('fr-FR')}
+                            </Text>
+                          </View>
+                          <View style={[
+                            styles.executionStatusBadge,
+                            { backgroundColor: execution.status === 'completed' ? '#34C75920' : '#FF3B3020' }
+                          ]}>
+                            <Text style={{
+                              color: execution.status === 'completed' ? '#34C759' : '#FF3B30',
+                              fontWeight: '600',
+                              fontSize: 11,
+                            }}>
+                              {execution.status === 'completed' ? '✓ Succès' : '✕ Erreur'}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.executionDetails}>
+                          {execution.duration_ms && (
+                            <Text style={styles.executionDetail}>
+                              Durée: {execution.duration_ms}ms
+                            </Text>
+                          )}
+                          {execution.error_message && (
+                            <Text style={[styles.executionDetail, { color: '#FF3B30' }]}>
+                              Erreur: {execution.error_message}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    ))
+                  ) : (
+                    <View style={styles.emptyState}>
+                      <Text style={styles.emptyStateText}>Aucune exécution</Text>
                     </View>
-                    <View style={[
-                      styles.executionStatusBadge,
-                      { backgroundColor: index < 4 ? '#34C75920' : '#FF3B3020' }
-                    ]}>
-                      <Text style={{
-                        color: index < 4 ? '#34C759' : '#FF3B30',
-                        fontWeight: '600',
-                        fontSize: 11,
-                      }}>
-                        {index < 4 ? '✓ Succès' : '✕ Erreur'}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.executionDetails}>
-                    <Text style={styles.executionDetail}>Entité ID: #{12345 + index}</Text>
-                    <Text style={styles.executionDetail}>Actions: {selectedWorkflow?.actions.length || 0} / {selectedWorkflow?.actions.length || 0}</Text>
-                  </View>
-                </View>
-              ))}
+                  )}
+                </>
+              )}
             </ScrollView>
 
             <TouchableOpacity
@@ -542,6 +730,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F2F2F7',
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     backgroundColor: '#FFFFFF',
@@ -611,7 +804,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 20,
-    gap: 8,
   },
   workflowCard: {
     backgroundColor: '#FFFFFF',
@@ -661,6 +853,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: '#F2F2F7',
+    flexWrap: 'wrap',
   },
   chainNode: {
     paddingHorizontal: 8,
@@ -766,6 +959,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#000000',
   },
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
   triggersContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -813,7 +1010,7 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: '#F2F2F7',
     borderRadius: 8,
     paddingHorizontal: 12,
@@ -838,11 +1035,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#000000',
+    marginBottom: 6,
   },
-  actionConfig: {
-    fontSize: 11,
-    color: '#8E8E93',
-    marginTop: 2,
+  actionInput: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 12,
+    color: '#000000',
+    backgroundColor: '#FFFFFF',
+    marginTop: 4,
   },
   deleteActionButton: {
     padding: 4,
@@ -866,11 +1070,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  conditionHint: {
-    fontSize: 11,
-    color: '#8E8E93',
-    marginTop: 6,
   },
   templateSelector: {
     marginTop: 16,
@@ -1005,6 +1204,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8E8E93',
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 12,
+    color: '#C7C7CC',
+    textAlign: 'center',
   },
 });
 

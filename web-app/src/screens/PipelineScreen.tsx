@@ -117,6 +117,7 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
   const [datePickerInitialDate, setDatePickerInitialDate] = useState<Date>(new Date());
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [opportunityToDelete, setOpportunityToDelete] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -156,6 +157,21 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
   };
 
   const formatCurrency = (amount: number) => {
+    if (amount >= 1000000) {
+      return new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'EUR',
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }).format(amount / 1000000) + 'M';
+    } else if (amount >= 1000) {
+      return new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'EUR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount / 1000) + 'K';
+    }
     return new Intl.NumberFormat('fr-FR', {
       style: 'currency',
       currency: 'EUR',
@@ -675,10 +691,22 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
     );
   };
 
+  const getFilteredOpportunities = () => {
+    if (!searchQuery.trim()) return opportunities;
+
+    const query = searchQuery.toLowerCase().trim();
+    return opportunities.filter(opp =>
+      opp.name.toLowerCase().includes(query) ||
+      opp.customer_name?.toLowerCase().includes(query) ||
+      opp.description?.toLowerCase().includes(query)
+    );
+  };
+
   const renderColumn = (stage: PipelineStage) => {
-    const columnOpportunities = opportunities.filter((opp) => opp.stage_id === stage.id);
-    const totalValue = getTotalValue(stage.id);
-    const weightedValue = getWeightedValue(stage.id);
+    const filteredOpps = getFilteredOpportunities();
+    const columnOpportunities = filteredOpps.filter((opp) => opp.stage_id === stage.id);
+    const totalValue = columnOpportunities.reduce((sum, opp) => sum + opp.value, 0);
+    const weightedValue = columnOpportunities.reduce((sum, opp) => sum + (opp.value * opp.probability) / 100, 0);
 
     return (
       <View key={stage.id} style={styles.column}>
@@ -742,7 +770,7 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
       <Navigation />
       {/* En-tête */}
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Pipeline</Text>
           <Text style={styles.headerSubtitle}>
             {opportunities.length} opportunités • {formatCurrency(totalPipelineValue)}
@@ -761,6 +789,27 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
           <Text style={styles.addButtonText}>+ Nouveau</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Barre de recherche */}
+      {activeTab === 'pipeline' && (
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Rechercher par nom, client ou description..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#8E8E93"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              style={styles.clearSearchButton}
+              onPress={() => setSearchQuery('')}
+            >
+              <Text style={styles.clearSearchText}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Onglets */}
       <View style={styles.tabBar}>
@@ -974,7 +1023,7 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
                     <>
                       <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>Client</Text>
-                        <TouchableOpacity onPress={() => navigation.navigate('Customers')}>
+                        <TouchableOpacity onPress={() => navigation.navigate('Customers' as any)}>
                           <Text style={[styles.detailValue, styles.linkText]}>
                             {selectedOpportunity.customer_name || 'Non défini'} →
                           </Text>
@@ -1011,7 +1060,7 @@ export default function PipelineScreen({ navigation }: PipelineScreenProps) {
                         <Text style={styles.detailLabel}>Devis associé</Text>
                         <TouchableOpacity onPress={() => {
                           setModalVisible(false);
-                          navigation.navigate('Home');
+                          navigation.navigate('Home' as any);
                         }}>
                           <Text style={[styles.detailValue, styles.linkText]}>
                             Voir le devis →
@@ -2141,5 +2190,42 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#8E8E93',
     marginTop: 2,
+  },
+  modalFooterOpp: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  searchContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  searchInput: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#000000',
+    letterSpacing: -0.2,
+  },
+  clearSearchButton: {
+    position: 'absolute',
+    right: 28,
+    top: 22,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#8E8E93',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clearSearchText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

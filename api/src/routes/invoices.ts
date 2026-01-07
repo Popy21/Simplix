@@ -3,6 +3,13 @@ import { pool } from '../database/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { requireOrganization } from '../middleware/multiTenancy';
 import { getOrgIdFromRequest } from '../utils/multiTenancyHelper';
+import {
+  sendEmail,
+  generateInvoiceEmailHTML,
+  generateReminderEmailHTML,
+  getCompanyProfile,
+  logEmail
+} from '../services/emailService';
 
 const router = Router();
 
@@ -448,20 +455,66 @@ router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response)
 router.post('/:id/send-email', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const orgId = getOrgIdFromRequest(req);
+    const { to, cc, subject } = req.body; // Email personnalisé optionnel
 
-    const result = await pool.query(`
-      UPDATE invoices
-      SET status = 'sent', updated_at = NOW()
-      WHERE id = $1 AND status = 'draft'
-      RETURNING *
+    // Récupérer la facture avec les infos client
+    const invoiceResult = await pool.query(`
+      SELECT i.*, c.name as customer_name, c.email as customer_email, c.company as customer_company
+      FROM invoices i
+      LEFT JOIN customers c ON i.customer_id = c.id
+      WHERE i.id = $1
     `, [id]);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Facture non trouvée ou déjà envoyée' });
+    if (invoiceResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Facture non trouvée' });
     }
 
-    res.json({ message: 'Facture envoyée avec succès', invoice: result.rows[0] });
+    const invoice = invoiceResult.rows[0];
+
+    // Déterminer le destinataire
+    const recipient = to || invoice.customer_email;
+    if (!recipient) {
+      return res.status(400).json({ error: 'Aucun email client disponible. Veuillez spécifier un destinataire.' });
+    }
+
+    // Récupérer le profil entreprise
+    const companyProfile = await getCompanyProfile();
+
+    // Générer le contenu de l'email
+    const html = generateInvoiceEmailHTML(invoice, companyProfile);
+    const emailSubject = subject || `Facture ${invoice.invoice_number} - ${companyProfile?.company_name || 'Simplix'}`;
+
+    // Envoyer l'email
+    const result = await sendEmail({
+      to: recipient,
+      cc: cc,
+      subject: emailSubject,
+      html: html
+    });
+
+    // Logger l'envoi
+    await logEmail('invoice', parseInt(id), recipient, result);
+
+    if (result.success) {
+      // Mettre à jour le statut si c'était un brouillon
+      if (invoice.status === 'draft') {
+        await pool.query(
+          'UPDATE invoices SET status = $1, updated_at = NOW() WHERE id = $2',
+          ['sent', id]
+        );
+      }
+
+      res.json({
+        message: 'Facture envoyée avec succès',
+        messageId: result.messageId,
+        recipient: recipient
+      });
+    } else {
+      res.status(500).json({
+        error: 'Erreur lors de l\'envoi de l\'email',
+        details: result.error
+      });
+    }
   } catch (error: any) {
     console.error('Erreur lors de l\'envoi de la facture:', error);
     res.status(500).json({ error: error.message });
@@ -538,13 +591,15 @@ router.post('/:id/mark-as-paid', authenticateToken, requireOrganization, async (
 router.post('/:id/send-reminder', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const orgId = getOrgIdFromRequest(req);
+    const { reminder_type = 'first', to } = req.body; // first, second, final, legal
 
-    // Vérifier que la facture existe et n'est pas payée
-    const invoiceResult = await pool.query(
-      'SELECT * FROM invoices WHERE id = $1',
-      [id]
-    );
+    // Récupérer la facture avec les infos client
+    const invoiceResult = await pool.query(`
+      SELECT i.*, c.name as customer_name, c.email as customer_email, c.company as customer_company
+      FROM invoices i
+      LEFT JOIN customers c ON i.customer_id = c.id
+      WHERE i.id = $1
+    `, [id]);
 
     if (invoiceResult.rows.length === 0) {
       return res.status(404).json({ error: 'Facture non trouvée' });
@@ -556,19 +611,74 @@ router.post('/:id/send-reminder', authenticateToken, requireOrganization, async 
       return res.status(400).json({ error: 'Cette facture est déjà payée' });
     }
 
-    // TODO: Implement actual email sending logic here
-    // For now, just update the status to 'overdue' if past due date
-    if (new Date(invoice.due_date) < new Date()) {
+    // Déterminer le destinataire
+    const recipient = to || invoice.customer_email;
+    if (!recipient) {
+      return res.status(400).json({ error: 'Aucun email client disponible' });
+    }
+
+    // Récupérer le profil entreprise
+    const companyProfile = await getCompanyProfile();
+
+    // Générer le contenu de l'email de relance
+    const html = generateReminderEmailHTML(invoice, reminder_type, companyProfile);
+
+    const reminderTitles: Record<string, string> = {
+      first: 'Rappel de paiement',
+      second: 'Second rappel de paiement',
+      final: 'Dernier rappel avant mise en recouvrement',
+      legal: 'Mise en demeure de payer'
+    };
+
+    const emailSubject = `${reminderTitles[reminder_type] || 'Rappel'} - Facture ${invoice.invoice_number}`;
+
+    // Envoyer l'email
+    const result = await sendEmail({
+      to: recipient,
+      subject: emailSubject,
+      html: html
+    });
+
+    // Logger l'envoi
+    await logEmail('reminder', parseInt(id), recipient, result);
+
+    // Enregistrer la relance dans payment_reminders si la table existe
+    try {
+      await pool.query(`
+        INSERT INTO payment_reminders (invoice_id, reminder_type, days_after_due, sent_at, email_subject)
+        VALUES ($1, $2, $3, NOW(), $4)
+      `, [
+        id,
+        reminder_type,
+        Math.floor((Date.now() - new Date(invoice.due_date).getTime()) / (1000 * 60 * 60 * 24)),
+        emailSubject
+      ]);
+    } catch (e) {
+      // Table peut ne pas exister, ignorer
+    }
+
+    // Mettre à jour le statut en 'overdue' si nécessaire
+    if (new Date(invoice.due_date) < new Date() && invoice.status === 'sent') {
       await pool.query(
         'UPDATE invoices SET status = $1, updated_at = NOW() WHERE id = $2',
         ['overdue', id]
       );
     }
 
-    res.json({
-      message: 'Relance envoyée avec succès',
-      invoice_number: invoice.invoice_number
-    });
+    if (result.success) {
+      res.json({
+        message: 'Relance envoyée avec succès',
+        invoice_number: invoice.invoice_number,
+        reminder_type: reminder_type,
+        recipient: recipient,
+        messageId: result.messageId
+      });
+    } else {
+      res.status(500).json({
+        error: 'Erreur lors de l\'envoi de la relance',
+        details: result.error
+      });
+    }
   } catch (error: any) {
     console.error('Erreur lors de l\'envoi de la relance:', error);
     res.status(500).json({ error: error.message });
@@ -626,6 +736,113 @@ router.post('/:id/convert-to-quote', authenticateToken, async (req: AuthRequest,
     res.status(201).json(quoteResult.rows[0]);
   } catch (err: any) {
     console.error('Erreur lors de la conversion en devis:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/invoices/:id/duplicate
+ * Dupliquer une facture
+ */
+router.post('/:id/duplicate', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = (req.user as any)?.userId || 1;
+    const organizationId = (req.user as any)?.organizationId;
+
+    // Récupérer la facture originale
+    const invoiceResult = await pool.query(
+      'SELECT * FROM invoices WHERE id = $1 AND organization_id = $2',
+      [id, organizationId]
+    );
+
+    if (invoiceResult.rows.length === 0) {
+      res.status(404).json({ error: 'Facture non trouvée' });
+      return;
+    }
+
+    const originalInvoice = invoiceResult.rows[0];
+
+    // Générer un nouveau numéro de facture
+    const year = new Date().getFullYear();
+    const numResult = await pool.query(`
+      SELECT invoice_number FROM invoices
+      WHERE organization_id = $1 AND invoice_number LIKE $2
+      ORDER BY invoice_number DESC LIMIT 1
+    `, [organizationId, `FA-${year}-%`]);
+
+    let nextNum = 1;
+    if (numResult.rows.length > 0) {
+      const match = numResult.rows[0].invoice_number.match(/FA-\d{4}-(\d+)/);
+      if (match) nextNum = parseInt(match[1]) + 1;
+    }
+    const newInvoiceNumber = `FA-${year}-${String(nextNum).padStart(5, '0')}`;
+
+    // Créer la nouvelle facture
+    const newInvoiceResult = await pool.query(
+      `INSERT INTO invoices (
+        customer_id, user_id, invoice_number, title, description,
+        subtotal, tax_rate, tax_amount, total_amount, status,
+        due_date, template_id, billing_address, payment_terms,
+        notes, discount_amount, organization_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, $11, $12, $13, $14, $15, $16)
+      RETURNING *`,
+      [
+        originalInvoice.customer_id,
+        userId,
+        newInvoiceNumber,
+        originalInvoice.title,
+        originalInvoice.description,
+        originalInvoice.subtotal,
+        originalInvoice.tax_rate,
+        originalInvoice.tax_amount,
+        originalInvoice.total_amount,
+        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // +30 jours
+        originalInvoice.template_id,
+        originalInvoice.billing_address,
+        originalInvoice.payment_terms,
+        originalInvoice.notes,
+        originalInvoice.discount_amount,
+        organizationId
+      ]
+    );
+
+    const newInvoiceId = newInvoiceResult.rows[0].id;
+
+    // Copier les lignes de la facture
+    const itemsResult = await pool.query('SELECT * FROM invoice_items WHERE invoice_id = $1', [id]);
+    for (const item of itemsResult.rows) {
+      await pool.query(
+        `INSERT INTO invoice_items (invoice_id, product_id, description, quantity, unit_price, total_price, discount_percent, tax_rate, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          newInvoiceId,
+          item.product_id,
+          item.description,
+          item.quantity,
+          item.unit_price,
+          item.total_price,
+          item.discount_percent || 0,
+          item.tax_rate,
+          item.sort_order || 0
+        ]
+      );
+    }
+
+    // Récupérer la facture complète avec les items
+    const completeInvoice = await pool.query(`
+      SELECT i.*, c.name as customer_name
+      FROM invoices i
+      LEFT JOIN customers c ON i.customer_id = c.id
+      WHERE i.id = $1
+    `, [newInvoiceId]);
+
+    res.status(201).json({
+      ...completeInvoice.rows[0],
+      message: 'Facture dupliquée avec succès'
+    });
+  } catch (err: any) {
+    console.error('Erreur lors de la duplication de la facture:', err);
     res.status(500).json({ error: err.message });
   }
 });

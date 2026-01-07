@@ -68,7 +68,6 @@ export default function GlassAnalyticsScreen({ navigation }: AnalyticsScreenProp
   const [conversionFunnel, setConversionFunnel] = useState<ChartData[]>([]);
   const [dealsByStage, setDealsByStage] = useState<ChartData[]>([]);
   const [topPerformers, setTopPerformers] = useState<any[]>([]);
-  const [leadScoring, setLeadScoring] = useState<ChartData[]>([]);
   const [revenueTimeSeries, setRevenueTimeSeries] = useState<TimeSeriesData[]>([]);
 
   // Animation values for charts
@@ -151,12 +150,6 @@ export default function GlassAnalyticsScreen({ navigation }: AnalyticsScreenProp
         { label: 'Closing', value: 12, percentage: 14, color: '#34C759' },
       ];
 
-      // Lead Scoring Distribution
-      const scoring: ChartData[] = [
-        { label: 'Hot (80-100)', value: 15, percentage: 18, color: '#FF3B30' },
-        { label: 'Warm (50-79)', value: 32, percentage: 38, color: '#FF9500' },
-        { label: 'Cold (0-49)', value: 38, percentage: 44, color: '#8E8E93' },
-      ];
 
       // Top Performers
       const performers = [
@@ -188,7 +181,6 @@ export default function GlassAnalyticsScreen({ navigation }: AnalyticsScreenProp
       setConversionFunnel(funnel);
       setDealsByStage(stages);
       setTopPerformers(performers);
-      setLeadScoring(scoring);
       setRevenueTimeSeries(timeSeries);
 
     } catch (error) {
@@ -207,7 +199,7 @@ export default function GlassAnalyticsScreen({ navigation }: AnalyticsScreenProp
     return (
       <GlassCard key={metric.id} variant="frosted" elevation="md" glow glowColor={metric.gradient[0]}>
         <LinearGradient
-          colors={[...metric.gradient.map((c) => c + '08')]}
+          colors={metric.gradient as [string, string]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -493,9 +485,6 @@ export default function GlassAnalyticsScreen({ navigation }: AnalyticsScreenProp
 
           {/* Top Performers */}
           {renderTopPerformers()}
-
-          {/* Lead Scoring */}
-          {renderBarChart(leadScoring, 'Distribution du scoring des leads', false)}
 
           {/* Additional Metrics */}
           <GlassCard variant="frosted" elevation="md">

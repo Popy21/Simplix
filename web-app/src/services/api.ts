@@ -431,7 +431,6 @@ export const analyticsService = {
   getActivitySummary: () => api.get('/analytics/activity-summary'),
   getForecasting: () => api.get('/analytics/forecasting'),
   getQuickStats: () => api.get('/analytics/quick-stats'),
-  getLeadScores: (limit: number = 5) => api.get(`/analytics/lead-scores?limit=${limit}`),
   getPipelineStages: () => api.get('/analytics/pipeline-stages'),
 };
 
@@ -587,8 +586,6 @@ export const leadsService = {
   getAll: (params?: { status?: string; source?: string; min_score?: number; max_score?: number; page?: number; limit?: number }) =>
     api.get('/leads', { params }),
   getById: (id: string) => api.get(`/leads/${id}`),
-  getScoreBreakdown: (id: string) => api.get(`/leads/${id}/score-breakdown`),
-  updateScore: (id: string) => api.post(`/leads/${id}/recalculate-score`),
   getTopLeads: (params?: { limit?: number; min_score?: number }) =>
     api.get('/leads/top', { params }),
   convertToCustomer: (id: string) => api.post(`/leads/${id}/convert-to-customer`),
@@ -616,26 +613,36 @@ export const workflowsService = {
     api.post('/workflows', workflow),
   update: (workflowId: string, workflow: any) => api.put(`/workflows/${workflowId}`, workflow),
   delete: (workflowId: string) => api.delete(`/workflows/${workflowId}`),
-  toggle: (workflowId: string, enabled: boolean) => api.patch(`/workflows/${workflowId}/toggle`, { enabled }),
-  getExecutions: (workflowId: string, params?: { page?: number; limit?: number }) =>
+  execute: (workflowId: string, data: { targetId: string; targetType: string }) =>
+    api.post(`/workflows/${workflowId}/execute`, data),
+  getExecutions: (workflowId: string, params?: { limit?: number; offset?: number }) =>
     api.get(`/workflows/${workflowId}/executions`, { params }),
-  testWorkflow: (workflowId: string, testData?: any) =>
-    api.post(`/workflows/${workflowId}/test`, { testData }),
+  getTemplates: () => api.get('/workflows/templates/list'),
 };
 
 // Emails API
 export const emailsService = {
-  send: (data: { organizationId: string; to: string; subject: string; body?: string; cc?: string; bcc?: string; templateId?: string; variables?: any; attachments?: any[] }) =>
-    api.post('/emails/send', data),
-  getTemplates: (organizationId: string) => api.get('/emails/templates', { params: { organizationId } }),
-  getTemplateById: (templateId: string) => api.get(`/emails/templates/${templateId}`),
-  createTemplate: (template: { organizationId: string; name: string; subject: string; body: string; variables?: string[] }) =>
-    api.post('/emails/templates', template),
-  updateTemplate: (templateId: string, template: any) =>
-    api.put(`/emails/templates/${templateId}`, template),
-  deleteTemplate: (templateId: string) => api.delete(`/emails/templates/${templateId}`),
-  getLogs: (params?: { organizationId?: string; from_date?: string; to_date?: string; status?: string; page?: number; limit?: number }) =>
-    api.get('/emails/logs', { params }),
-  trackOpen: (emailId: string) => api.post(`/emails/${emailId}/track/open`),
-  trackClick: (emailId: string, linkUrl: string) => api.post(`/emails/${emailId}/track/click`, { linkUrl }),
+  // Templates
+  getTemplates: () => api.get('/email-campaigns/templates'),
+  getTemplateById: (id: string) => api.get(`/email-campaigns/templates/${id}`),
+  createTemplate: (data: { name: string; subject: string; html_content: string; text_content?: string; variables?: string[]; category?: string }) =>
+    api.post('/email-campaigns/templates', data),
+  updateTemplate: (id: string, data: { name?: string; subject?: string; html_content?: string; text_content?: string; variables?: string[]; category?: string }) =>
+    api.put(`/email-campaigns/templates/${id}`, data),
+  deleteTemplate: (id: string) => api.delete(`/email-campaigns/templates/${id}`),
+
+  // Campaigns
+  getCampaigns: (params?: { status?: string }) => api.get('/email-campaigns', { params }),
+  createCampaign: (data: { template_id?: string; name: string; subject: string; html_content?: string; text_content?: string; from_email: string; from_name?: string; reply_to?: string; scheduled_at?: string }) =>
+    api.post('/email-campaigns', data),
+  sendCampaign: (id: string, data: { contact_ids: string[] }) => api.post(`/email-campaigns/${id}/send`, data),
+  pauseCampaign: (id: string) => api.post(`/email-campaigns/${id}/pause`),
+  getCampaignStats: (id: string) => api.get(`/email-campaigns/${id}/stats`),
+
+  // Logs
+  getLogs: (params?: { campaign_id?: string; contact_id?: string; status?: string; limit?: number }) =>
+    api.get('/email-campaigns/logs', { params }),
 };
+
+// Export api instance for direct usage
+export { api };
