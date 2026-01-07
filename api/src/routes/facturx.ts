@@ -373,7 +373,7 @@ function generateFacturXML(data: {
         <ram:TaxBasisTotalAmount>${parseFloat(invoice.subtotal || 0).toFixed(2)}</ram:TaxBasisTotalAmount>
         <ram:TaxTotalAmount currencyID="${invoice.currency || 'EUR'}">${parseFloat(invoice.tax_amount || 0).toFixed(2)}</ram:TaxTotalAmount>
         <ram:GrandTotalAmount>${parseFloat(invoice.total_amount || 0).toFixed(2)}</ram:GrandTotalAmount>
-        <ram:DuePayableAmount>${parseFloat(invoice.total_amount - (invoice.paid_amount || 0)).toFixed(2)}</ram:DuePayableAmount>
+        <ram:DuePayableAmount>${(parseFloat(invoice.total_amount || 0) - parseFloat(invoice.paid_amount || 0)).toFixed(2)}</ram:DuePayableAmount>
       </ram:SpecifiedTradeSettlementHeaderMonetarySummation>
     </ram:ApplicableHeaderTradeSettlement>
     ${lineItems}
