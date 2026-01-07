@@ -24,31 +24,39 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       ORDER BY is_default DESC, account_name
     `, [organizationId]);
 
-    // Stats globales
+    // Stats globales - join via bank_accounts pour filtrer par organization
     const statsResult = await db.query(`
       SELECT
         COUNT(*) as total_transactions,
-        COUNT(*) FILTER (WHERE status = 'pending') as pending_count,
-        COUNT(*) FILTER (WHERE status = 'matched') as matched_count,
-        COALESCE(SUM(CASE WHEN type = 'credit' AND status = 'pending' THEN amount ELSE 0 END), 0) as pending_credits,
-        COALESCE(SUM(CASE WHEN type = 'debit' AND status = 'pending' THEN amount ELSE 0 END), 0) as pending_debits
-      FROM bank_transactions
-      WHERE organization_id = $1
+        COUNT(*) FILTER (WHERE NOT bt.is_reconciled) as pending_count,
+        COUNT(*) FILTER (WHERE bt.is_reconciled) as matched_count,
+        COALESCE(SUM(CASE WHEN bt.amount > 0 AND NOT bt.is_reconciled THEN bt.amount ELSE 0 END), 0) as pending_credits,
+        COALESCE(SUM(CASE WHEN bt.amount < 0 AND NOT bt.is_reconciled THEN ABS(bt.amount) ELSE 0 END), 0) as pending_debits
+      FROM bank_transactions bt
+      JOIN bank_accounts ba ON bt.bank_account_id = ba.id
+      WHERE ba.organization_id = $1 AND ba.deleted_at IS NULL
     `, [organizationId]);
 
-    // Derniers imports
-    const importsResult = await db.query(`
-      SELECT id, filename, imported_at, total_transactions, pending_count, matched_count
-      FROM bank_imports
-      WHERE organization_id = $1
-      ORDER BY imported_at DESC
-      LIMIT 5
-    `, [organizationId]);
+    // Derniers imports - vérifier si la table existe avec les bonnes colonnes
+    let importsRows: any[] = [];
+    try {
+      const importsResult = await db.query(`
+        SELECT id, filename, created_at as imported_at
+        FROM bank_imports
+        WHERE organization_id = $1
+        ORDER BY created_at DESC
+        LIMIT 5
+      `, [organizationId]);
+      importsRows = importsResult.rows;
+    } catch (e) {
+      // Table might not exist or have different structure
+      importsRows = [];
+    }
 
     res.json({
       accounts: accountsResult.rows,
       statistics: statsResult.rows[0],
-      recent_imports: importsResult.rows,
+      recent_imports: importsRows,
       total_balance: accountsResult.rows.reduce((sum: number, acc: any) => sum + parseFloat(acc.current_balance || 0), 0)
     });
   } catch (err: any) {
@@ -63,11 +71,11 @@ router.get('/accounts', authenticateToken, async (req: AuthRequest, res: Respons
 
     const result = await db.query(`
       SELECT ba.*,
-        (SELECT COUNT(*) FROM bank_transactions WHERE bank_account_id = ba.id AND status = 'pending') as pending_count,
+        (SELECT COUNT(*) FROM bank_transactions WHERE bank_account_id = ba.id AND NOT is_reconciled) as pending_count,
         (SELECT MAX(transaction_date) FROM bank_transactions WHERE bank_account_id = ba.id) as last_transaction_date
       FROM bank_accounts ba
-      WHERE ba.organization_id = $1 AND ba.is_active = true
-      ORDER BY ba.is_default DESC, ba.name
+      WHERE ba.organization_id = $1 AND ba.is_active = true AND ba.deleted_at IS NULL
+      ORDER BY ba.is_default DESC, ba.account_name
     `, [organizationId]);
 
     res.json(result.rows);
