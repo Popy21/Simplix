@@ -18,15 +18,16 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         c.name as customer_name
       FROM payment_reminders pr
       LEFT JOIN invoices i ON pr.invoice_id = i.id
-      LEFT JOIN customers c ON pr.customer_id = c.id
-      WHERE ($1::UUID IS NULL OR pr.organization_id = $1)
+      LEFT JOIN customers c ON i.customer_id = c.id
+      WHERE ($1::UUID IS NULL OR i.organization_id = $1)
       ORDER BY pr.sent_at DESC
       LIMIT $2 OFFSET $3
     `, [organizationId, limit, offset]);
 
     const countResult = await db.query(`
-      SELECT COUNT(*) as total FROM payment_reminders
-      WHERE ($1::UUID IS NULL OR organization_id = $1)
+      SELECT COUNT(*) as total FROM payment_reminders pr
+      LEFT JOIN invoices i ON pr.invoice_id = i.id
+      WHERE ($1::UUID IS NULL OR i.organization_id = $1)
     `, [organizationId]);
 
     res.json({

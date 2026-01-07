@@ -156,16 +156,16 @@ router.get('/templates', authenticateToken, async (req: AuthRequest, res: Respon
     }
 
     const result = await pool.query(
-      `SELECT id, name, subject, category, variables, created_at
+      `SELECT id, name, subject, category, COALESCE(variables, '[]'::jsonb) as variables, created_at
        FROM email_templates
-       WHERE organization_id = $1 AND deleted_at IS NULL
+       WHERE organization_id = $1 AND is_active = true
        ORDER BY category, name`,
       [organizationId]
     );
 
     const templates = result.rows.map(row => ({
       ...row,
-      variables: JSON.parse(row.variables),
+      variables: typeof row.variables === 'string' ? JSON.parse(row.variables) : (row.variables || []),
     }));
 
     res.json({

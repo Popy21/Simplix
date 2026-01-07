@@ -18,10 +18,10 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     // Comptes bancaires
     const accountsResult = await db.query(`
       SELECT
-        id, name, bank_name, iban, currency, current_balance, is_default
+        id, account_name as name, bank_name, iban, currency, current_balance, is_default
       FROM bank_accounts
-      WHERE organization_id = $1 AND is_active = true
-      ORDER BY is_default DESC, name
+      WHERE organization_id = $1 AND is_active = true AND deleted_at IS NULL
+      ORDER BY is_default DESC, account_name
     `, [organizationId]);
 
     // Stats globales

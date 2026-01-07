@@ -12,9 +12,9 @@ router.get('/settings', authenticateToken, async (req: AuthRequest, res: Respons
     const result = await db.query(`
       SELECT
         ds.*,
-        (SELECT COUNT(*) FROM document_number_audit WHERE sequence_id = ds.id) as total_generated,
-        (SELECT COUNT(*) FROM document_number_audit WHERE sequence_id = ds.id AND year = EXTRACT(YEAR FROM CURRENT_DATE)) as generated_this_year,
-        (SELECT MAX(generated_at) FROM document_number_audit WHERE sequence_id = ds.id) as last_generated_at
+        (SELECT COUNT(*) FROM document_number_audit dna WHERE dna.organization_id = ds.organization_id AND dna.document_type = ds.document_type) as total_generated,
+        (SELECT COUNT(*) FROM document_number_audit dna WHERE dna.organization_id = ds.organization_id AND dna.document_type = ds.document_type AND dna.fiscal_year = EXTRACT(YEAR FROM CURRENT_DATE)) as generated_this_year,
+        (SELECT MAX(generated_at) FROM document_number_audit dna WHERE dna.organization_id = ds.organization_id AND dna.document_type = ds.document_type) as last_generated_at
       FROM document_sequences ds
       WHERE ds.organization_id = $1
       ORDER BY ds.document_type
