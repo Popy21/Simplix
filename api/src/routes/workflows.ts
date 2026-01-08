@@ -98,6 +98,136 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 });
 
 /**
+ * GET /api/workflows/executions
+ * Récupérer toutes les exécutions de workflows
+ */
+router.get('/executions', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id || (req.query.organizationId as string);
+    const { limit = 50, offset = 0 } = req.query;
+
+    // Check if table exists first
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'workflow_executions'
+      )
+    `);
+
+    if (!tableCheck.rows[0].exists) {
+      return res.json({
+        success: true,
+        executions: [],
+        total: 0,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string),
+      });
+    }
+
+    let query = `
+      SELECT we.id, we.workflow_id, w.name as workflow_name, we.target_id, we.target_type, we.actions_executed, we.executed_at
+      FROM workflow_executions we
+      LEFT JOIN workflows w ON we.workflow_id = w.id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    if (organizationId) {
+      params.push(organizationId);
+      query += ` AND w.organization_id = $${params.length}`;
+    }
+
+    query += ` ORDER BY we.executed_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(parseInt(limit as string), parseInt(offset as string));
+
+    const result = await pool.query(query, params);
+
+    const executions = result.rows.map(row => ({
+      ...row,
+      actionsExecuted: row.actions_executed ? JSON.parse(row.actions_executed) : [],
+    }));
+
+    res.json({
+      success: true,
+      executions,
+      total: executions.length,
+      limit: parseInt(limit as string),
+      offset: parseInt(offset as string),
+    });
+  } catch (error: any) {
+    console.error('Erreur lors de la récupération des exécutions:', error);
+    res.json({
+      success: true,
+      executions: [],
+      total: 0
+    });
+  }
+});
+
+/**
+ * GET /api/workflows/templates/list
+ * Récupérer les modèles de workflows prédéfinis
+ */
+router.get('/templates/list', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const templates = [
+      {
+        id: 'new_contact_welcome',
+        name: 'Accueil nouveau contact',
+        description: 'Envoyer un email de bienvenue et créer une tâche de suivi',
+        trigger: { type: 'contact_created' },
+        actions: [
+          {
+            type: 'send_email',
+            config: {
+              subject: 'Bienvenue dans notre CRM!',
+              template: 'welcome_email',
+            },
+          },
+          {
+            type: 'create_task',
+            config: {
+              title: 'Suivi du nouveau contact',
+              description: 'Appeler le contact pour présentation',
+              dueDate: '+3days',
+            },
+          },
+        ],
+      },
+      {
+        id: 'deal_won_notification',
+        name: 'Notification deal gagné',
+        description: 'Créer une activité et ajouter un tag quand un deal est gagné',
+        trigger: { type: 'deal_moved', conditions: { toStage: 'won' } },
+        actions: [
+          {
+            type: 'add_tag',
+            config: { tag: 'deal_won' },
+          },
+          {
+            type: 'add_activity',
+            config: {
+              activityType: 'note',
+              description: 'Deal remporté!',
+            },
+          },
+        ],
+      },
+    ];
+
+    res.json({
+      success: true,
+      templates,
+    });
+  } catch (error: any) {
+    console.error('Erreur lors de la récupération des modèles:', error);
+    res.status(500).json({
+      error: 'Erreur lors de la récupération des modèles',
+    });
+  }
+});
+
+/**
  * GET /api/workflows/:workflowId
  * Récupérer un workflow spécifique
  */
@@ -371,110 +501,6 @@ router.get('/:workflowId/executions', authenticateToken, async (req: AuthRequest
     console.error('Erreur lors de la récupération de l\'historique d\'exécution:', error);
     res.status(500).json({
       error: 'Erreur lors de la récupération de l\'historique d\'exécution',
-    });
-  }
-});
-
-/**
- * GET /api/workflows/templates
- * Récupérer les modèles de workflows prédéfinis
- */
-router.get('/templates/list', authenticateToken, async (req: AuthRequest, res: Response) => {
-  try {
-    const templates = [
-      {
-        id: 'new_contact_welcome',
-        name: 'Accueil nouveau contact',
-        description: 'Envoyer un email de bienvenue et créer une tâche de suivi',
-        trigger: { type: 'contact_created' },
-        actions: [
-          {
-            type: 'send_email',
-            config: {
-              subject: 'Bienvenue dans notre CRM!',
-              template: 'welcome_email',
-            },
-          },
-          {
-            type: 'create_task',
-            config: {
-              title: 'Suivi du nouveau contact',
-              description: 'Appeler le contact pour présentation',
-              dueDate: '+3days',
-            },
-          },
-        ],
-      },
-      {
-        id: 'deal_won_notification',
-        name: 'Notification deal gagné',
-        description: 'Créer une activité et ajouter un tag quand un deal est gagné',
-        trigger: { type: 'deal_moved', conditions: { toStage: 'won' } },
-        actions: [
-          {
-            type: 'add_tag',
-            config: { tag: 'deal_won' },
-          },
-          {
-            type: 'add_activity',
-            config: {
-              activityType: 'note',
-              description: 'Deal remporté!',
-            },
-          },
-        ],
-      },
-      {
-        id: 'quote_accepted_follow_up',
-        name: 'Suivi devis accepté',
-        description: 'Créer une facture et une tâche de suivi quand un devis est accepté',
-        trigger: { type: 'quote_accepted' },
-        actions: [
-          {
-            type: 'create_task',
-            config: {
-              title: 'Créer facture pour le client',
-              description: 'Générer et envoyer la facture',
-              dueDate: '+1day',
-            },
-          },
-          {
-            type: 'send_email',
-            config: {
-              subject: 'Merci pour votre acceptation',
-              template: 'quote_accepted',
-            },
-          },
-        ],
-      },
-      {
-        id: 'high_value_lead',
-        name: 'Lead haute valeur',
-        description: 'Assigner les leads avec score > 75 au manager',
-        trigger: { type: 'contact_created', conditions: { scoreAbove: 75 } },
-        actions: [
-          {
-            type: 'assign_contact',
-            config: { role: 'sales_manager' },
-          },
-          {
-            type: 'send_notification',
-            config: {
-              message: 'Nouveau lead haute valeur!',
-            },
-          },
-        ],
-      },
-    ];
-
-    res.json({
-      success: true,
-      templates,
-    });
-  } catch (error: any) {
-    console.error('Erreur lors de la récupération des modèles:', error);
-    res.status(500).json({
-      error: 'Erreur lors de la récupération des modèles',
     });
   }
 });

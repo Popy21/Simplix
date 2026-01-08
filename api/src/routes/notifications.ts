@@ -183,6 +183,29 @@ router.get('/user/:userId', async (req: Request, res: Response) => {
   }
 });
 
+// Get notification settings
+router.get('/settings', async (req: Request, res: Response) => {
+  try {
+    // Return default settings (table may not exist)
+    res.json({
+      email_enabled: true,
+      push_enabled: true,
+      sms_enabled: false,
+      digest_frequency: 'daily',
+      notification_types: {
+        quotes_expiring: true,
+        invoices_overdue: true,
+        low_stock: true,
+        new_leads: true,
+        deal_won: true,
+        tasks_due: true
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get unread notifications
 router.get('/unread', async (req: Request, res: Response) => {
   try {

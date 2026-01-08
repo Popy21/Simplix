@@ -86,6 +86,40 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 });
 
 /**
+ * GET /api/invoices/next
+ * Récupérer le prochain numéro de facture
+ */
+router.get('/next', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const year = new Date().getFullYear();
+    const prefix = `FA-${year}-`;
+
+    const result = await pool.query(`
+      SELECT invoice_number FROM invoices
+      WHERE invoice_number LIKE $1
+      ORDER BY invoice_number DESC LIMIT 1
+    `, [`${prefix}%`]);
+
+    let nextNum = 1;
+    if (result.rows.length > 0) {
+      const match = result.rows[0].invoice_number.match(/FA-\d{4}-(\d+)/);
+      if (match) nextNum = parseInt(match[1]) + 1;
+    }
+
+    const nextNumber = `${prefix}${String(nextNum).padStart(5, '0')}`;
+
+    res.json({
+      next_number: nextNumber,
+      prefix: prefix,
+      sequence: nextNum
+    });
+  } catch (error: any) {
+    console.error('Erreur lors de la génération du numéro de facture:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/invoices/overdue
  * Récupérer toutes les factures en retard
  */

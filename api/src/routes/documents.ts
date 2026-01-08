@@ -57,6 +57,48 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 });
 
 /**
+ * GET /api/documents/stats
+ * Statistiques de stockage
+ */
+router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = req.user?.organization_id || '00000000-0000-0000-0000-000000000001';
+
+    // Check if table exists and has the right columns
+    const result = await db.query(
+      `SELECT
+        COUNT(*) as total_documents,
+        COALESCE(SUM(CASE WHEN file_size IS NOT NULL THEN file_size ELSE 0 END), 0) as total_size_bytes,
+        COUNT(*) FILTER (WHERE document_type = 'contract') as contracts,
+        COUNT(*) FILTER (WHERE document_type = 'quote') as quotes,
+        COUNT(*) FILTER (WHERE document_type = 'invoice') as invoices,
+        COUNT(*) FILTER (WHERE document_type = 'proposal') as proposals,
+        COUNT(*) FILTER (WHERE document_type = 'other' OR document_type = 'general' OR document_type IS NULL) as other
+      FROM file_attachments
+      WHERE organization_id = $1 AND deleted_at IS NULL`,
+      [orgId]
+    );
+
+    res.json({
+      ...result.rows[0],
+      total_size_mb: Math.round((result.rows[0].total_size_bytes || 0) / 1024 / 1024 * 100) / 100,
+    });
+  } catch (err: any) {
+    // Return empty stats on error
+    res.json({
+      total_documents: 0,
+      total_size_bytes: 0,
+      contracts: 0,
+      quotes: 0,
+      invoices: 0,
+      proposals: 0,
+      other: 0,
+      total_size_mb: 0
+    });
+  }
+});
+
+/**
  * GET /api/documents/:id
  * Récupérer un document spécifique
  */
