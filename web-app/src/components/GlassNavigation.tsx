@@ -17,7 +17,6 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { glassTheme } from '../theme/glassTheme';
-import GlassCard from './GlassCard';
 import {
   ChartIcon,
   TrendingUpIcon,
@@ -63,45 +62,45 @@ interface NavModule {
 // Tous les modules disponibles
 const ALL_MODULES: NavModule[] = [
   // Vue d'ensemble
-  { id: 'dashboard', name: 'Dashboard', label: 'Tableau de bord', icon: ChartIcon, gradient: ['#007AFF', '#5AC8FA'], category: 'Vue d\'ensemble' },
-  { id: 'analytics', name: 'Analytics', label: 'Analytics', icon: BarChartIcon, gradient: ['#5856D6', '#AF52DE'], category: 'Vue d\'ensemble' },
-  { id: 'pilotage', name: 'Pilotage', label: 'Pilotage', icon: PieChartIcon, gradient: ['#FF9500', '#FFCC00'], category: 'Vue d\'ensemble' },
+  { id: 'dashboard', name: 'Dashboard', label: 'Tableau de bord', icon: ChartIcon, gradient: ['#3b82f6', '#60a5fa'], category: 'Vue d\'ensemble' },
+  { id: 'analytics', name: 'Analytics', label: 'Analytics', icon: BarChartIcon, gradient: ['#8b5cf6', '#a78bfa'], category: 'Vue d\'ensemble' },
+  { id: 'pilotage', name: 'Pilotage', label: 'Pilotage', icon: PieChartIcon, gradient: ['#f59e0b', '#fbbf24'], category: 'Vue d\'ensemble' },
 
   // Ventes & CRM
-  { id: 'pipeline', name: 'Pipeline', label: 'Pipeline', icon: TrendingUpIcon, gradient: ['#5856D6', '#AF52DE'], category: 'Ventes & CRM' },
-  { id: 'contacts', name: 'Contacts', label: 'Contacts', icon: UsersIcon, gradient: ['#34C759', '#30D158'], category: 'Ventes & CRM' },
-  { id: 'deals', name: 'Deals', label: 'Affaires', icon: BriefcaseIcon, gradient: ['#007AFF', '#5AC8FA'], category: 'Ventes & CRM' },
-  { id: 'leads', name: 'Leads', label: 'Leads', icon: TargetIcon, gradient: ['#FF3B30', '#FF6B6B'], category: 'Ventes & CRM' },
+  { id: 'pipeline', name: 'Pipeline', label: 'Pipeline', icon: TrendingUpIcon, gradient: ['#8b5cf6', '#a78bfa'], category: 'Ventes & CRM' },
+  { id: 'contacts', name: 'Contacts', label: 'Contacts', icon: UsersIcon, gradient: ['#10b981', '#34d399'], category: 'Ventes & CRM' },
+  { id: 'deals', name: 'Deals', label: 'Affaires', icon: BriefcaseIcon, gradient: ['#3b82f6', '#60a5fa'], category: 'Ventes & CRM' },
+  { id: 'leads', name: 'Leads', label: 'Leads', icon: TargetIcon, gradient: ['#ef4444', '#f87171'], category: 'Ventes & CRM' },
 
   // Opérations
-  { id: 'tasks', name: 'Tasks', label: 'Tâches', icon: CheckCircleIcon, gradient: ['#FF9500', '#FFCC00'], category: 'Opérations' },
-  { id: 'sales', name: 'Sales', label: 'Ventes', icon: DollarIcon, gradient: ['#34C759', '#30D158'], category: 'Opérations' },
-  { id: 'invoices', name: 'Invoices', label: 'Factures', icon: FileTextIcon, gradient: ['#FF2D55', '#FF375F'], category: 'Opérations' },
-  { id: 'products', name: 'Products', label: 'Produits', icon: PackageIcon, gradient: ['#AF52DE', '#BF5AF2'], category: 'Opérations' },
+  { id: 'tasks', name: 'Tasks', label: 'Tâches', icon: CheckCircleIcon, gradient: ['#f59e0b', '#fbbf24'], category: 'Opérations' },
+  { id: 'sales', name: 'Sales', label: 'Ventes', icon: DollarIcon, gradient: ['#10b981', '#34d399'], category: 'Opérations' },
+  { id: 'invoices', name: 'Invoices', label: 'Factures', icon: FileTextIcon, gradient: ['#ec4899', '#f472b6'], category: 'Opérations' },
+  { id: 'products', name: 'Products', label: 'Produits', icon: PackageIcon, gradient: ['#a855f7', '#c084fc'], category: 'Opérations' },
 
   // Finance
-  { id: 'expenses', name: 'Expenses', label: 'Dépenses', icon: ShoppingCartIcon, gradient: ['#FF9500', '#FFCC00'], category: 'Finance' },
-  { id: 'suppliers', name: 'Suppliers', label: 'Fournisseurs', icon: TruckIcon, gradient: ['#8E8E93', '#AEAEB2'], category: 'Finance' },
-  { id: 'creditnotes', name: 'CreditNotes', label: 'Avoirs', icon: FileTextIcon, gradient: ['#FF3B30', '#FF6B6B'], category: 'Finance' },
-  { id: 'recurring', name: 'RecurringInvoices', label: 'Récurrences', icon: RepeatIcon, gradient: ['#5856D6', '#AF52DE'], category: 'Finance' },
-  { id: 'cashflow', name: 'Cashflow', label: 'Trésorerie', icon: TrendingUpIcon, gradient: ['#34C759', '#30D158'], category: 'Finance' },
-  { id: 'reconciliation', name: 'BankReconciliation', label: 'Rapprochement', icon: LayersIcon, gradient: ['#007AFF', '#5AC8FA'], category: 'Finance' },
-  { id: 'reminders', name: 'Reminders', label: 'Relances', icon: SendIcon, gradient: ['#FF9500', '#FFCC00'], category: 'Finance' },
-  { id: 'accounting', name: 'Accounting', label: 'Comptabilité', icon: BarChartIcon, gradient: ['#5856D6', '#AF52DE'], category: 'Finance' },
-  { id: 'reports', name: 'Reports', label: 'Rapports', icon: PieChartIcon, gradient: ['#007AFF', '#5AC8FA'], category: 'Finance' },
+  { id: 'expenses', name: 'Expenses', label: 'Dépenses', icon: ShoppingCartIcon, gradient: ['#f59e0b', '#fbbf24'], category: 'Finance' },
+  { id: 'suppliers', name: 'Suppliers', label: 'Fournisseurs', icon: TruckIcon, gradient: ['#6b7280', '#9ca3af'], category: 'Finance' },
+  { id: 'creditnotes', name: 'CreditNotes', label: 'Avoirs', icon: FileTextIcon, gradient: ['#ef4444', '#f87171'], category: 'Finance' },
+  { id: 'recurring', name: 'RecurringInvoices', label: 'Récurrences', icon: RepeatIcon, gradient: ['#8b5cf6', '#a78bfa'], category: 'Finance' },
+  { id: 'cashflow', name: 'Cashflow', label: 'Trésorerie', icon: TrendingUpIcon, gradient: ['#10b981', '#34d399'], category: 'Finance' },
+  { id: 'reconciliation', name: 'BankReconciliation', label: 'Rapprochement', icon: LayersIcon, gradient: ['#3b82f6', '#60a5fa'], category: 'Finance' },
+  { id: 'reminders', name: 'Reminders', label: 'Relances', icon: SendIcon, gradient: ['#f59e0b', '#fbbf24'], category: 'Finance' },
+  { id: 'accounting', name: 'Accounting', label: 'Comptabilité', icon: BarChartIcon, gradient: ['#8b5cf6', '#a78bfa'], category: 'Finance' },
+  { id: 'reports', name: 'Reports', label: 'Rapports', icon: PieChartIcon, gradient: ['#3b82f6', '#60a5fa'], category: 'Finance' },
 
   // Automatisation
-  { id: 'workflows', name: 'Workflows', label: 'Workflows', icon: RepeatIcon, gradient: ['#5AC8FA', '#007AFF'], category: 'Automatisation' },
-  { id: 'emails', name: 'Emails', label: 'Emails', icon: SendIcon, gradient: ['#34C759', '#30D158'], category: 'Automatisation' },
-  { id: 'documents', name: 'Documents', label: 'Documents', icon: FolderIcon, gradient: ['#007AFF', '#5AC8FA'], category: 'Automatisation' },
-  { id: 'templates', name: 'Templates', label: 'Templates', icon: CopyIcon, gradient: ['#AF52DE', '#BF5AF2'], category: 'Automatisation' },
+  { id: 'workflows', name: 'Workflows', label: 'Workflows', icon: RepeatIcon, gradient: ['#06b6d4', '#22d3ee'], category: 'Automatisation' },
+  { id: 'emails', name: 'Emails', label: 'Emails', icon: SendIcon, gradient: ['#10b981', '#34d399'], category: 'Automatisation' },
+  { id: 'documents', name: 'Documents', label: 'Documents', icon: FolderIcon, gradient: ['#3b82f6', '#60a5fa'], category: 'Automatisation' },
+  { id: 'templates', name: 'Templates', label: 'Templates', icon: CopyIcon, gradient: ['#a855f7', '#c084fc'], category: 'Automatisation' },
 
   // Configuration
-  { id: 'teams', name: 'Teams', label: 'Équipes', icon: UsersIcon, gradient: ['#5856D6', '#AF52DE'], category: 'Configuration' },
-  { id: 'profile', name: 'Profile', label: 'Profil', icon: SettingsIcon, gradient: ['#8E8E93', '#AEAEB2'], category: 'Configuration' },
+  { id: 'teams', name: 'Teams', label: 'Équipes', icon: UsersIcon, gradient: ['#8b5cf6', '#a78bfa'], category: 'Configuration' },
+  { id: 'profile', name: 'Profile', label: 'Profil', icon: SettingsIcon, gradient: ['#6b7280', '#9ca3af'], category: 'Configuration' },
 ];
 
-// Modules par défaut (comme épinglés sur iPhone)
+// Modules par défaut
 const DEFAULT_PINNED_MODULES = ['dashboard', 'pipeline', 'tasks', 'contacts', 'invoices', 'products'];
 
 export default function GlassNavigation() {
@@ -166,7 +165,6 @@ export default function GlassNavigation() {
   };
 
   const pinnedModules = ALL_MODULES.filter((m) => pinnedModuleIds.includes(m.id));
-
   const categories = ['Tous', ...Array.from(new Set(ALL_MODULES.map((m) => m.category)))];
   const filteredModules = selectedCategory === 'Tous'
     ? ALL_MODULES
@@ -176,7 +174,6 @@ export default function GlassNavigation() {
     const isActive = route.name === item.name;
     const Icon = item.icon;
     const isHovered = hoverIndex === index;
-    // Animation disabled to avoid React hooks violations when used in .map()
 
     const touchableProps: any = {
       key: item.id,
@@ -185,7 +182,6 @@ export default function GlassNavigation() {
       activeOpacity: 0.7,
     };
 
-    // Add mouse events only on web
     if (Platform.OS === 'web') {
       touchableProps.onMouseEnter = () => setHoverIndex(index);
       touchableProps.onMouseLeave = () => setHoverIndex(null);
@@ -238,58 +234,96 @@ export default function GlassNavigation() {
     );
   };
 
+  // ============================================
+  // MODAL PERSONNALISER - DESIGN PREMIUM
+  // ============================================
   const renderCustomizeModal = () => (
     <Modal
       visible={customizeModalVisible}
-      animationType="slide"
+      animationType="fade"
       transparent
       onRequestClose={() => setCustomizeModalVisible(false)}
     >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
+      <View style={modalStyles.overlay}>
+        {/* Ambient background effects */}
+        {isWeb && (
+          <>
+            <View style={modalStyles.ambientOrb1} />
+            <View style={modalStyles.ambientOrb2} />
+            <View style={modalStyles.ambientOrb3} />
+          </>
+        )}
+
+        <View style={modalStyles.container}>
+          {/* Glass effect layer */}
+          <View style={modalStyles.glassLayer} />
+
           {/* Header */}
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Personnaliser la navigation</Text>
+          <View style={modalStyles.header}>
+            <View style={modalStyles.headerLeft}>
+              <View style={modalStyles.headerIcon}>
+                <SettingsIcon size={24} color="#a78bfa" />
+              </View>
+              <View>
+                <Text style={modalStyles.title}>Personnaliser</Text>
+                <Text style={modalStyles.subtitle}>Gérez vos modules favoris</Text>
+              </View>
+            </View>
             <TouchableOpacity
               onPress={() => setCustomizeModalVisible(false)}
-              style={styles.closeButton}
+              style={modalStyles.closeButton}
+              activeOpacity={0.7}
             >
-              <Text style={styles.closeButtonText}>×</Text>
+              <Text style={modalStyles.closeIcon}>×</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Categories */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.categoriesScroll}
-            contentContainerStyle={styles.categoriesContent}
-          >
-            {categories.map((category) => (
-              <TouchableOpacity
-                key={category}
-                onPress={() => setSelectedCategory(category)}
-                style={[
-                  styles.categoryChip,
-                  selectedCategory === category && styles.categoryChipActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    selectedCategory === category && styles.categoryChipTextActive,
-                  ]}
-                >
-                  {category}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {/* Categories Pills */}
+          <View style={modalStyles.categoriesWrapper}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={modalStyles.categoriesContent}
+            >
+              {categories.map((category) => {
+                const isSelected = selectedCategory === category;
+                return (
+                  <TouchableOpacity
+                    key={category}
+                    onPress={() => setSelectedCategory(category)}
+                    style={[
+                      modalStyles.categoryPill,
+                      isSelected && modalStyles.categoryPillActive,
+                    ]}
+                    activeOpacity={0.7}
+                  >
+                    {isSelected && (
+                      <LinearGradient
+                        colors={['#8b5cf6', '#a855f7']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={StyleSheet.absoluteFill}
+                      />
+                    )}
+                    <Text
+                      style={[
+                        modalStyles.categoryText,
+                        isSelected && modalStyles.categoryTextActive,
+                      ]}
+                    >
+                      {category}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
 
           {/* Modules Grid */}
           <ScrollView
-            style={styles.modulesScroll}
-            contentContainerStyle={styles.modulesGrid}
+            style={modalStyles.modulesScroll}
+            contentContainerStyle={modalStyles.modulesGrid}
+            showsVerticalScrollIndicator={false}
           >
             {filteredModules.map((module) => {
               const isPinned = pinnedModuleIds.includes(module.id);
@@ -300,34 +334,56 @@ export default function GlassNavigation() {
                   key={module.id}
                   onPress={() => toggleModule(module.id)}
                   style={[
-                    styles.moduleCard,
-                    isPinned && styles.moduleCardPinned,
+                    modalStyles.moduleCard,
+                    isPinned && modalStyles.moduleCardActive,
                   ]}
                   activeOpacity={0.8}
                 >
-                  <LinearGradient
-                    colors={module.gradient as [string, string]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
+                  {/* Background gradient for active */}
+                  {isPinned && (
+                    <LinearGradient
+                      colors={[module.gradient[0] + '30', module.gradient[1] + '10']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                    />
+                  )}
 
-                  <View
-                    style={[
-                      styles.moduleIcon,
-                      { backgroundColor: module.gradient[0] + '20' },
-                    ]}
-                  >
-                    <Icon size={24} color={module.gradient[0]} />
+                  {/* Icon container */}
+                  <View style={[
+                    modalStyles.moduleIconWrapper,
+                    { backgroundColor: module.gradient[0] + '20' }
+                  ]}>
+                    <LinearGradient
+                      colors={module.gradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={modalStyles.moduleIconGradient}
+                    >
+                      <Icon size={22} color="#FFFFFF" />
+                    </LinearGradient>
                   </View>
 
-                  <Text style={styles.moduleLabel} numberOfLines={1}>
+                  {/* Label */}
+                  <Text style={modalStyles.moduleLabel} numberOfLines={1}>
                     {module.label}
                   </Text>
 
+                  {/* Category tag */}
+                  <Text style={modalStyles.moduleCategory} numberOfLines={1}>
+                    {module.category}
+                  </Text>
+
+                  {/* Pinned indicator */}
                   {isPinned && (
-                    <View style={styles.pinnedIndicator}>
-                      <View style={styles.pinnedDot} />
+                    <View style={modalStyles.pinnedBadge}>
+                      <LinearGradient
+                        colors={['#10b981', '#34d399']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={StyleSheet.absoluteFill}
+                      />
+                      <Text style={modalStyles.pinnedBadgeText}>✓</Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -336,15 +392,20 @@ export default function GlassNavigation() {
           </ScrollView>
 
           {/* Footer */}
-          <View style={styles.modalFooter}>
-            <Text style={styles.footerText}>
-              {pinnedModuleIds.length} modules épinglés
-            </Text>
+          <View style={modalStyles.footer}>
+            <View style={modalStyles.footerInfo}>
+              <View style={modalStyles.footerBadge}>
+                <Text style={modalStyles.footerBadgeText}>{pinnedModuleIds.length}</Text>
+              </View>
+              <Text style={modalStyles.footerText}>modules épinglés</Text>
+            </View>
+
             <TouchableOpacity
               onPress={() => savePinnedModules(DEFAULT_PINNED_MODULES)}
-              style={styles.resetButton}
+              style={modalStyles.resetButton}
+              activeOpacity={0.7}
             >
-              <Text style={styles.resetButtonText}>Réinitialiser</Text>
+              <Text style={modalStyles.resetButtonText}>Réinitialiser</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -362,16 +423,14 @@ export default function GlassNavigation() {
         />
       ) : (
         <View
-          // @ts-ignore - className and web styles
           {...(Platform.OS === 'web' && {
-            className: 'glass-blur-bg',
             style: {
               position: 'absolute',
               top: 0,
               left: 0,
               right: 0,
               bottom: 0,
-              backgroundColor: glassTheme.glass.frosted.backgroundColor,
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
               backdropFilter: 'blur(40px) saturate(180%)',
               WebkitBackdropFilter: 'blur(40px) saturate(180%)',
               borderRadius: 0,
@@ -379,9 +438,7 @@ export default function GlassNavigation() {
           })}
           style={Platform.OS !== 'web' ? [
             StyleSheet.absoluteFill,
-            {
-              backgroundColor: glassTheme.glass.frosted.backgroundColor,
-            },
+            { backgroundColor: 'rgba(255, 255, 255, 0.95)' },
           ] : undefined}
         />
       )}
@@ -395,7 +452,7 @@ export default function GlassNavigation() {
             activeOpacity={0.8}
           >
             <LinearGradient
-              colors={['#007AFF', '#5AC8FA']}
+              colors={['#3b82f6', '#60a5fa']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.homeButtonGradient}
@@ -426,7 +483,7 @@ export default function GlassNavigation() {
             activeOpacity={0.8}
           >
             <View style={styles.customizeButtonContent}>
-              <SettingsIcon size={20} color={glassTheme.colors.text.secondary} />
+              <SettingsIcon size={20} color="#8b5cf6" />
               {isExpanded && (
                 <Text style={styles.customizeButtonText}>Personnaliser</Text>
               )}
@@ -440,9 +497,12 @@ export default function GlassNavigation() {
             activeOpacity={0.8}
           >
             <View style={styles.profileContent}>
-              <View style={styles.profileAvatar}>
+              <LinearGradient
+                colors={['#8b5cf6', '#a855f7']}
+                style={styles.profileAvatar}
+              >
                 <UserIcon size={18} color="#FFFFFF" />
-              </View>
+              </LinearGradient>
               {isExpanded && (
                 <View style={styles.profileInfo}>
                   <Text style={styles.profileName} numberOfLines={1}>
@@ -472,19 +532,350 @@ export default function GlassNavigation() {
   );
 }
 
+// ============================================
+// STYLES MODAL - GLASSMORPHISME PREMIUM
+// ============================================
+const modalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    ...(isWeb ? {
+      backgroundColor: 'rgba(15, 23, 42, 0.8)',
+      backdropFilter: 'blur(12px)',
+    } : {
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    }),
+  },
+
+  // Ambient orbs
+  ambientOrb1: {
+    position: 'absolute',
+    width: 400,
+    height: 400,
+    borderRadius: 200,
+    top: '10%',
+    left: '-10%',
+    ...(isWeb ? {
+      background: 'radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, transparent 70%)',
+      animation: 'float 8s ease-in-out infinite',
+    } : {}),
+  },
+  ambientOrb2: {
+    position: 'absolute',
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    bottom: '10%',
+    right: '-5%',
+    ...(isWeb ? {
+      background: 'radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, transparent 70%)',
+      animation: 'float 10s ease-in-out infinite reverse',
+    } : {}),
+  },
+  ambientOrb3: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    top: '50%',
+    right: '20%',
+    ...(isWeb ? {
+      background: 'radial-gradient(circle, rgba(236, 72, 153, 0.2) 0%, transparent 70%)',
+      animation: 'float 12s ease-in-out infinite',
+    } : {}),
+  },
+
+  container: {
+    width: '100%',
+    maxWidth: 700,
+    maxHeight: '85%',
+    borderRadius: 28,
+    overflow: 'hidden',
+    position: 'relative',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(30, 41, 59, 0.7)',
+      backdropFilter: 'blur(40px) saturate(180%)',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      boxShadow: `
+        0 25px 50px -12px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1)
+      `,
+    } : {
+      backgroundColor: 'rgba(30, 41, 59, 0.95)',
+    }),
+  },
+
+  glassLayer: {
+    ...StyleSheet.absoluteFillObject,
+    ...(isWeb ? {
+      background: `
+        linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%),
+        linear-gradient(225deg, rgba(139,92,246,0.1) 0%, transparent 50%)
+      `,
+    } : {}),
+  },
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  headerIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(139, 92, 246, 0.15)',
+      border: '1px solid rgba(139, 92, 246, 0.2)',
+    } : {
+      backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    }),
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#f8fafc',
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      transition: 'all 0.2s ease',
+    } : {
+      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    }),
+  },
+  closeIcon: {
+    fontSize: 28,
+    color: '#94a3b8',
+    fontWeight: '300',
+    lineHeight: 28,
+  },
+
+  // Categories
+  categoriesWrapper: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  categoriesContent: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    gap: 10,
+  },
+  categoryPill: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 100,
+    overflow: 'hidden',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.06)',
+      border: '1px solid rgba(255, 255, 255, 0.08)',
+      transition: 'all 0.2s ease',
+    } : {
+      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    }),
+  },
+  categoryPillActive: {
+    ...(isWeb ? {
+      boxShadow: '0 4px 15px rgba(139, 92, 246, 0.4)',
+      border: '1px solid rgba(139, 92, 246, 0.5)',
+    } : {}),
+  },
+  categoryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#94a3b8',
+  },
+  categoryTextActive: {
+    color: '#FFFFFF',
+  },
+
+  // Modules Grid
+  modulesScroll: {
+    flex: 1,
+  },
+  modulesGrid: {
+    padding: 24,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  moduleCard: {
+    width: '30%',
+    minWidth: 150,
+    aspectRatio: 1,
+    borderRadius: 20,
+    padding: 16,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(255, 255, 255, 0.04)',
+      border: '1px solid rgba(255, 255, 255, 0.08)',
+      transition: 'all 0.3s ease',
+      cursor: 'pointer',
+    } : {
+      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.1)',
+    }),
+  },
+  moduleCardActive: {
+    ...(isWeb ? {
+      border: '1px solid rgba(139, 92, 246, 0.4)',
+      boxShadow: '0 8px 25px rgba(139, 92, 246, 0.2)',
+      transform: [{ scale: 1.02 }],
+    } : {
+      borderColor: 'rgba(139, 92, 246, 0.5)',
+    }),
+  },
+  moduleIconWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  moduleIconGradient: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moduleLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#f1f5f9',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  moduleCategory: {
+    fontSize: 11,
+    color: '#64748b',
+    textAlign: 'center',
+  },
+  pinnedBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pinnedBadgeText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // Footer
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingHorizontal: 24,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    } : {}),
+  },
+  footerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  footerBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(139, 92, 246, 0.2)',
+      border: '1px solid rgba(139, 92, 246, 0.3)',
+    } : {
+      backgroundColor: 'rgba(139, 92, 246, 0.3)',
+    }),
+  },
+  footerBadgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#a78bfa',
+  },
+  footerText: {
+    fontSize: 14,
+    color: '#94a3b8',
+  },
+  resetButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    ...(isWeb ? {
+      backgroundColor: 'rgba(239, 68, 68, 0.15)',
+      border: '1px solid rgba(239, 68, 68, 0.2)',
+      transition: 'all 0.2s ease',
+    } : {
+      backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    }),
+  },
+  resetButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#f87171',
+  },
+});
+
+// ============================================
+// STYLES NAVIGATION PRINCIPALE
+// ============================================
 const styles = StyleSheet.create({
   container: {
     width: NAV_WIDTH,
     height: '100%',
     overflow: 'hidden',
     ...(isWeb ? {
-      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+      backgroundColor: 'rgba(255, 255, 255, 0.08)',
       backdropFilter: 'blur(24px) saturate(180%)',
       borderRight: '1px solid rgba(255, 255, 255, 0.1)',
-      boxShadow: '4px 0 30px rgba(0, 0, 0, 0.05)',
+      boxShadow: '4px 0 30px rgba(0, 0, 0, 0.1)',
     } : {
       borderRightWidth: 1,
       borderRightColor: 'rgba(0, 0, 0, 0.06)',
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
     }),
   },
   containerCollapsed: {
@@ -492,13 +883,13 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingVertical: glassTheme.spacing.md,
+    paddingVertical: 16,
   },
 
   // Header
   header: {
-    paddingHorizontal: glassTheme.spacing.md,
-    marginBottom: glassTheme.spacing.lg,
+    paddingHorizontal: 16,
+    marginBottom: 24,
   },
   homeButton: {
     borderRadius: 12,
@@ -510,10 +901,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    gap: glassTheme.spacing.sm,
+    gap: 10,
   },
   homeButtonText: {
-    ...glassTheme.typography.body,
+    fontSize: 15,
     color: '#FFFFFF',
     fontWeight: '600',
   },
@@ -523,7 +914,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   navListContent: {
-    paddingHorizontal: glassTheme.spacing.sm,
+    paddingHorizontal: 8,
     gap: 4,
   },
   navItem: {
@@ -536,10 +927,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 10,
     overflow: 'hidden',
-    gap: glassTheme.spacing.sm,
+    gap: 10,
   },
   navItemActive: {
-    backgroundColor: glassTheme.colors.primary,
+    backgroundColor: '#3b82f6',
   },
   navItemHover: {
     backgroundColor: 'rgba(0, 0, 0, 0.03)',
@@ -551,8 +942,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   navLabel: {
-    ...glassTheme.typography.body,
-    color: glassTheme.colors.text.primary,
+    fontSize: 14,
+    color: '#374151',
     fontWeight: '500',
     flex: 1,
   },
@@ -561,7 +952,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   badge: {
-    backgroundColor: glassTheme.colors.error,
+    backgroundColor: '#ef4444',
     minWidth: 20,
     height: 20,
     borderRadius: 10,
@@ -570,34 +961,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   badgeText: {
-    ...glassTheme.typography.caption,
-    color: '#FFFFFF',
     fontSize: 11,
+    color: '#FFFFFF',
     fontWeight: '700',
   },
 
   // Footer
   footer: {
-    paddingHorizontal: glassTheme.spacing.md,
-    paddingTop: glassTheme.spacing.md,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0, 0, 0, 0.06)',
-    gap: glassTheme.spacing.sm,
+    gap: 8,
   },
   customizeButton: {
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    backgroundColor: 'rgba(139, 92, 246, 0.08)',
   },
   customizeButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: glassTheme.spacing.sm,
+    gap: 10,
   },
   customizeButtonText: {
-    ...glassTheme.typography.bodySmall,
-    color: glassTheme.colors.text.secondary,
+    fontSize: 14,
+    color: '#8b5cf6',
     fontWeight: '500',
   },
   profileButton: {
@@ -608,13 +998,12 @@ const styles = StyleSheet.create({
   profileContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: glassTheme.spacing.sm,
+    gap: 10,
   },
   profileAvatar: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: glassTheme.colors.primary,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -622,240 +1011,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   profileName: {
-    ...glassTheme.typography.bodySmall,
-    color: glassTheme.colors.text.primary,
+    fontSize: 14,
+    color: '#1f2937',
     fontWeight: '600',
   },
   profileRole: {
-    ...glassTheme.typography.caption,
-    color: glassTheme.colors.text.tertiary,
     fontSize: 11,
+    color: '#9ca3af',
   },
   logoutButton: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    borderRadius: 10,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'flex-start',
   },
   logoutText: {
     fontSize: 24,
-    color: glassTheme.colors.error,
+    color: '#ef4444',
     fontWeight: '300',
     lineHeight: 24,
-  },
-
-  // Modal - Transparent Glass Effect
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: glassTheme.spacing.lg,
-    ...(isWeb ? {
-      backgroundColor: 'rgba(0, 0, 0, 0.3)',
-      backdropFilter: 'blur(8px)',
-    } : {
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    }),
-  },
-  modalContainer: {
-    width: '100%',
-    maxWidth: 600,
-    maxHeight: '80%',
-    borderRadius: 24,
-    overflow: 'hidden',
-    ...(isWeb ? {
-      backgroundColor: 'rgba(255, 255, 255, 0.25)',
-      backdropFilter: 'blur(40px) saturate(180%)',
-      border: '1px solid rgba(255, 255, 255, 0.2)',
-      boxShadow: `
-        0 25px 50px rgba(0, 0, 0, 0.15),
-        0 10px 20px rgba(0, 0, 0, 0.1),
-        inset 0 1px 1px rgba(255, 255, 255, 0.4)
-      `,
-    } : {
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    }),
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: glassTheme.spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.15)',
-    ...(isWeb ? {
-      backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    } : {}),
-  },
-  modalTitle: {
-    ...glassTheme.typography.h1,
-    color: glassTheme.colors.text.primary,
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...(isWeb ? {
-      backgroundColor: 'rgba(255, 255, 255, 0.2)',
-      backdropFilter: 'blur(10px)',
-    } : {
-      backgroundColor: 'rgba(0, 0, 0, 0.05)',
-    }),
-  },
-  closeButtonText: {
-    fontSize: 24,
-    color: glassTheme.colors.text.secondary,
-    fontWeight: '300',
-    lineHeight: 24,
-  },
-
-  // Categories - Glass chips
-  categoriesScroll: {
-    maxHeight: 50,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-    ...(isWeb ? {
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    } : {}),
-  },
-  categoriesContent: {
-    paddingHorizontal: glassTheme.spacing.lg,
-    paddingVertical: glassTheme.spacing.sm,
-    gap: glassTheme.spacing.sm,
-  },
-  categoryChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    ...(isWeb ? {
-      backgroundColor: 'rgba(255, 255, 255, 0.15)',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
-    } : {
-      backgroundColor: 'rgba(0, 0, 0, 0.04)',
-    }),
-  },
-  categoryChipActive: {
-    ...(isWeb ? {
-      backgroundColor: 'rgba(0, 122, 255, 0.8)',
-      boxShadow: '0 4px 12px rgba(0, 122, 255, 0.3)',
-    } : {
-      backgroundColor: glassTheme.colors.primary,
-    }),
-  },
-  categoryChipText: {
-    ...glassTheme.typography.bodySmall,
-    color: glassTheme.colors.text.secondary,
-    fontWeight: '500',
-  },
-  categoryChipTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-
-  // Modules Grid - Glass Cards
-  modulesScroll: {
-    flex: 1,
-    ...(isWeb ? {
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    } : {}),
-  },
-  modulesGrid: {
-    padding: glassTheme.spacing.lg,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: glassTheme.spacing.md,
-  },
-  moduleCard: {
-    width: '31%',
-    aspectRatio: 1,
-    borderRadius: 16,
-    padding: glassTheme.spacing.md,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...(isWeb ? {
-      backgroundColor: 'rgba(255, 255, 255, 0.15)',
-      backdropFilter: 'blur(10px)',
-      border: '1px solid rgba(255, 255, 255, 0.15)',
-      boxShadow: '0 4px 15px rgba(0, 0, 0, 0.08)',
-      transition: 'all 0.3s ease',
-    } : {
-      borderWidth: 2,
-      borderColor: 'rgba(0, 0, 0, 0.06)',
-    }),
-  },
-  moduleCardPinned: {
-    ...(isWeb ? {
-      borderColor: 'rgba(0, 122, 255, 0.5)',
-      border: '2px solid rgba(0, 122, 255, 0.5)',
-      boxShadow: '0 4px 20px rgba(0, 122, 255, 0.2)',
-    } : {
-      borderColor: glassTheme.colors.primary,
-      borderWidth: 2,
-    }),
-  },
-  moduleIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: glassTheme.spacing.sm,
-  },
-  moduleLabel: {
-    ...glassTheme.typography.bodySmall,
-    color: glassTheme.colors.text.primary,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  pinnedIndicator: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-  },
-  pinnedDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: glassTheme.colors.primary,
-  },
-
-  // Modal Footer - Glass
-  modalFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: glassTheme.spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-    ...(isWeb ? {
-      backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    } : {}),
-  },
-  footerText: {
-    ...glassTheme.typography.body,
-    color: glassTheme.colors.text.tertiary,
-  },
-  resetButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    ...(isWeb ? {
-      backgroundColor: 'rgba(0, 122, 255, 0.2)',
-      backdropFilter: 'blur(10px)',
-      border: '1px solid rgba(0, 122, 255, 0.2)',
-    } : {
-      backgroundColor: 'rgba(0, 122, 255, 0.1)',
-    }),
-  },
-  resetButtonText: {
-    ...glassTheme.typography.bodySmall,
-    color: glassTheme.colors.primary,
-    fontWeight: '600',
   },
 });
