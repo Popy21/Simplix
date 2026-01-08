@@ -505,15 +505,7 @@ export default function GlassHomeScreen({ navigation }: HomeScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    ...(isWeb ? {
-      background: `
-        radial-gradient(at 20% 20%, rgba(99, 102, 241, 0.2) 0px, transparent 50%),
-        radial-gradient(at 80% 10%, rgba(236, 72, 153, 0.15) 0px, transparent 50%),
-        radial-gradient(at 10% 80%, rgba(6, 182, 212, 0.12) 0px, transparent 50%),
-        radial-gradient(at 90% 90%, rgba(139, 92, 246, 0.12) 0px, transparent 50%),
-        linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 50%, #f5f0ff 100%)
-      `,
-    } : {}),
+    // Dark theme - background handled by GlassLayout
   },
   scrollView: {
     flex: 1,
@@ -523,40 +515,46 @@ const styles = StyleSheet.create({
     paddingTop: isMobile ? responsiveSpacing.md : (Platform.OS === 'ios' ? 60 : 24),
   },
 
-  // Header - Glass effect
+  // Header - Dark glass effect
   header: {
     marginBottom: responsiveSpacing.lg,
     ...(isWeb ? {
       padding: 24,
       borderRadius: 24,
-      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+      backgroundColor: 'rgba(30, 41, 59, 0.6)',
       backdropFilter: 'blur(30px) saturate(200%)',
       WebkitBackdropFilter: 'blur(30px) saturate(200%)',
-      border: '1px solid rgba(255, 255, 255, 0.25)',
-      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.4)',
-    } : {}),
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.1)',
+    } : {
+      backgroundColor: 'rgba(30, 41, 59, 0.8)',
+      padding: 20,
+      borderRadius: 20,
+    }),
   },
   title: {
     fontSize: responsiveFontSizes.displayMedium,
     fontWeight: '700',
-    color: glassTheme.colors.text.primary,
+    color: '#f8fafc',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: responsiveFontSizes.body,
-    color: glassTheme.colors.text.tertiary,
+    color: '#94a3b8',
   },
 
-  // Stats Card - Glass effect
+  // Stats Card - Dark glass effect
   statsCard: {
     marginBottom: glassTheme.spacing.xl,
     ...(isWeb ? {
-      backgroundColor: 'rgba(255, 255, 255, 0.12)',
+      backgroundColor: 'rgba(30, 41, 59, 0.6)',
       backdropFilter: 'blur(30px) saturate(200%)',
       WebkitBackdropFilter: 'blur(30px) saturate(200%)',
-      border: '1px solid rgba(255, 255, 255, 0.2)',
-      boxShadow: '0 12px 40px rgba(0, 102, 255, 0.08), inset 0 1px 1px rgba(255, 255, 255, 0.3)',
-    } : {}),
+      border: '1px solid rgba(255, 255, 255, 0.08)',
+      boxShadow: '0 12px 40px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05)',
+    } : {
+      backgroundColor: 'rgba(30, 41, 59, 0.8)',
+    }),
   },
   statsContent: {
     flexDirection: 'row',
@@ -570,48 +568,53 @@ const styles = StyleSheet.create({
     ...(isWeb ? {
       padding: 12,
       borderRadius: 16,
-      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+      backgroundColor: 'rgba(255, 255, 255, 0.05)',
       backdropFilter: 'blur(10px)',
       margin: 4,
     } : {}),
   },
   statValue: {
     ...glassTheme.typography.displaySmall,
-    color: glassTheme.colors.primary,
+    color: '#818cf8',
     marginBottom: 4,
   },
   statLabel: {
     ...glassTheme.typography.caption,
-    color: glassTheme.colors.text.tertiary,
+    color: '#94a3b8',
   },
   statDivider: {
     width: 1,
     height: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    ...(isWeb ? {
-      boxShadow: '0 0 8px rgba(255, 255, 255, 0.5)',
-    } : {}),
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
 
-  // Categories - Glass container
+  // Categories - Dark glass container
   categoriesContainer: {
     gap: glassTheme.spacing.lg,
     ...(isWeb ? {
       padding: 16,
       borderRadius: 28,
-      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+      backgroundColor: 'rgba(30, 41, 59, 0.4)',
       backdropFilter: 'blur(20px) saturate(180%)',
       WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-      border: '1px solid rgba(255, 255, 255, 0.15)',
-    } : {}),
+      border: '1px solid rgba(255, 255, 255, 0.08)',
+    } : {
+      backgroundColor: 'rgba(30, 41, 59, 0.6)',
+      borderRadius: 24,
+      padding: 12,
+    }),
   },
   categoryWrapper: {
     gap: glassTheme.spacing.sm,
     ...(isWeb ? {
       padding: 8,
       borderRadius: 20,
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    } : {}),
+      backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    } : {
+      backgroundColor: 'rgba(255, 255, 255, 0.02)',
+      borderRadius: 16,
+      padding: 8,
+    }),
   },
 
   // Category Header
@@ -646,31 +649,35 @@ const styles = StyleSheet.create({
   },
   categoryTitle: {
     ...glassTheme.typography.h2,
-    color: glassTheme.colors.text.primary,
+    color: '#f8fafc',
     marginBottom: 2,
   },
   categorySubtitle: {
     ...glassTheme.typography.caption,
-    color: glassTheme.colors.text.tertiary,
+    color: '#64748b',
   },
   chevron: {
     marginRight: 10,
   },
   chevronText: {
     fontSize: 12,
-    color: glassTheme.colors.text.tertiary,
+    color: '#64748b',
   },
 
-  // Category Items - Glass container
+  // Category Items - Dark glass container
   categoryItems: {
     gap: glassTheme.spacing.sm,
     paddingLeft: glassTheme.spacing.md,
     ...(isWeb ? {
       padding: 12,
       borderRadius: 16,
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+      backgroundColor: 'rgba(255, 255, 255, 0.02)',
       backdropFilter: 'blur(10px)',
-    } : {}),
+    } : {
+      backgroundColor: 'rgba(255, 255, 255, 0.02)',
+      borderRadius: 12,
+      padding: 8,
+    }),
   },
 
   // Menu Item - Glass hover effect
@@ -715,12 +722,12 @@ const styles = StyleSheet.create({
   },
   menuItemTitle: {
     ...glassTheme.typography.bodyLarge,
-    color: glassTheme.colors.text.primary,
+    color: '#f8fafc',
     fontWeight: '600',
   },
   menuItemSubtitle: {
     ...glassTheme.typography.caption,
-    color: glassTheme.colors.text.tertiary,
+    color: '#64748b',
   },
   menuItemRight: {
     flexDirection: 'row',
@@ -765,7 +772,7 @@ const styles = StyleSheet.create({
   },
   arrow: {
     fontSize: 18,
-    color: glassTheme.colors.text.tertiary,
+    color: '#64748b',
     ...(isWeb ? {
       transition: 'transform 0.2s ease',
     } : {}),

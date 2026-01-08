@@ -11,9 +11,9 @@ const SIDEBAR_EXPANDED = 280;
 const SIDEBAR_COLLAPSED = 78;
 const BOTTOM_NAV_HEIGHT = 72 + (Platform.OS === 'ios' ? 34 : 0);
 
-// Inject premium global CSS for dark theme
+// Inject premium global CSS
 if (isWeb && typeof document !== 'undefined') {
-  const styleId = 'liquid-glass-global-styles';
+  const styleId = 'liquid-glass-layout-styles';
   if (!document.getElementById(styleId)) {
     const style = document.createElement('style');
     style.id = styleId;
@@ -25,15 +25,13 @@ if (isWeb && typeof document !== 'undefined') {
         -moz-osx-font-smoothing: grayscale;
       }
 
-      html, body, #root {
+      body {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
         min-height: 100vh;
-        margin: 0;
-        padding: 0;
       }
 
-      /* Custom scrollbar */
+      /* Custom scrollbar for the whole app */
       ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
@@ -49,62 +47,52 @@ if (isWeb && typeof document !== 'undefined') {
         background: rgba(255, 255, 255, 0.2);
       }
 
-      /* Smooth layout transitions */
+      /* Smooth transitions for layout */
       .liquid-main-content {
         transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
-      /* Ambient animations */
+      /* Background animated gradient */
+      @keyframes backgroundShift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+
+      .liquid-background-animated {
+        background-size: 400% 400%;
+        animation: backgroundShift 30s ease infinite;
+      }
+
+      /* Ambient glow effects */
       @keyframes ambientGlow1 {
         0%, 100% { opacity: 0.3; transform: translate(0, 0) scale(1); }
         50% { opacity: 0.5; transform: translate(30px, -20px) scale(1.2); }
       }
+
       @keyframes ambientGlow2 {
         0%, 100% { opacity: 0.2; transform: translate(0, 0) scale(1); }
         50% { opacity: 0.4; transform: translate(-40px, 30px) scale(1.1); }
       }
-      .ambient-glow-1 { animation: ambientGlow1 15s ease-in-out infinite; }
-      .ambient-glow-2 { animation: ambientGlow2 20s ease-in-out infinite; }
+
+      .ambient-glow-1 {
+        animation: ambientGlow1 15s ease-in-out infinite;
+      }
+
+      .ambient-glow-2 {
+        animation: ambientGlow2 20s ease-in-out infinite;
+      }
     `;
     document.head.appendChild(style);
   }
 }
 
-interface GlassLayoutProps {
+interface LiquidGlassLayoutProps {
   children: ReactNode;
   hideNavigation?: boolean;
 }
 
-// Background layer with animated gradients
-function BackgroundLayer() {
-  return (
-    <View style={styles.backgroundContainer}>
-      <LinearGradient
-        colors={['#0f172a', '#1e293b', '#0f172a']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <View
-        style={[styles.ambientOrb, styles.ambientOrb1]}
-        // @ts-ignore
-        {...(isWeb && { className: 'ambient-glow-1' })}
-      />
-      <View
-        style={[styles.ambientOrb, styles.ambientOrb2]}
-        // @ts-ignore
-        {...(isWeb && { className: 'ambient-glow-2' })}
-      />
-      <View
-        style={[styles.ambientOrb, styles.ambientOrb3]}
-        // @ts-ignore
-        {...(isWeb && { className: 'ambient-glow-1' })}
-      />
-    </View>
-  );
-}
-
-export default function GlassLayout({ children, hideNavigation = false }: GlassLayoutProps) {
+export default function LiquidGlassLayout({ children, hideNavigation = false }: LiquidGlassLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const sidebarWidth = sidebarCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED;
 
@@ -132,9 +120,13 @@ export default function GlassLayout({ children, hideNavigation = false }: GlassL
   return (
     <View style={styles.container}>
       <BackgroundLayer />
+
+      {/* Sidebar */}
       <View style={[styles.sidebar, { width: sidebarWidth }]}>
         <LiquidGlassSidebar onCollapse={setSidebarCollapsed} />
       </View>
+
+      {/* Main content */}
       <View
         style={[styles.content, { marginLeft: sidebarWidth }]}
         // @ts-ignore
@@ -142,6 +134,40 @@ export default function GlassLayout({ children, hideNavigation = false }: GlassL
       >
         {children}
       </View>
+    </View>
+  );
+}
+
+// Background layer with animated gradients
+function BackgroundLayer() {
+  return (
+    <View style={styles.backgroundContainer}>
+      {/* Base gradient */}
+      <LinearGradient
+        colors={['#0f172a', '#1e293b', '#0f172a']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* Ambient glow orbs */}
+      <View
+        style={[styles.ambientOrb, styles.ambientOrb1]}
+        // @ts-ignore
+        {...(isWeb && { className: 'ambient-glow-1' })}
+      />
+      <View
+        style={[styles.ambientOrb, styles.ambientOrb2]}
+        // @ts-ignore
+        {...(isWeb && { className: 'ambient-glow-2' })}
+      />
+      <View
+        style={[styles.ambientOrb, styles.ambientOrb3]}
+        // @ts-ignore
+        {...(isWeb && { className: 'ambient-glow-1' })}
+      />
+
+      {/* Subtle noise texture overlay - web only */}
     </View>
   );
 }
@@ -201,6 +227,7 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
   },
+  // Mobile styles
   mobileContainer: {
     flex: 1,
     position: 'relative',
