@@ -74,6 +74,56 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 });
 
 /**
+ * GET /api/permissions/roles
+ * Récupérer tous les rôles
+ */
+router.get('/roles', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    // Check if roles table exists
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'roles'
+      )
+    `);
+
+    if (!tableCheck.rows[0].exists) {
+      // Return default roles if table doesn't exist
+      return res.json({
+        success: true,
+        roles: [
+          { id: 1, name: 'admin', description: 'Administrateur avec tous les droits', permissions_count: 10 },
+          { id: 2, name: 'manager', description: 'Manager avec droits de gestion', permissions_count: 7 },
+          { id: 3, name: 'user', description: 'Utilisateur standard', permissions_count: 4 },
+          { id: 4, name: 'viewer', description: 'Accès en lecture seule', permissions_count: 2 }
+        ],
+        total: 4,
+      });
+    }
+
+    const result = await pool.query(`
+      SELECT r.id, r.name, r.description, r.created_at,
+             COUNT(rp.permission_id) as permissions_count
+      FROM roles r
+      LEFT JOIN role_permissions rp ON r.id = rp.role_id
+      GROUP BY r.id, r.name, r.description, r.created_at
+      ORDER BY r.name
+    `);
+
+    res.json({
+      success: true,
+      roles: result.rows,
+      total: result.rows.length,
+    });
+  } catch (error: any) {
+    console.error('Erreur lors de la récupération des rôles:', error);
+    res.status(500).json({
+      error: 'Erreur lors de la récupération des rôles',
+    });
+  }
+});
+
+/**
  * POST /api/permissions
  * Créer une nouvelle permission
  */

@@ -405,4 +405,97 @@ router.get('/rates', authenticateToken, async (req: AuthRequest, res: Response) 
   });
 });
 
+// ==========================================
+// DÉCLARATION TVA
+// ==========================================
+
+// Récupérer la déclaration TVA pour une période
+router.get('/declaration', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+    const { period, year, month, quarter } = req.query;
+
+    // Determine date range based on parameters
+    let startDate: string;
+    let endDate: string;
+
+    if (period) {
+      const [y, m] = (period as string).split('-');
+      startDate = `${y}-${m.padStart(2, '0')}-01`;
+      endDate = new Date(parseInt(y), parseInt(m), 0).toISOString().split('T')[0];
+    } else if (year && quarter) {
+      const q = parseInt(quarter as string);
+      const startMonth = (q - 1) * 3 + 1;
+      startDate = `${year}-${String(startMonth).padStart(2, '0')}-01`;
+      endDate = new Date(parseInt(year as string), startMonth + 2, 0).toISOString().split('T')[0];
+    } else if (year && month) {
+      startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      endDate = new Date(parseInt(year as string), parseInt(month as string), 0).toISOString().split('T')[0];
+    } else {
+      // Default to current month
+      const now = new Date();
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+    }
+
+    // TVA collectée (ventes)
+    const salesResult = await db.query(`
+      SELECT
+        COALESCE(ii.vat_rate, 20) as taux,
+        SUM(ii.subtotal) as base_ht,
+        SUM(COALESCE(ii.vat_amount, ii.subtotal * COALESCE(ii.vat_rate, 20) / 100)) as tva_collectee
+      FROM invoice_items ii
+      JOIN invoices i ON ii.invoice_id = i.id
+      WHERE i.invoice_date >= $1 AND i.invoice_date <= $2
+        AND i.status NOT IN ('draft', 'cancelled')
+        AND i.deleted_at IS NULL
+        AND ($3::UUID IS NULL OR i.organization_id = $3)
+      GROUP BY ii.vat_rate
+      ORDER BY ii.vat_rate DESC
+    `, [startDate, endDate, organizationId]);
+
+    // TVA déductible (achats)
+    const purchasesResult = await db.query(`
+      SELECT
+        COALESCE(e.vat_rate, 20) as taux,
+        SUM(e.amount) as base_ht,
+        SUM(COALESCE(e.tax_amount, e.amount * COALESCE(e.vat_rate, 20) / 100)) as tva_deductible
+      FROM expenses e
+      WHERE e.expense_date >= $1 AND e.expense_date <= $2
+        AND e.status NOT IN ('draft', 'cancelled')
+        AND e.deleted_at IS NULL
+        AND ($3::UUID IS NULL OR e.organization_id = $3)
+      GROUP BY e.vat_rate
+      ORDER BY e.vat_rate DESC
+    `, [startDate, endDate, organizationId]);
+
+    // Calculate totals
+    const totalCollected = salesResult.rows.reduce((sum: number, row: any) =>
+      sum + parseFloat(row.tva_collectee || 0), 0);
+    const totalDeductible = purchasesResult.rows.reduce((sum: number, row: any) =>
+      sum + parseFloat(row.tva_deductible || 0), 0);
+    const netVat = totalCollected - totalDeductible;
+
+    res.json({
+      period: { start: startDate, end: endDate },
+      tva_collectee: {
+        by_rate: salesResult.rows,
+        total: totalCollected
+      },
+      tva_deductible: {
+        by_rate: purchasesResult.rows,
+        total: totalDeductible
+      },
+      net_vat: netVat,
+      to_pay: netVat > 0 ? netVat : 0,
+      credit: netVat < 0 ? Math.abs(netVat) : 0,
+      status: netVat > 0 ? 'TVA à payer' : netVat < 0 ? 'Crédit de TVA' : 'Neutre',
+      declaration_type: quarter ? 'CA3 Trimestrielle' : 'CA3 Mensuelle'
+    });
+  } catch (err: any) {
+    console.error('Error generating VAT declaration:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

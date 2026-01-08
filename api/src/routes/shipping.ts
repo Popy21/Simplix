@@ -243,4 +243,79 @@ router.post('/calculate', authenticateToken, async (req: AuthRequest, res: Respo
   }
 });
 
+// ==========================================
+// ZONES DE LIVRAISON
+// ==========================================
+
+// GET /zones - Liste des zones de livraison
+router.get('/zones', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+
+    // Check if shipping_zones table exists
+    const tableCheck = await db.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'shipping_zones'
+      )
+    `);
+
+    if (!tableCheck.rows[0].exists) {
+      // Return default zones if table doesn't exist
+      return res.json({
+        zones: [
+          { id: 1, name: 'France métropolitaine', countries: ['FR'], is_active: true },
+          { id: 2, name: 'Union Européenne', countries: ['DE', 'ES', 'IT', 'BE', 'NL', 'PT', 'AT', 'PL'], is_active: true },
+          { id: 3, name: 'International', countries: ['*'], is_active: true }
+        ],
+        total: 3
+      });
+    }
+
+    const result = await db.query(`
+      SELECT * FROM shipping_zones
+      WHERE organization_id = $1 AND is_active = true
+      ORDER BY name
+    `, [organizationId]);
+
+    res.json({
+      zones: result.rows,
+      total: result.rows.length
+    });
+  } catch (err: any) {
+    console.error('Error fetching shipping zones:', err);
+    // Return default zones on error
+    res.json({
+      zones: [
+        { id: 1, name: 'France métropolitaine', countries: ['FR'], is_active: true },
+        { id: 2, name: 'Union Européenne', countries: ['DE', 'ES', 'IT', 'BE', 'NL'], is_active: true },
+        { id: 3, name: 'International', countries: ['*'], is_active: true }
+      ],
+      total: 3
+    });
+  }
+});
+
+// POST /zones - Créer une zone de livraison
+router.post('/zones', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+    const { name, countries, rate_id, min_order, free_above, is_active } = req.body;
+
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+
+    const result = await db.query(`
+      INSERT INTO shipping_zones (organization_id, name, countries, rate_id, min_order, free_above, is_active)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *
+    `, [organizationId, name, countries || [], rate_id, min_order, free_above, is_active !== false]);
+
+    res.status(201).json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

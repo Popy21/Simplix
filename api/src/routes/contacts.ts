@@ -112,6 +112,133 @@ router.get('/deleted', authenticateToken, requireOrganization, async (req: AuthR
   }
 });
 
+// Import contacts from CSV/Excel
+router.post('/import', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+    const userId = req.user?.id;
+    const { contacts, mapping } = req.body;
+
+    if (!contacts || !Array.isArray(contacts)) {
+      return res.status(400).json({ error: 'contacts array is required' });
+    }
+
+    const imported = [];
+    const errors = [];
+
+    for (let i = 0; i < contacts.length; i++) {
+      const contact = contacts[i];
+      try {
+        const result = await pool.query(
+          `INSERT INTO contacts (
+            organization_id, first_name, last_name, email, phone, type, source, created_by
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          RETURNING id`,
+          [
+            orgId,
+            contact.first_name || contact.firstName || '',
+            contact.last_name || contact.lastName || '',
+            contact.email || '',
+            contact.phone || '',
+            contact.type || 'lead',
+            'import',
+            userId
+          ]
+        );
+        imported.push(result.rows[0]);
+      } catch (err: any) {
+        errors.push({ row: i + 1, error: err.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      imported: imported.length,
+      errors: errors.length,
+      details: { imported, errors }
+    });
+  } catch (err: any) {
+    console.error('Error importing contacts:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Find duplicate contacts
+router.get('/deduplicate', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+
+    const result = await pool.query(`
+      SELECT
+        c1.id as contact_id,
+        c1.first_name,
+        c1.last_name,
+        c1.email,
+        c1.phone,
+        c2.id as duplicate_id,
+        c2.first_name as dup_first_name,
+        c2.last_name as dup_last_name,
+        c2.email as dup_email,
+        CASE
+          WHEN c1.email = c2.email THEN 'email'
+          WHEN c1.phone = c2.phone THEN 'phone'
+          WHEN c1.first_name = c2.first_name AND c1.last_name = c2.last_name THEN 'name'
+        END as match_type
+      FROM contacts c1
+      JOIN contacts c2 ON c1.id < c2.id
+        AND c1.organization_id = c2.organization_id
+        AND (
+          (c1.email IS NOT NULL AND c1.email = c2.email) OR
+          (c1.phone IS NOT NULL AND c1.phone = c2.phone) OR
+          (c1.first_name = c2.first_name AND c1.last_name = c2.last_name)
+        )
+      WHERE c1.organization_id = $1
+        AND c1.deleted_at IS NULL
+        AND c2.deleted_at IS NULL
+      ORDER BY c1.email, c1.phone
+      LIMIT 100
+    `, [orgId]);
+
+    res.json({
+      duplicates: result.rows,
+      total: result.rows.length
+    });
+  } catch (err: any) {
+    console.error('Error finding duplicates:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Merge duplicate contacts
+router.post('/deduplicate', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+    const { primary_id, duplicate_ids } = req.body;
+
+    if (!primary_id || !duplicate_ids || !Array.isArray(duplicate_ids)) {
+      return res.status(400).json({ error: 'primary_id and duplicate_ids array are required' });
+    }
+
+    // Soft delete duplicates
+    const result = await pool.query(
+      `UPDATE contacts
+       SET deleted_at = NOW()
+       WHERE id = ANY($1) AND organization_id = $2 AND deleted_at IS NULL
+       RETURNING id`,
+      [duplicate_ids, orgId]
+    );
+
+    res.json({
+      success: true,
+      merged: result.rows.length,
+      primary_id
+    });
+  } catch (err: any) {
+    console.error('Error merging contacts:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get contact statistics
 router.get('/stats', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {

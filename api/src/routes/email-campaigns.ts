@@ -419,6 +419,82 @@ router.get('/logs', authenticateToken, requireOrganization, async (req: AuthRequ
 });
 
 // ========================================
+// CAMPAIGN STATISTICS
+// ========================================
+
+// GET /api/email-campaigns/stats - Get global email campaign statistics
+router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id;
+
+    // Get campaign statistics
+    const campaignStats = await db.query(`
+      SELECT
+        COUNT(*) as total_campaigns,
+        COUNT(*) FILTER (WHERE status = 'sent') as sent_campaigns,
+        COUNT(*) FILTER (WHERE status = 'draft') as draft_campaigns,
+        COUNT(*) FILTER (WHERE status = 'scheduled') as scheduled_campaigns,
+        COALESCE(SUM(sent_count), 0) as total_emails_sent,
+        COALESCE(SUM(open_count), 0) as total_opens,
+        COALESCE(SUM(click_count), 0) as total_clicks,
+        COALESCE(SUM(bounce_count), 0) as total_bounces,
+        COALESCE(SUM(unsubscribe_count), 0) as total_unsubscribes
+      FROM email_campaigns
+      WHERE organization_id = $1
+    `, [organizationId]);
+
+    const stats = campaignStats.rows[0];
+
+    // Calculate rates
+    const totalSent = parseInt(stats.total_emails_sent) || 1; // Avoid division by zero
+    const openRate = ((parseInt(stats.total_opens) / totalSent) * 100).toFixed(2);
+    const clickRate = ((parseInt(stats.total_clicks) / totalSent) * 100).toFixed(2);
+    const bounceRate = ((parseInt(stats.total_bounces) / totalSent) * 100).toFixed(2);
+
+    // Get recent campaigns performance
+    const recentCampaigns = await db.query(`
+      SELECT
+        id, name, subject, status,
+        sent_count, open_count, click_count, bounce_count,
+        sent_at, created_at,
+        CASE WHEN sent_count > 0 THEN
+          ROUND((open_count::numeric / sent_count) * 100, 2)
+        ELSE 0 END as open_rate,
+        CASE WHEN sent_count > 0 THEN
+          ROUND((click_count::numeric / sent_count) * 100, 2)
+        ELSE 0 END as click_rate
+      FROM email_campaigns
+      WHERE organization_id = $1 AND status = 'sent'
+      ORDER BY sent_at DESC
+      LIMIT 5
+    `, [organizationId]);
+
+    res.json({
+      summary: {
+        total_campaigns: parseInt(stats.total_campaigns),
+        sent_campaigns: parseInt(stats.sent_campaigns),
+        draft_campaigns: parseInt(stats.draft_campaigns),
+        scheduled_campaigns: parseInt(stats.scheduled_campaigns),
+        total_emails_sent: parseInt(stats.total_emails_sent),
+        total_opens: parseInt(stats.total_opens),
+        total_clicks: parseInt(stats.total_clicks),
+        total_bounces: parseInt(stats.total_bounces),
+        total_unsubscribes: parseInt(stats.total_unsubscribes)
+      },
+      rates: {
+        open_rate: parseFloat(openRate),
+        click_rate: parseFloat(clickRate),
+        bounce_rate: parseFloat(bounceRate)
+      },
+      recent_campaigns: recentCampaigns.rows
+    });
+  } catch (error: any) {
+    console.error('Error fetching campaign stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================================
 // HELPER FUNCTIONS
 // ========================================
 

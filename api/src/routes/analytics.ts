@@ -802,4 +802,176 @@ router.get('/contacts', async (req: Request, res: Response) => {
   }
 });
 
+// Leads analytics
+router.get('/leads', async (req: Request, res: Response) => {
+  try {
+    const leadsStats = await db.query(`
+      SELECT
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE type = 'lead') as new_leads,
+        COUNT(*) FILTER (WHERE type = 'prospect') as prospects,
+        COUNT(*) FILTER (WHERE type = 'customer') as converted,
+        COUNT(*) FILTER (WHERE score >= 70) as hot_leads,
+        COUNT(*) FILTER (WHERE score < 30) as cold_leads,
+        AVG(score)::numeric(10,2) as avg_score,
+        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days') as new_this_week,
+        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days') as new_this_month
+      FROM contacts
+      WHERE deleted_at IS NULL
+    `);
+
+    const bySource = await db.query(`
+      SELECT
+        source,
+        COUNT(*) as count,
+        AVG(score)::numeric(10,2) as avg_score
+      FROM contacts
+      WHERE deleted_at IS NULL AND source IS NOT NULL
+      GROUP BY source
+      ORDER BY count DESC
+    `);
+
+    const conversionFunnel = await db.query(`
+      SELECT
+        type,
+        COUNT(*) as count
+      FROM contacts
+      WHERE deleted_at IS NULL
+      GROUP BY type
+      ORDER BY
+        CASE type
+          WHEN 'lead' THEN 1
+          WHEN 'prospect' THEN 2
+          WHEN 'customer' THEN 3
+          ELSE 4
+        END
+    `);
+
+    res.json({
+      summary: leadsStats.rows[0],
+      by_source: bySource.rows,
+      funnel: conversionFunnel.rows
+    });
+  } catch (err: any) {
+    console.error('Error fetching leads analytics:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Pipeline analytics
+router.get('/pipeline', async (req: Request, res: Response) => {
+  try {
+    const pipelineStats = await db.query(`
+      SELECT
+        COUNT(*) as total_deals,
+        COUNT(*) FILTER (WHERE status = 'won') as won_deals,
+        COUNT(*) FILTER (WHERE status = 'lost') as lost_deals,
+        COUNT(*) FILTER (WHERE status = 'open' OR status IS NULL) as open_deals,
+        COALESCE(SUM(value), 0) as total_value,
+        COALESCE(SUM(value) FILTER (WHERE status = 'won'), 0) as won_value,
+        COALESCE(SUM(value) FILTER (WHERE status = 'open' OR status IS NULL), 0) as open_value,
+        COALESCE(AVG(value), 0) as average_deal_value,
+        ROUND(
+          COUNT(*) FILTER (WHERE status = 'won')::numeric /
+          NULLIF(COUNT(*) FILTER (WHERE status IN ('won', 'lost')), 0) * 100,
+          2
+        ) as win_rate
+      FROM deals
+      WHERE deleted_at IS NULL
+    `);
+
+    const byStage = await db.query(`
+      SELECT
+        ps.id as stage_id,
+        ps.name as stage_name,
+        ps.color as stage_color,
+        COUNT(d.id) as deal_count,
+        COALESCE(SUM(d.value), 0) as stage_value,
+        COALESCE(AVG(d.value), 0) as avg_deal_value
+      FROM pipeline_stages ps
+      LEFT JOIN deals d ON d.stage_id = ps.id AND d.deleted_at IS NULL
+      GROUP BY ps.id, ps.name, ps.color
+      ORDER BY ps.display_order
+    `);
+
+    const monthlyTrend = await db.query(`
+      SELECT
+        DATE_TRUNC('month', created_at) as month,
+        COUNT(*) as deals_created,
+        COUNT(*) FILTER (WHERE status = 'won') as deals_won,
+        COALESCE(SUM(value) FILTER (WHERE status = 'won'), 0) as revenue
+      FROM deals
+      WHERE deleted_at IS NULL AND created_at >= NOW() - INTERVAL '12 months'
+      GROUP BY DATE_TRUNC('month', created_at)
+      ORDER BY month DESC
+    `);
+
+    res.json({
+      summary: pipelineStats.rows[0],
+      by_stage: byStage.rows,
+      monthly_trend: monthlyTrend.rows
+    });
+  } catch (err: any) {
+    console.error('Error fetching pipeline analytics:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Products analytics
+router.get('/products', async (req: Request, res: Response) => {
+  try {
+    const productsStats = await db.query(`
+      SELECT
+        COUNT(*) as total_products,
+        COUNT(*) FILTER (WHERE is_active = true OR deleted_at IS NULL) as active_products,
+        COUNT(*) FILTER (WHERE stock_quantity <= 0) as out_of_stock,
+        COUNT(*) FILTER (WHERE stock_quantity > 0 AND stock_quantity <= COALESCE(stock_min_alert, 5)) as low_stock,
+        COALESCE(SUM(stock_quantity * COALESCE(cost_price, price * 0.7)), 0) as inventory_value,
+        COALESCE(AVG(price), 0) as avg_price
+      FROM products
+      WHERE deleted_at IS NULL
+    `);
+
+    const topSelling = await db.query(`
+      SELECT
+        p.id,
+        p.name,
+        p.sku,
+        p.price,
+        COUNT(ii.id) as times_sold,
+        COALESCE(SUM(ii.quantity), 0) as total_quantity,
+        COALESCE(SUM(ii.quantity * ii.unit_price), 0) as total_revenue
+      FROM products p
+      LEFT JOIN invoice_items ii ON p.id = ii.product_id
+      LEFT JOIN invoices i ON ii.invoice_id = i.id AND i.status = 'paid'
+      WHERE p.deleted_at IS NULL
+      GROUP BY p.id, p.name, p.sku, p.price
+      ORDER BY total_revenue DESC
+      LIMIT 10
+    `);
+
+    const byCategory = await db.query(`
+      SELECT
+        COALESCE(pc.name, 'Non catégorisé') as category_name,
+        COUNT(p.id) as product_count,
+        COALESCE(SUM(p.stock_quantity), 0) as total_stock,
+        COALESCE(AVG(p.price), 0) as avg_price
+      FROM products p
+      LEFT JOIN product_categories pc ON p.category_id = pc.id
+      WHERE p.deleted_at IS NULL
+      GROUP BY pc.name
+      ORDER BY product_count DESC
+    `);
+
+    res.json({
+      summary: productsStats.rows[0],
+      top_selling: topSelling.rows,
+      by_category: byCategory.rows
+    });
+  } catch (err: any) {
+    console.error('Error fetching products analytics:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

@@ -94,6 +94,29 @@ router.post('/payment-methods', authenticateToken, requireOrganization, async (r
 });
 
 /**
+ * GET /api/stripe/payment-methods
+ * Get all payment methods for the organization
+ */
+router.get('/payment-methods', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = req.user!.organization_id!;
+
+    const result = await db.query(`
+      SELECT pm.*, c.name as customer_name, c.email as customer_email
+      FROM payment_methods pm
+      LEFT JOIN customers c ON pm.customer_id = c.id
+      WHERE pm.organization_id = $1
+      ORDER BY pm.created_at DESC
+    `, [orgId]);
+
+    res.json(result.rows);
+  } catch (error: any) {
+    console.error('Error fetching payment methods:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/stripe/payment-methods/:customer_id
  * Get all payment methods for a customer
  */

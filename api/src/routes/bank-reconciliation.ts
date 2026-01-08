@@ -781,4 +781,168 @@ router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) 
   }
 });
 
+// ==========================================
+// DIRECT BANK ENDPOINTS (aliases)
+// ==========================================
+
+// GET /transactions - List all bank transactions
+router.get('/transactions', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id || '00000000-0000-0000-0000-000000000001';
+    const { status, from_date, to_date, page = 1, limit = 50 } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    let query = `
+      SELECT bt.*,
+        ba.name as account_name,
+        ba.bank_name,
+        i.invoice_number as matched_invoice_number,
+        e.reference as matched_expense_reference
+      FROM bank_transactions bt
+      LEFT JOIN bank_accounts ba ON bt.bank_account_id = ba.id
+      LEFT JOIN invoices i ON bt.matched_invoice_id = i.id
+      LEFT JOIN expenses e ON bt.matched_expense_id = e.id
+      WHERE ($1::UUID IS NULL OR bt.organization_id = $1)
+    `;
+    const params: any[] = [organizationId];
+
+    if (status) {
+      if (status === 'pending') {
+        query += ` AND NOT bt.is_reconciled`;
+      } else if (status === 'matched') {
+        query += ` AND bt.is_reconciled`;
+      }
+    }
+
+    if (from_date) {
+      params.push(from_date);
+      query += ` AND bt.transaction_date >= $${params.length}`;
+    }
+
+    if (to_date) {
+      params.push(to_date);
+      query += ` AND bt.transaction_date <= $${params.length}`;
+    }
+
+    query += ' ORDER BY bt.transaction_date DESC, bt.id DESC';
+    query += ` LIMIT ${limit} OFFSET ${offset}`;
+
+    const result = await db.query(query, params);
+
+    const countResult = await db.query(`
+      SELECT COUNT(*) as total FROM bank_transactions
+      WHERE ($1::UUID IS NULL OR organization_id = $1)
+    `, [organizationId]);
+
+    res.json({
+      data: result.rows,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: parseInt(countResult.rows[0].total),
+        pages: Math.ceil(parseInt(countResult.rows[0].total) / Number(limit))
+      }
+    });
+  } catch (err: any) {
+    console.error('Error fetching transactions:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /import/ofx - Import OFX bank statement
+router.post('/import/ofx', authenticateToken, upload.single('file'), async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id || '00000000-0000-0000-0000-000000000001';
+    const userId = req.user?.id;
+    const { account_id } = req.body;
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'Fichier OFX requis' });
+    }
+
+    const content = req.file.buffer.toString('utf-8');
+    const transactions: any[] = [];
+
+    // Basic OFX parsing (simplified)
+    const stmtTrnRegex = /<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi;
+    let match;
+
+    while ((match = stmtTrnRegex.exec(content)) !== null) {
+      const txnBlock = match[1];
+
+      const getTagValue = (tag: string) => {
+        const tagRegex = new RegExp(`<${tag}>([^<\\n]+)`, 'i');
+        const m = txnBlock.match(tagRegex);
+        return m ? m[1].trim() : null;
+      };
+
+      const dtPosted = getTagValue('DTPOSTED');
+      const trnAmt = getTagValue('TRNAMT');
+      const name = getTagValue('NAME');
+      const memo = getTagValue('MEMO');
+      const fitId = getTagValue('FITID');
+      const trnType = getTagValue('TRNTYPE');
+
+      if (dtPosted && trnAmt) {
+        let transactionDate = null;
+        if (dtPosted.length >= 8) {
+          const year = dtPosted.substring(0, 4);
+          const month = dtPosted.substring(4, 6);
+          const day = dtPosted.substring(6, 8);
+          transactionDate = `${year}-${month}-${day}`;
+        }
+
+        transactions.push({
+          transaction_date: transactionDate,
+          amount: parseFloat(trnAmt),
+          description: name || memo || 'Transaction OFX',
+          reference: fitId,
+          type: parseFloat(trnAmt) >= 0 ? 'credit' : 'debit'
+        });
+      }
+    }
+
+    if (transactions.length === 0) {
+      return res.status(400).json({ error: 'Aucune transaction trouvée dans le fichier OFX' });
+    }
+
+    // Insert transactions
+    let imported = 0;
+    const errors = [];
+
+    for (const txn of transactions) {
+      try {
+        await db.query(`
+          INSERT INTO bank_transactions (
+            bank_account_id, organization_id, transaction_date, amount, type,
+            description, reference, status, source
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', 'ofx_import')
+        `, [
+          account_id || null,
+          organizationId,
+          txn.transaction_date,
+          txn.amount,
+          txn.type,
+          txn.description,
+          txn.reference
+        ]);
+        imported++;
+      } catch (e: any) {
+        errors.push({ transaction: txn, error: e.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `${imported} transactions importées`,
+      imported,
+      errors: errors.length,
+      error_details: errors.slice(0, 10)
+    });
+  } catch (err: any) {
+    console.error('Error importing OFX:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

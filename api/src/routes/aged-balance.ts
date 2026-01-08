@@ -520,4 +520,66 @@ router.get('/receivables/export', authenticateToken, async (req: AuthRequest, re
   }
 });
 
+// Alias for suppliers (same as payables)
+router.get('/suppliers', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+    const { as_of_date } = req.query;
+
+    const referenceDate = as_of_date || new Date().toISOString().split('T')[0];
+
+    const result = await db.query(`
+      SELECT
+        e.supplier_id,
+        s.name as supplier_name,
+        s.email as supplier_email,
+        COUNT(*) as expense_count,
+        SUM(e.amount) as total_amount,
+        SUM(CASE WHEN e.due_date >= $1::DATE OR e.due_date IS NULL THEN e.amount ELSE 0 END) as not_due,
+        SUM(CASE WHEN e.due_date < $1::DATE AND $1::DATE - e.due_date::DATE <= 30 THEN e.amount ELSE 0 END) as days_1_30,
+        SUM(CASE WHEN e.due_date < $1::DATE AND $1::DATE - e.due_date::DATE > 30 AND $1::DATE - e.due_date::DATE <= 60 THEN e.amount ELSE 0 END) as days_31_60,
+        SUM(CASE WHEN e.due_date < $1::DATE AND $1::DATE - e.due_date::DATE > 60 AND $1::DATE - e.due_date::DATE <= 90 THEN e.amount ELSE 0 END) as days_61_90,
+        SUM(CASE WHEN e.due_date < $1::DATE AND $1::DATE - e.due_date::DATE > 90 THEN e.amount ELSE 0 END) as days_over_90
+      FROM expenses e
+      LEFT JOIN suppliers s ON e.supplier_id = s.id
+      WHERE e.deleted_at IS NULL
+        AND e.status != 'paid'
+        AND ($2::UUID IS NULL OR e.organization_id = $2)
+      GROUP BY e.supplier_id, s.name, s.email
+      HAVING SUM(e.amount) > 0
+      ORDER BY SUM(e.amount) DESC
+    `, [referenceDate, organizationId]);
+
+    const totals = {
+      total_suppliers: result.rows.length,
+      total_expenses: 0,
+      total_amount: 0,
+      not_due: 0,
+      days_1_30: 0,
+      days_31_60: 0,
+      days_61_90: 0,
+      days_over_90: 0
+    };
+
+    result.rows.forEach(row => {
+      totals.total_expenses += parseInt(row.expense_count);
+      totals.total_amount += parseFloat(row.total_amount);
+      totals.not_due += parseFloat(row.not_due);
+      totals.days_1_30 += parseFloat(row.days_1_30);
+      totals.days_31_60 += parseFloat(row.days_31_60);
+      totals.days_61_90 += parseFloat(row.days_61_90);
+      totals.days_over_90 += parseFloat(row.days_over_90);
+    });
+
+    res.json({
+      as_of_date: referenceDate,
+      totals,
+      suppliers: result.rows
+    });
+  } catch (err: any) {
+    console.error('Error fetching supplier balances:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

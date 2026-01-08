@@ -624,4 +624,110 @@ router.get('/public/:slug/reviews', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================================================
+// SHOWCASE CONFIG & ROOT
+// ============================================================================
+
+// GET / - Get showcase overview
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id;
+
+    // Get profile with stats
+    const profileResult = await pool.query(`
+      SELECT
+        sp.*,
+        (SELECT COUNT(*) FROM showcase_posts WHERE showcase_profile_id = sp.id AND deleted_at IS NULL) as posts_count,
+        (SELECT COUNT(*) FROM showcase_reviews WHERE showcase_profile_id = sp.id AND deleted_at IS NULL) as reviews_count
+      FROM showcase_profiles sp
+      WHERE sp.organization_id = $1 AND sp.deleted_at IS NULL
+    `, [organizationId]);
+
+    if (profileResult.rows.length === 0) {
+      return res.json({
+        has_profile: false,
+        message: 'No showcase profile configured'
+      });
+    }
+
+    const profile = profileResult.rows[0];
+
+    // Get recent posts
+    const postsResult = await pool.query(`
+      SELECT id, title, post_type, media_urls, is_featured, views_count, likes_count, created_at
+      FROM showcase_posts
+      WHERE showcase_profile_id = $1 AND deleted_at IS NULL
+      ORDER BY created_at DESC
+      LIMIT 5
+    `, [profile.id]);
+
+    res.json({
+      has_profile: true,
+      profile: {
+        id: profile.id,
+        display_name: profile.display_name,
+        custom_slug: profile.custom_slug,
+        is_published: profile.is_published,
+        total_views: profile.total_views,
+        average_rating: profile.average_rating,
+        posts_count: parseInt(profile.posts_count),
+        reviews_count: parseInt(profile.reviews_count)
+      },
+      recent_posts: postsResult.rows
+    });
+  } catch (error: any) {
+    console.error('Error fetching showcase overview:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /config - Get showcase configuration
+router.get('/config', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id;
+
+    const result = await pool.query(`
+      SELECT
+        id,
+        display_name,
+        custom_slug,
+        theme,
+        primary_color,
+        secondary_color,
+        font_family,
+        seo_title,
+        seo_description,
+        is_published,
+        show_reviews,
+        show_contact_button,
+        allow_direct_purchase
+      FROM showcase_profiles
+      WHERE organization_id = $1 AND deleted_at IS NULL
+    `, [organizationId]);
+
+    if (result.rows.length === 0) {
+      return res.json({
+        configured: false,
+        config: {
+          theme: 'default',
+          primary_color: '#4f46e5',
+          secondary_color: '#10b981',
+          font_family: 'Inter',
+          show_reviews: true,
+          show_contact_button: true,
+          allow_direct_purchase: false
+        }
+      });
+    }
+
+    res.json({
+      configured: true,
+      config: result.rows[0]
+    });
+  } catch (error: any) {
+    console.error('Error fetching showcase config:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

@@ -149,6 +149,65 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 });
 
 /**
+ * POST /api/leads
+ * Create a new lead
+ */
+router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = req.user?.organization_id || '00000000-0000-0000-0000-000000000001';
+    const userId = req.user?.id;
+    const {
+      first_name,
+      last_name,
+      email,
+      phone,
+      company_name,
+      company_id,
+      source,
+      notes,
+      linkedin_url,
+      twitter_url,
+      owner_id
+    } = req.body;
+
+    if (!first_name && !last_name && !email) {
+      return res.status(400).json({ error: 'At least first_name, last_name, or email is required' });
+    }
+
+    // Calculate initial score
+    let score = 0;
+    if (email) score += 10;
+    if (phone) score += 10;
+    if (company_name || company_id) score += 15;
+    if (linkedin_url) score += 20;
+    if (source) {
+      const sourceScores: { [key: string]: number } = { referral: 25, direct: 20, organic: 15, paid: 10, other: 5 };
+      score += sourceScores[source] || 5;
+    }
+    score += 10; // Base score for being a new lead
+
+    const result = await db.query(
+      `INSERT INTO contacts (
+        organization_id, first_name, last_name, email, phone,
+        company_id, type, source, notes, linkedin_url, twitter_url,
+        owner_id, score, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, 'lead', $7, $8, $9, $10, $11, $12, $13)
+      RETURNING *`,
+      [
+        orgId, first_name, last_name, email, phone,
+        company_id, source || 'other', notes, linkedin_url, twitter_url,
+        owner_id || userId, score, userId
+      ]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err: any) {
+    console.error('Error creating lead:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/leads/stats/by-source
  * Statistiques par source
  */

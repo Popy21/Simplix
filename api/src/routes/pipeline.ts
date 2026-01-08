@@ -37,6 +37,51 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// Get pipeline statistics
+router.get('/stats', async (req: Request, res: Response) => {
+  try {
+    const result = await db.query(`
+      SELECT
+        COUNT(*) as total_deals,
+        COUNT(*) FILTER (WHERE status = 'won') as won_deals,
+        COUNT(*) FILTER (WHERE status = 'lost') as lost_deals,
+        COUNT(*) FILTER (WHERE status = 'open' OR status IS NULL) as open_deals,
+        COALESCE(SUM(value), 0) as total_value,
+        COALESCE(SUM(value) FILTER (WHERE status = 'won'), 0) as won_value,
+        COALESCE(SUM(value) FILTER (WHERE status = 'open' OR status IS NULL), 0) as open_value,
+        COALESCE(AVG(value), 0) as average_deal_value,
+        ROUND(
+          COUNT(*) FILTER (WHERE status = 'won')::numeric /
+          NULLIF(COUNT(*) FILTER (WHERE status IN ('won', 'lost')), 0) * 100,
+          2
+        ) as win_rate
+      FROM deals
+      WHERE deleted_at IS NULL
+    `);
+
+    const stageStats = await db.query(`
+      SELECT
+        ps.id as stage_id,
+        ps.name as stage_name,
+        ps.color as stage_color,
+        COUNT(d.id) as deal_count,
+        COALESCE(SUM(d.value), 0) as stage_value
+      FROM pipeline_stages ps
+      LEFT JOIN deals d ON d.stage_id = ps.id AND d.deleted_at IS NULL
+      GROUP BY ps.id, ps.name, ps.color
+      ORDER BY ps.display_order
+    `);
+
+    res.json({
+      summary: result.rows[0],
+      by_stage: stageStats.rows
+    });
+  } catch (err: any) {
+    console.error('Error fetching pipeline stats:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ========== PIPELINE STAGES ==========
 
 // Get all pipeline stages

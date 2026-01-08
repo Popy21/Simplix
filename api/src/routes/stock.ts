@@ -8,6 +8,58 @@ const router = express.Router();
 // GESTION DES STOCKS
 // ==========================================
 
+// Current stock levels summary
+router.get('/current', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId || req.user?.organization_id;
+
+    const result = await db.query(`
+      SELECT
+        p.id,
+        p.name,
+        p.sku,
+        p.reference,
+        p.stock_quantity as quantity,
+        p.stock_min_alert as min_alert,
+        p.stock_location as location,
+        p.price,
+        p.cost_price,
+        pc.name as category_name,
+        CASE
+          WHEN p.stock_quantity <= 0 THEN 'out_of_stock'
+          WHEN p.stock_quantity <= COALESCE(p.stock_min_alert, 0) THEN 'low_stock'
+          ELSE 'in_stock'
+        END as status
+      FROM products p
+      LEFT JOIN product_categories pc ON p.category_id = pc.id
+      WHERE p.organization_id = $1
+        AND p.deleted_at IS NULL
+        AND (p.track_stock = true OR p.stock_quantity IS NOT NULL)
+      ORDER BY p.name ASC
+    `, [organizationId]);
+
+    const summary = await db.query(`
+      SELECT
+        COUNT(*) as total_products,
+        COUNT(*) FILTER (WHERE stock_quantity <= 0) as out_of_stock,
+        COUNT(*) FILTER (WHERE stock_quantity > 0 AND stock_quantity <= COALESCE(stock_min_alert, 0)) as low_stock,
+        COUNT(*) FILTER (WHERE stock_quantity > COALESCE(stock_min_alert, 0)) as in_stock,
+        COALESCE(SUM(stock_quantity), 0) as total_quantity,
+        COALESCE(SUM(stock_quantity * COALESCE(cost_price, price * 0.7)), 0) as total_value
+      FROM products
+      WHERE organization_id = $1 AND deleted_at IS NULL AND (track_stock = true OR stock_quantity IS NOT NULL)
+    `, [organizationId]);
+
+    res.json({
+      products: result.rows,
+      summary: summary.rows[0]
+    });
+  } catch (err: any) {
+    console.error('Error fetching current stock:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Alertes stock
 router.get('/alerts', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

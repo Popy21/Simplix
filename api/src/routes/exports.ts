@@ -772,4 +772,284 @@ router.get('/csv/:type', authenticateToken, requireOrganization, async (req: Aut
   }
 });
 
+// Direct endpoint exports for convenience
+
+/**
+ * GET /api/exports/invoices
+ * Export invoices directly
+ */
+router.get('/invoices', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+    const { from_date, to_date, format = 'json' } = req.query;
+
+    const result = await pool.query(`
+      SELECT
+        i.id,
+        i.invoice_number,
+        i.invoice_date,
+        i.due_date,
+        c.name as customer_name,
+        c.email as customer_email,
+        i.subtotal,
+        i.tax_amount,
+        i.total_amount,
+        i.status,
+        i.notes
+      FROM invoices i
+      LEFT JOIN customers c ON i.customer_id = c.id
+      WHERE i.organization_id = $1
+        AND ($2::DATE IS NULL OR i.invoice_date >= $2)
+        AND ($3::DATE IS NULL OR i.invoice_date <= $3)
+        AND i.deleted_at IS NULL
+      ORDER BY i.invoice_date DESC
+    `, [orgId, from_date || null, to_date || null]);
+
+    if (format === 'csv') {
+      const headers = ['Numéro', 'Date', 'Échéance', 'Client', 'Email', 'HT', 'TVA', 'TTC', 'Statut'];
+      let csv = headers.join(';') + '\n';
+      for (const row of result.rows) {
+        csv += [
+          row.invoice_number,
+          new Date(row.invoice_date).toLocaleDateString('fr-FR'),
+          row.due_date ? new Date(row.due_date).toLocaleDateString('fr-FR') : '',
+          `"${row.customer_name || ''}"`,
+          row.customer_email || '',
+          row.subtotal,
+          row.tax_amount,
+          row.total_amount,
+          row.status
+        ].join(';') + '\n';
+      }
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="invoices.csv"');
+      return res.send('\ufeff' + csv);
+    }
+
+    res.json({ data: result.rows, total: result.rows.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/exports/quotes
+ * Export quotes
+ */
+router.get('/quotes', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+    const { from_date, to_date, format = 'json' } = req.query;
+
+    const result = await pool.query(`
+      SELECT
+        q.id,
+        q.quote_number,
+        q.created_at as quote_date,
+        q.valid_until,
+        c.name as customer_name,
+        c.email as customer_email,
+        q.subtotal,
+        q.tax_amount,
+        q.total_amount,
+        q.status,
+        q.notes
+      FROM quotes q
+      LEFT JOIN customers c ON q.customer_id = c.id
+      WHERE q.organization_id = $1
+        AND ($2::DATE IS NULL OR q.created_at >= $2)
+        AND ($3::DATE IS NULL OR q.created_at <= $3)
+        AND q.deleted_at IS NULL
+      ORDER BY q.created_at DESC
+    `, [orgId, from_date || null, to_date || null]);
+
+    if (format === 'csv') {
+      const headers = ['Numéro', 'Date', 'Validité', 'Client', 'Email', 'HT', 'TVA', 'TTC', 'Statut'];
+      let csv = headers.join(';') + '\n';
+      for (const row of result.rows) {
+        csv += [
+          row.quote_number,
+          new Date(row.quote_date).toLocaleDateString('fr-FR'),
+          row.valid_until ? new Date(row.valid_until).toLocaleDateString('fr-FR') : '',
+          `"${row.customer_name || ''}"`,
+          row.customer_email || '',
+          row.subtotal,
+          row.tax_amount,
+          row.total_amount,
+          row.status
+        ].join(';') + '\n';
+      }
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="quotes.csv"');
+      return res.send('\ufeff' + csv);
+    }
+
+    res.json({ data: result.rows, total: result.rows.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/exports/products
+ * Export products
+ */
+router.get('/products', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+    const { format = 'json' } = req.query;
+
+    const result = await pool.query(`
+      SELECT
+        p.id,
+        p.name,
+        p.sku,
+        p.reference,
+        p.description,
+        p.price,
+        p.cost_price,
+        p.stock_quantity,
+        pc.name as category_name,
+        p.is_active
+      FROM products p
+      LEFT JOIN product_categories pc ON p.category_id = pc.id
+      WHERE p.organization_id = $1 AND p.deleted_at IS NULL
+      ORDER BY p.name
+    `, [orgId]);
+
+    if (format === 'csv') {
+      const headers = ['Nom', 'SKU', 'Référence', 'Description', 'Prix', 'Coût', 'Stock', 'Catégorie', 'Actif'];
+      let csv = headers.join(';') + '\n';
+      for (const row of result.rows) {
+        csv += [
+          `"${row.name || ''}"`,
+          row.sku || '',
+          row.reference || '',
+          `"${(row.description || '').replace(/"/g, '""').substring(0, 100)}"`,
+          row.price,
+          row.cost_price || '',
+          row.stock_quantity || 0,
+          `"${row.category_name || ''}"`,
+          row.is_active ? 'Oui' : 'Non'
+        ].join(';') + '\n';
+      }
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="products.csv"');
+      return res.send('\ufeff' + csv);
+    }
+
+    res.json({ data: result.rows, total: result.rows.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/exports/customers
+ * Export customers
+ */
+router.get('/customers', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+    const { format = 'json' } = req.query;
+
+    const result = await pool.query(`
+      SELECT
+        c.id,
+        c.name,
+        c.email,
+        c.phone,
+        c.company,
+        c.address,
+        c.city,
+        c.postal_code,
+        c.country,
+        c.tax_id,
+        c.created_at
+      FROM customers c
+      WHERE c.organization_id = $1 AND c.deleted_at IS NULL
+      ORDER BY c.name
+    `, [orgId]);
+
+    if (format === 'csv') {
+      const headers = ['Nom', 'Email', 'Téléphone', 'Société', 'Adresse', 'Ville', 'Code postal', 'Pays', 'N° TVA', 'Date création'];
+      let csv = headers.join(';') + '\n';
+      for (const row of result.rows) {
+        csv += [
+          `"${row.name || ''}"`,
+          row.email || '',
+          row.phone || '',
+          `"${row.company || ''}"`,
+          `"${row.address || ''}"`,
+          `"${row.city || ''}"`,
+          row.postal_code || '',
+          row.country || '',
+          row.tax_id || '',
+          new Date(row.created_at).toLocaleDateString('fr-FR')
+        ].join(';') + '\n';
+      }
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="customers.csv"');
+      return res.send('\ufeff' + csv);
+    }
+
+    res.json({ data: result.rows, total: result.rows.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/exports/payments
+ * Export payments
+ */
+router.get('/payments', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+    const { from_date, to_date, format = 'json' } = req.query;
+
+    const result = await pool.query(`
+      SELECT
+        p.id,
+        p.payment_date,
+        p.amount,
+        p.payment_method,
+        p.reference,
+        i.invoice_number,
+        c.name as customer_name,
+        p.notes
+      FROM payments p
+      LEFT JOIN invoices i ON p.invoice_id = i.id
+      LEFT JOIN customers c ON i.customer_id = c.id
+      WHERE p.organization_id = $1
+        AND ($2::DATE IS NULL OR p.payment_date >= $2)
+        AND ($3::DATE IS NULL OR p.payment_date <= $3)
+      ORDER BY p.payment_date DESC
+    `, [orgId, from_date || null, to_date || null]);
+
+    if (format === 'csv') {
+      const headers = ['Date', 'Montant', 'Mode', 'Référence', 'Facture', 'Client', 'Notes'];
+      let csv = headers.join(';') + '\n';
+      for (const row of result.rows) {
+        csv += [
+          new Date(row.payment_date).toLocaleDateString('fr-FR'),
+          row.amount,
+          row.payment_method || '',
+          row.reference || '',
+          row.invoice_number || '',
+          `"${row.customer_name || ''}"`,
+          `"${(row.notes || '').replace(/"/g, '""')}"`,
+        ].join(';') + '\n';
+      }
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="payments.csv"');
+      return res.send('\ufeff' + csv);
+    }
+
+    res.json({ data: result.rows, total: result.rows.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

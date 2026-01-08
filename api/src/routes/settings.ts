@@ -658,4 +658,115 @@ router.get('/numbering', authenticateToken, async (req: AuthRequest, res: Respon
   }
 });
 
+// ============================================================================
+// EMAIL SETTINGS
+// ============================================================================
+
+// GET /api/settings/email - Get email configuration
+router.get('/email', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id;
+
+    // Check if email_settings table exists
+    const tableCheck = await db.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'email_settings'
+      )
+    `);
+
+    if (!tableCheck.rows[0].exists) {
+      // Return default settings
+      return res.json({
+        configured: false,
+        settings: {
+          smtp_host: '',
+          smtp_port: 587,
+          smtp_secure: true,
+          smtp_user: '',
+          from_name: '',
+          from_email: '',
+          reply_to: '',
+          signature_html: '',
+          send_copy: false
+        }
+      });
+    }
+
+    const result = await db.query(`
+      SELECT
+        smtp_host, smtp_port, smtp_secure, smtp_user,
+        from_name, from_email, reply_to, signature_html, send_copy,
+        created_at, updated_at
+      FROM email_settings
+      WHERE organization_id = $1
+    `, [organizationId]);
+
+    if (result.rows.length === 0) {
+      return res.json({
+        configured: false,
+        settings: {
+          smtp_host: '',
+          smtp_port: 587,
+          smtp_secure: true,
+          smtp_user: '',
+          from_name: '',
+          from_email: '',
+          reply_to: '',
+          signature_html: '',
+          send_copy: false
+        }
+      });
+    }
+
+    res.json({
+      configured: true,
+      settings: result.rows[0]
+    });
+  } catch (error: any) {
+    console.error('Error fetching email settings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /api/settings/email - Update email configuration
+router.put('/email', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id;
+    const {
+      smtp_host, smtp_port, smtp_secure, smtp_user, smtp_password,
+      from_name, from_email, reply_to, signature_html, send_copy
+    } = req.body;
+
+    // Upsert email settings
+    const result = await db.query(`
+      INSERT INTO email_settings (
+        organization_id, smtp_host, smtp_port, smtp_secure, smtp_user, smtp_password,
+        from_name, from_email, reply_to, signature_html, send_copy
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ON CONFLICT (organization_id) DO UPDATE SET
+        smtp_host = EXCLUDED.smtp_host,
+        smtp_port = EXCLUDED.smtp_port,
+        smtp_secure = EXCLUDED.smtp_secure,
+        smtp_user = EXCLUDED.smtp_user,
+        smtp_password = COALESCE(EXCLUDED.smtp_password, email_settings.smtp_password),
+        from_name = EXCLUDED.from_name,
+        from_email = EXCLUDED.from_email,
+        reply_to = EXCLUDED.reply_to,
+        signature_html = EXCLUDED.signature_html,
+        send_copy = EXCLUDED.send_copy,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING id
+    `, [
+      organizationId, smtp_host, smtp_port, smtp_secure, smtp_user, smtp_password,
+      from_name, from_email, reply_to, signature_html, send_copy
+    ]);
+
+    res.json({ success: true, message: 'Email settings updated' });
+  } catch (error: any) {
+    console.error('Error updating email settings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

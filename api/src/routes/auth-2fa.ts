@@ -256,6 +256,32 @@ router.post('/2fa/disable', authenticateToken, async (req: AuthRequest, res: Res
 });
 
 /**
+ * GET /api/auth/2fa/status
+ * Get 2FA status for current user
+ */
+router.get('/2fa/status', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const result = await db.query(
+      'SELECT two_factor_enabled, two_factor_secret IS NOT NULL as has_secret FROM users WHERE id = $1',
+      [userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const user = result.rows[0];
+    res.json({
+      enabled: user.two_factor_enabled || false,
+      configured: user.has_secret || false,
+      message: user.two_factor_enabled ? '2FA is enabled for your account' : '2FA is not enabled'
+    });
+  } catch (error: any) {
+    console.error('Error checking 2FA status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * POST /api/auth/2fa/regenerate-backup-codes
  * Generate new backup codes
  */

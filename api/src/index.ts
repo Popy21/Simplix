@@ -199,6 +199,190 @@ app.use('/api/return-orders', returnOrdersRouter);
 app.use('/api/vat', vatRouter);
 app.use('/api/catalog', catalogRouter);
 
+// Additional API endpoints (inline handlers)
+import { authenticateToken } from './middleware/auth';
+import { pool } from './database/db';
+
+// GET /api/users - List all users in organization
+app.get('/api/users', authenticateToken, async (req: any, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id;
+    const result = await pool.query(`
+      SELECT id, email, first_name, last_name, role, status, avatar_url, created_at
+      FROM users
+      WHERE organization_id = $1 AND deleted_at IS NULL
+      ORDER BY last_name, first_name
+    `, [organizationId]);
+    res.json({ users: result.rows, total: result.rows.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/organizations - Get current organization
+app.get('/api/organizations', authenticateToken, async (req: any, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id;
+    const result = await pool.query(`
+      SELECT id, name, slug, website, settings, created_at, updated_at
+      FROM organizations
+      WHERE id = $1
+    `, [organizationId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/email-logs - Get email logs
+app.get('/api/email-logs', authenticateToken, async (req: any, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id;
+    const { page = 1, limit = 50 } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    // Check if table exists
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'email_logs'
+      )
+    `);
+
+    if (!tableCheck.rows[0].exists) {
+      return res.json({ logs: [], total: 0 });
+    }
+
+    const result = await pool.query(`
+      SELECT id, recipient, subject, status, sent_at, error_message, template_id
+      FROM email_logs
+      WHERE organization_id = $1
+      ORDER BY sent_at DESC
+      LIMIT $2 OFFSET $3
+    `, [organizationId, limit, offset]);
+
+    const countResult = await pool.query(`
+      SELECT COUNT(*) as total FROM email_logs WHERE organization_id = $1
+    `, [organizationId]);
+
+    res.json({
+      logs: result.rows,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: parseInt(countResult.rows[0].total),
+        pages: Math.ceil(parseInt(countResult.rows[0].total) / Number(limit))
+      }
+    });
+  } catch (err: any) {
+    res.json({ logs: [], total: 0 });
+  }
+});
+
+// GET /api/email-settings - Get email settings (alias)
+app.get('/api/email-settings', authenticateToken, async (req: any, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id;
+
+    // Check if table exists
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'email_settings'
+      )
+    `);
+
+    if (!tableCheck.rows[0].exists) {
+      return res.json({
+        configured: false,
+        settings: { smtp_host: '', smtp_port: 587, from_name: '', from_email: '' }
+      });
+    }
+
+    const result = await pool.query(`
+      SELECT smtp_host, smtp_port, smtp_secure, smtp_user, from_name, from_email, reply_to
+      FROM email_settings WHERE organization_id = $1
+    `, [organizationId]);
+
+    res.json({
+      configured: result.rows.length > 0,
+      settings: result.rows[0] || { smtp_host: '', smtp_port: 587, from_name: '', from_email: '' }
+    });
+  } catch (err: any) {
+    res.json({ configured: false, settings: {} });
+  }
+});
+
+// GET /api/integrations - List integrations
+app.get('/api/integrations', authenticateToken, async (req: any, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id;
+
+    // Check if table exists
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'integrations'
+      )
+    `);
+
+    if (!tableCheck.rows[0].exists) {
+      return res.json({
+        integrations: [
+          { id: 1, name: 'Stripe', type: 'payment', status: 'available', connected: false },
+          { id: 2, name: 'Mailchimp', type: 'email', status: 'available', connected: false },
+          { id: 3, name: 'Slack', type: 'notification', status: 'available', connected: false },
+          { id: 4, name: 'Google Calendar', type: 'calendar', status: 'available', connected: false },
+          { id: 5, name: 'Zapier', type: 'automation', status: 'available', connected: false }
+        ],
+        total: 5
+      });
+    }
+
+    const result = await pool.query(`
+      SELECT id, name, type, status, config, created_at
+      FROM integrations WHERE organization_id = $1
+    `, [organizationId]);
+
+    res.json({ integrations: result.rows, total: result.rows.length });
+  } catch (err: any) {
+    res.json({ integrations: [], total: 0 });
+  }
+});
+
+// GET /api/api-keys - List API keys
+app.get('/api/api-keys', authenticateToken, async (req: any, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id;
+
+    // Check if table exists
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'api_keys'
+      )
+    `);
+
+    if (!tableCheck.rows[0].exists) {
+      return res.json({ keys: [], total: 0 });
+    }
+
+    const result = await pool.query(`
+      SELECT id, name, key_prefix, permissions, last_used_at, expires_at, is_active, created_at
+      FROM api_keys
+      WHERE organization_id = $1 AND deleted_at IS NULL
+      ORDER BY created_at DESC
+    `, [organizationId]);
+
+    res.json({ keys: result.rows, total: result.rows.length });
+  } catch (err: any) {
+    res.json({ keys: [], total: 0 });
+  }
+});
+
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: Function) => {
   // Always log the full stack on the server

@@ -556,4 +556,92 @@ function generateCatalogHTML(data: {
   return html;
 }
 
+// ==========================================
+// CATALOGUE API ENDPOINTS
+// ==========================================
+
+// GET / - Récupérer le catalogue produits (données JSON)
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+    const { category_id, search, page = 1, limit = 50 } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    let query = `
+      SELECT
+        p.id,
+        p.name,
+        p.sku,
+        p.reference,
+        p.description,
+        p.price,
+        p.cost_price,
+        p.stock_quantity,
+        p.image_url,
+        p.is_active,
+        pc.id as category_id,
+        pc.name as category_name
+      FROM products p
+      LEFT JOIN product_categories pc ON p.category_id = pc.id
+      WHERE p.organization_id = $1 AND p.deleted_at IS NULL
+    `;
+    const params: any[] = [organizationId];
+
+    if (category_id) {
+      params.push(category_id);
+      query += ` AND p.category_id = $${params.length}`;
+    }
+
+    if (search) {
+      params.push(`%${search}%`);
+      query += ` AND (p.name ILIKE $${params.length} OR p.sku ILIKE $${params.length} OR p.description ILIKE $${params.length})`;
+    }
+
+    query += ` ORDER BY pc.display_order NULLS LAST, pc.name NULLS LAST, p.name`;
+    query += ` LIMIT ${limit} OFFSET ${offset}`;
+
+    const result = await db.query(query, params);
+
+    // Get categories for filter
+    const categoriesResult = await db.query(`
+      SELECT pc.id, pc.name, COUNT(p.id) as product_count
+      FROM product_categories pc
+      LEFT JOIN products p ON p.category_id = pc.id AND p.deleted_at IS NULL AND p.is_active = true
+      WHERE pc.organization_id = $1
+      GROUP BY pc.id
+      ORDER BY pc.display_order, pc.name
+    `, [organizationId]);
+
+    // Count total
+    let countQuery = `
+      SELECT COUNT(*) as total FROM products p
+      WHERE p.organization_id = $1 AND p.deleted_at IS NULL
+    `;
+    const countParams: any[] = [organizationId];
+    if (category_id) {
+      countParams.push(category_id);
+      countQuery += ` AND p.category_id = $${countParams.length}`;
+    }
+    if (search) {
+      countParams.push(`%${search}%`);
+      countQuery += ` AND (p.name ILIKE $${countParams.length} OR p.sku ILIKE $${countParams.length})`;
+    }
+    const countResult = await db.query(countQuery, countParams);
+
+    res.json({
+      products: result.rows,
+      categories: categoriesResult.rows,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: parseInt(countResult.rows[0].total),
+        pages: Math.ceil(parseInt(countResult.rows[0].total) / Number(limit))
+      }
+    });
+  } catch (err: any) {
+    console.error('Error fetching catalog:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
