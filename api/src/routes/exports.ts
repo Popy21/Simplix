@@ -1000,6 +1000,65 @@ router.get('/customers', authenticateToken, requireOrganization, async (req: Aut
 });
 
 /**
+ * GET /api/exports/deals
+ * Export deals
+ */
+router.get('/deals', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+    const { from_date, to_date, format = 'json' } = req.query;
+
+    const result = await pool.query(`
+      SELECT
+        d.id,
+        d.title,
+        d.value,
+        ps.name as stage_name,
+        d.probability,
+        d.expected_close_date,
+        c.first_name || ' ' || c.last_name as contact_name,
+        co.name as company_name,
+        d.status,
+        d.created_at
+      FROM deals d
+      LEFT JOIN pipeline_stages ps ON d.stage_id = ps.id
+      LEFT JOIN contacts c ON d.contact_id = c.id
+      LEFT JOIN companies co ON d.company_id = co.id
+      WHERE d.organization_id = $1
+        AND ($2::DATE IS NULL OR d.created_at >= $2)
+        AND ($3::DATE IS NULL OR d.created_at <= $3)
+        AND d.deleted_at IS NULL
+      ORDER BY d.created_at DESC
+    `, [orgId, from_date || null, to_date || null]);
+
+    if (format === 'csv') {
+      const headers = ['Titre', 'Valeur', 'Étape', 'Probabilité', 'Date clôture prévue', 'Contact', 'Société', 'Statut', 'Date création'];
+      let csv = headers.join(';') + '\n';
+      for (const row of result.rows) {
+        csv += [
+          `"${row.title || ''}"`,
+          row.value || 0,
+          `"${row.stage_name || ''}"`,
+          row.probability || 0,
+          row.expected_close_date ? new Date(row.expected_close_date).toLocaleDateString('fr-FR') : '',
+          `"${row.contact_name || ''}"`,
+          `"${row.company_name || ''}"`,
+          row.status || '',
+          new Date(row.created_at).toLocaleDateString('fr-FR')
+        ].join(';') + '\n';
+      }
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="deals.csv"');
+      return res.send('\ufeff' + csv);
+    }
+
+    res.json({ data: result.rows, total: result.rows.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/exports/payments
  * Export payments
  */
