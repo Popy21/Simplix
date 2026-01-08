@@ -10,54 +10,104 @@ const upload = multer({ storage: multer.memoryStorage() });
 // COMPTES BANCAIRES
 // ==========================================
 
-// GET / - Vue d'ensemble du rapprochement bancaire
-router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+// GET /reconciliation - Vue d'ensemble du rapprochement bancaire (alias)
+router.get('/reconciliation', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const organizationId = (req.user as any)?.organizationId;
-
-    // Comptes bancaires
-    const accountsResult = await db.query(`
-      SELECT
-        id, account_name as name, bank_name, iban, currency, current_balance, is_default
-      FROM bank_accounts
-      WHERE organization_id = $1 AND is_active = true AND deleted_at IS NULL
-      ORDER BY is_default DESC, account_name
-    `, [organizationId]);
-
-    // Stats globales - join via bank_accounts pour filtrer par organization
+    // Stats globales depuis bank_transactions
     const statsResult = await db.query(`
       SELECT
         COUNT(*) as total_transactions,
         COUNT(*) FILTER (WHERE NOT bt.is_reconciled) as pending_count,
         COUNT(*) FILTER (WHERE bt.is_reconciled) as matched_count,
         COALESCE(SUM(CASE WHEN bt.amount > 0 AND NOT bt.is_reconciled THEN bt.amount ELSE 0 END), 0) as pending_credits,
-        COALESCE(SUM(CASE WHEN bt.amount < 0 AND NOT bt.is_reconciled THEN ABS(bt.amount) ELSE 0 END), 0) as pending_debits
+        COALESCE(SUM(CASE WHEN bt.amount < 0 AND NOT bt.is_reconciled THEN ABS(bt.amount) ELSE 0 END), 0) as pending_debits,
+        COALESCE(SUM(bt.amount), 0) as balance
       FROM bank_transactions bt
-      JOIN bank_accounts ba ON bt.bank_account_id = ba.id
-      WHERE ba.organization_id = $1 AND ba.deleted_at IS NULL
-    `, [organizationId]);
+    `);
 
-    // Derniers imports - vérifier si la table existe avec les bonnes colonnes
-    let importsRows: any[] = [];
-    try {
-      const importsResult = await db.query(`
-        SELECT id, filename, created_at as imported_at
-        FROM bank_imports
-        WHERE organization_id = $1
-        ORDER BY created_at DESC
-        LIMIT 5
-      `, [organizationId]);
-      importsRows = importsResult.rows;
-    } catch (e) {
-      // Table might not exist or have different structure
-      importsRows = [];
-    }
+    // Liste des banques uniques
+    const banksResult = await db.query(`
+      SELECT DISTINCT bank_name, COUNT(*) as transaction_count
+      FROM bank_transactions
+      WHERE bank_name IS NOT NULL
+      GROUP BY bank_name
+    `);
+
+    // Transactions récentes
+    const recentResult = await db.query(`
+      SELECT id, transaction_date, description, amount, is_reconciled, bank_name
+      FROM bank_transactions
+      ORDER BY transaction_date DESC
+      LIMIT 10
+    `);
 
     res.json({
-      accounts: accountsResult.rows,
-      statistics: statsResult.rows[0],
-      recent_imports: importsRows,
-      total_balance: accountsResult.rows.reduce((sum: number, acc: any) => sum + parseFloat(acc.current_balance || 0), 0)
+      accounts: banksResult.rows.map((b: any) => ({
+        name: b.bank_name,
+        transaction_count: parseInt(b.transaction_count)
+      })),
+      statistics: statsResult.rows[0] || {
+        total_transactions: 0,
+        pending_count: 0,
+        matched_count: 0,
+        pending_credits: 0,
+        pending_debits: 0,
+        balance: 0
+      },
+      recent_transactions: recentResult.rows,
+      total_balance: parseFloat(statsResult.rows[0]?.balance || 0)
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET / - Vue d'ensemble du rapprochement bancaire
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    // Stats globales depuis bank_transactions
+    const statsResult = await db.query(`
+      SELECT
+        COUNT(*) as total_transactions,
+        COUNT(*) FILTER (WHERE NOT bt.is_reconciled) as pending_count,
+        COUNT(*) FILTER (WHERE bt.is_reconciled) as matched_count,
+        COALESCE(SUM(CASE WHEN bt.amount > 0 AND NOT bt.is_reconciled THEN bt.amount ELSE 0 END), 0) as pending_credits,
+        COALESCE(SUM(CASE WHEN bt.amount < 0 AND NOT bt.is_reconciled THEN ABS(bt.amount) ELSE 0 END), 0) as pending_debits,
+        COALESCE(SUM(bt.amount), 0) as balance
+      FROM bank_transactions bt
+    `);
+
+    // Liste des banques uniques
+    const banksResult = await db.query(`
+      SELECT DISTINCT bank_name, COUNT(*) as transaction_count
+      FROM bank_transactions
+      WHERE bank_name IS NOT NULL
+      GROUP BY bank_name
+    `);
+
+    // Transactions récentes
+    const recentResult = await db.query(`
+      SELECT id, transaction_date, description, amount, is_reconciled, bank_name
+      FROM bank_transactions
+      ORDER BY transaction_date DESC
+      LIMIT 10
+    `);
+
+    res.json({
+      accounts: banksResult.rows.map((b: any) => ({
+        name: b.bank_name,
+        transaction_count: parseInt(b.transaction_count)
+      })),
+      statistics: statsResult.rows[0] || {
+        total_transactions: 0,
+        pending_count: 0,
+        matched_count: 0,
+        pending_credits: 0,
+        pending_debits: 0,
+        balance: 0
+      },
+      recent_transactions: recentResult.rows,
+      total_balance: parseFloat(statsResult.rows[0]?.balance || 0)
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

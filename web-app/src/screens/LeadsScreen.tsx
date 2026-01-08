@@ -1,1054 +1,1221 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  RefreshControl,
   TouchableOpacity,
-  ActivityIndicator,
-  Dimensions,
+  RefreshControl,
   Platform,
-  FlatList,
-  Pressable,
-  Modal,
-  TextInput,
   Alert,
+  Animated,
+  Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { useAuth } from '../context/AuthContext';
 import {
-  TrendingUpIcon,
-  TrendingDownIcon,
   UsersIcon,
+  MailIcon,
+  PhoneIcon,
+  PlusIcon,
+  ChevronRightIcon,
+  EditIcon,
+  TrashIcon,
+  StarIcon,
+  FilterIcon,
+  TrendingUpIcon,
+  ClockIcon,
 } from '../components/Icons';
 import { leadsService, contactService, dealsService } from '../services/api';
-import { withGlassLayout } from '../components/withGlassLayout';
+import GlassLayout from '../components/GlassLayout';
+import { useAuth } from '../context/AuthContext';
+import { glassTheme, withShadow } from '../theme/glassTheme';
+import {
+  GlassSearchBar,
+  GlassModal,
+  GlassButton,
+  GlassInput,
+  GlassEmptyState,
+  GlassLoadingState,
+  GlassAvatar,
+  GlassBadge,
+  GlassTabBar,
+  GlassProgressBar,
+} from '../components/ui';
 
 type LeadsScreenProps = {
-  navigation: NativeStackNavigationProp<RootStackParamList, 'Contacts'>;
+  navigation: NativeStackNavigationProp<RootStackParamList, 'Leads'>;
 };
 
 interface Lead {
   id: string;
-  name: string;
-  company: string;
-  email: string;
-  phone: string;
-  score: number;
-  trend: 'up' | 'down' | 'flat';
-  contacts: number;
-  lastActivity: string;
-  status: 'hot' | 'warm' | 'cold';
-  deals: number;
-  activities: number;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  title?: string;
+  source?: string;
+  status: 'new' | 'contacted' | 'qualified' | 'unqualified';
+  score?: number;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
 }
 
-interface ScoreBreakdown {
-  email: number;
-  phone: number;
-  company: number;
-  linkedin: number;
-  type: number;
-  source: number;
-  activities: number;
-  deals: number;
-  engagement: number;
-}
+const { width } = Dimensions.get('window');
 
-const { width, height } = Dimensions.get('window');
+const statusConfig = {
+  new: { label: 'Nouveau', color: '#007AFF', bgColor: 'rgba(0, 122, 255, 0.1)' },
+  contacted: { label: 'Contacte', color: '#FF9500', bgColor: 'rgba(255, 149, 0, 0.1)' },
+  qualified: { label: 'Qualifie', color: '#34C759', bgColor: 'rgba(52, 199, 89, 0.1)' },
+  unqualified: { label: 'Non qualifie', color: '#FF3B30', bgColor: 'rgba(255, 59, 48, 0.1)' },
+};
 
-function LeadsScreen({ navigation }: LeadsScreenProps) {
+const sourceConfig: { [key: string]: { label: string; color: string } } = {
+  website: { label: 'Site web', color: '#007AFF' },
+  referral: { label: 'Referral', color: '#34C759' },
+  social: { label: 'Reseaux sociaux', color: '#5856D6' },
+  ads: { label: 'Publicite', color: '#FF9500' },
+  email: { label: 'Email', color: '#FF2D55' },
+  other: { label: 'Autre', color: '#8E8E93' },
+};
+
+export default function LeadsScreen({ navigation }: LeadsScreenProps) {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'hot' | 'warm' | 'cold'>('all');
-  const [sortBy, setSortBy] = useState<'score' | 'trend' | 'activity'>('score');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [selectedLeadBreakdown, setSelectedLeadBreakdown] = useState<ScoreBreakdown | null>(null);
+  const [leadModalVisible, setLeadModalVisible] = useState(false);
   const [newLeadModalVisible, setNewLeadModalVisible] = useState(false);
-  const [newLeadForm, setNewLeadForm] = useState({
-    name: '',
-    company: '',
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [leadForm, setLeadForm] = useState({
+    first_name: '',
+    last_name: '',
     email: '',
     phone: '',
+    company: '',
+    title: '',
+    source: 'website',
+    notes: '',
   });
+
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
     fetchLeads();
   }, []);
 
   useEffect(() => {
-    filterAndSortLeads();
-  }, [leads, filterStatus, sortBy]);
+    if (!loading) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [loading]);
+
+  useEffect(() => {
+    filterLeads();
+  }, [searchQuery, selectedStatus, leads]);
 
   const fetchLeads = async () => {
     try {
-      setLoading(true);
+      // Try the leads service first
+      const response = await leadsService.getAll();
+      const leadsData = response.data.data || response.data || [];
 
-      // Fetch contacts, deals, and activities in parallel
-      const [contactsResponse, dealsResponse] = await Promise.all([
-        contactService.getAll({ type: 'lead' }),
-        dealsService.getAll().catch(() => ({ data: [] })),
-      ]);
+      // Transform API data
+      const transformedLeads: Lead[] = leadsData.map((lead: any) => ({
+        id: lead.id,
+        first_name: lead.first_name,
+        last_name: lead.last_name,
+        full_name: lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+        email: lead.email,
+        phone: lead.phone,
+        company: lead.company_name || lead.company,
+        title: lead.title || lead.job_title,
+        source: lead.source || 'other',
+        status: lead.status || 'new',
+        score: lead.score || calculateScore(lead),
+        notes: lead.notes || lead.description,
+        created_at: lead.created_at,
+        updated_at: lead.updated_at,
+      }));
 
-      const contacts = contactsResponse.data.data || contactsResponse.data;
-      const allDeals = dealsResponse.data.data || dealsResponse.data || [];
-
-      // Transform API data to Lead format with integrated deals and activities
-      const apiLeads: Lead[] = contacts.map((contact: any) => {
-        // Count deals for this contact
-        const contactDeals = allDeals.filter((deal: any) =>
-          deal.contact_id === contact.id || deal.company_id === contact.company_id
-        );
-
-        // Calculate score based on multiple factors
-        let calculatedScore = contact.score || 0;
-
-        // Boost score based on completeness
-        if (contact.email) calculatedScore += 10;
-        if (contact.phone) calculatedScore += 10;
-        if (contact.company_name) calculatedScore += 10;
-        if (contact.linkedin_url) calculatedScore += 5;
-
-        // Boost score based on engagement
-        if (contact.type === 'customer') calculatedScore += 20;
-        if (contact.source === 'referral') calculatedScore += 15;
-        if (contactDeals.length > 0) calculatedScore += contactDeals.length * 10;
-
-        // Cap score at 100
-        calculatedScore = Math.min(100, calculatedScore);
-
-        return {
-          id: contact.id,
-          name: `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.full_name || 'N/A',
-          company: contact.company_name || 'N/A',
-          email: contact.email || '',
-          phone: contact.phone || '',
-          score: calculatedScore,
-          trend: calculatedScore >= 70 ? 'up' : calculatedScore >= 40 ? 'flat' : 'down',
-          contacts: 1,
-          lastActivity: contact.updated_at ? getTimeAgo(contact.updated_at) : 'N/A',
-          status: calculatedScore >= 70 ? 'hot' : calculatedScore >= 40 ? 'warm' : 'cold',
-          deals: contactDeals.length,
-          activities: contact.activities_count || 0,
-        };
-      });
-
-      setLeads(apiLeads);
-      setLoading(false);
+      setLeads(transformedLeads);
     } catch (error) {
       console.error('Error fetching leads:', error);
-      // Fallback to mock data if API fails
-      const mockLeads: Lead[] = [
-        {
-          id: '1',
-          name: 'Acme Corporation',
-          company: 'Acme Corp',
-          email: 'contact@acme.com',
-          phone: '+33612345678',
-          score: 95,
-          trend: 'up',
-          contacts: 5,
-          lastActivity: '2 heures',
-          status: 'hot',
-          deals: 2,
-          activities: 24,
-        },
-        {
-          id: '2',
-          name: 'Tech Industries France',
-          company: 'TechFR SAS',
-          email: 'sales@techfr.fr',
-          phone: '+33623456789',
-          score: 82,
-          trend: 'up',
-          contacts: 3,
-          lastActivity: '5 heures',
-          status: 'hot',
-          deals: 1,
-          activities: 18,
-        },
-        {
-          id: '3',
-          name: 'Global Solutions Ltd',
-          company: 'Global Solutions',
-          email: 'contact@globalsol.uk',
-          phone: '+33634567890',
-          score: 68,
-          trend: 'flat',
-          contacts: 2,
-          lastActivity: '1 jour',
-          status: 'warm',
-          deals: 0,
-          activities: 8,
-        },
-        {
-          id: '4',
-          name: 'Enterprise Plus',
-          company: 'Enterprise',
-          email: 'info@enterprise.com',
-          phone: '+33645678901',
-          score: 55,
-          trend: 'down',
-          contacts: 1,
-          lastActivity: '3 jours',
-          status: 'warm',
-          deals: 0,
-          activities: 3,
-        },
-        {
-          id: '5',
-          name: 'StartUp Innovations',
-          company: 'StartupXYZ',
-          email: 'contact@startupxyz.fr',
-          phone: '+33656789012',
-          score: 42,
-          trend: 'up',
-          contacts: 1,
-          lastActivity: '5 jours',
-          status: 'cold',
-          deals: 0,
-          activities: 1,
-        },
-        {
-          id: '6',
-          name: 'SME Business',
-          company: 'SME Corp',
-          email: 'contact@smecorp.fr',
-          phone: '+33667890123',
-          score: 28,
-          trend: 'down',
-          contacts: 1,
-          lastActivity: '10 jours',
-          status: 'cold',
-          deals: 0,
-          activities: 0,
-        },
-      ];
+      // Fallback: try fetching contacts with type 'lead'
+      try {
+        const contactsResponse = await contactService.getAll({ type: 'lead' });
+        const contacts = contactsResponse.data.data || contactsResponse.data || [];
 
-      setLeads(mockLeads);
+        const transformedLeads: Lead[] = contacts.map((contact: any) => ({
+          id: contact.id,
+          first_name: contact.first_name,
+          last_name: contact.last_name,
+          full_name: contact.full_name || `${contact.first_name || ''} ${contact.last_name || ''}`.trim(),
+          email: contact.email,
+          phone: contact.phone,
+          company: contact.company_name,
+          title: contact.title,
+          source: contact.source || 'other',
+          status: contact.type === 'lead' ? 'new' : 'contacted',
+          score: contact.score || calculateScore(contact),
+          notes: contact.notes,
+          created_at: contact.created_at,
+          updated_at: contact.updated_at,
+        }));
+
+        setLeads(transformedLeads);
+      } catch (contactError) {
+        console.error('Error fetching contacts as leads:', contactError);
+        // Fallback to mock data
+        setLeads([
+          { id: '1', first_name: 'Jean', last_name: 'Dupont', email: 'jean@example.com', phone: '+33612345678', company: 'TechCorp', title: 'CEO', source: 'website', status: 'new', score: 85, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { id: '2', first_name: 'Marie', last_name: 'Martin', email: 'marie@example.com', phone: '+33687654321', company: 'StartupXYZ', title: 'CTO', source: 'referral', status: 'contacted', score: 72, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { id: '3', first_name: 'Pierre', last_name: 'Leroy', email: 'pierre@example.com', company: 'Enterprise Ltd', source: 'social', status: 'qualified', score: 92, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        ]);
+      }
+    } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const getTimeAgo = (dateString: string) => {
-    const now = new Date();
-    const past = new Date(dateString);
-    const diffMs = now.getTime() - past.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 60) return `${diffMins} min`;
-    if (diffHours < 24) return `${diffHours}h`;
-    return `${diffDays}j`;
+  const calculateScore = (lead: any): number => {
+    let score = 30; // Base score
+    if (lead.email) score += 15;
+    if (lead.phone) score += 15;
+    if (lead.company || lead.company_name) score += 10;
+    if (lead.title) score += 10;
+    if (lead.linkedin_url) score += 10;
+    if (lead.source === 'referral') score += 10;
+    return Math.min(100, score);
   };
 
-  const filterAndSortLeads = () => {
+  const filterLeads = () => {
     let filtered = leads;
 
-    // Appliquer le filtre de statut
-    if (filterStatus !== 'all') {
-      filtered = filtered.filter(lead => lead.status === filterStatus);
+    if (searchQuery) {
+      filtered = filtered.filter(
+        (l) =>
+          l.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          l.first_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          l.last_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          l.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          l.company?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
     }
 
-    // Appliquer le tri
-    const sorted = [...filtered].sort((a, b) => {
-      if (sortBy === 'score') return b.score - a.score;
-      if (sortBy === 'trend') {
-        const trendOrder = { up: 2, flat: 1, down: 0 };
-        return trendOrder[b.trend] - trendOrder[a.trend];
-      }
-      if (sortBy === 'activity') return b.activities - a.activities;
-      return 0;
-    });
+    if (selectedStatus !== 'all') {
+      filtered = filtered.filter((l) => l.status === selectedStatus);
+    }
 
-    setFilteredLeads(sorted);
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return '#34C759';
-    if (score >= 60) return '#FF9500';
-    return '#FF3B30';
-  };
-
-  const getScoreBreakdown = (lead: Lead): ScoreBreakdown => {
-    // Simuler le breakdown du scoring
-    return {
-      email: 10,
-      phone: 10,
-      company: 15,
-      linkedin: Math.floor(lead.score * 0.2),
-      type: Math.floor(lead.score * 0.25),
-      source: Math.floor(lead.score * 0.2),
-      activities: Math.min(lead.activities * 2, 25),
-      deals: lead.deals * 10,
-      engagement: Math.floor((lead.activities / 30) * 20),
-    };
+    setFilteredLeads(filtered);
   };
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchLeads().then(() => setRefreshing(false));
+    fetchLeads();
   };
 
-  const handleCreateLead = () => {
-    if (!newLeadForm.name.trim() || !newLeadForm.company.trim()) {
-      Alert.alert('Erreur', 'Veuillez remplir le nom et l\'entreprise');
+  const getLeadFullName = (lead: Lead) => {
+    return lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Sans nom';
+  };
+
+  const getLeadScore = (lead: Lead) => lead.score || 0;
+
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return '#34C759';
+    if (score >= 50) return '#FF9500';
+    return '#FF3B30';
+  };
+
+  const openLeadDetails = (lead: Lead) => {
+    setSelectedLead(lead);
+    setLeadModalVisible(true);
+  };
+
+  const handleCreateLead = async () => {
+    if (!leadForm.first_name.trim()) {
+      Platform.OS === 'web' ? alert('Le prenom est obligatoire') : Alert.alert('Erreur', 'Le prenom est obligatoire');
       return;
     }
 
-    const newLead: Lead = {
-      id: String(leads.length + 1),
-      name: newLeadForm.name,
-      company: newLeadForm.company,
-      email: newLeadForm.email,
-      phone: newLeadForm.phone,
-      score: 30,
-      trend: 'flat',
-      contacts: 1,
-      lastActivity: 'À l\'instant',
-      status: 'cold',
-      deals: 0,
-      activities: 0,
+    try {
+      if (editingLead) {
+        await leadsService.update(editingLead.id, leadForm);
+      } else {
+        await leadsService.create({ ...leadForm, status: 'new' });
+      }
+      setNewLeadModalVisible(false);
+      resetLeadForm();
+      fetchLeads();
+    } catch (error) {
+      console.error('Error saving lead:', error);
+      // Local fallback
+      if (!editingLead) {
+        const newLead: Lead = {
+          id: `l${Date.now()}`,
+          ...leadForm,
+          status: 'new',
+          score: calculateScore(leadForm),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        setLeads([...leads, newLead]);
+      }
+      setNewLeadModalVisible(false);
+      resetLeadForm();
+    }
+  };
+
+  const handleEditLead = (lead: Lead) => {
+    setEditingLead(lead);
+    setLeadForm({
+      first_name: lead.first_name || '',
+      last_name: lead.last_name || '',
+      email: lead.email || '',
+      phone: lead.phone || '',
+      company: lead.company || '',
+      title: lead.title || '',
+      source: lead.source || 'website',
+      notes: lead.notes || '',
+    });
+    setLeadModalVisible(false);
+    setNewLeadModalVisible(true);
+  };
+
+  const handleDeleteLead = async (lead: Lead) => {
+    const confirmDelete = async () => {
+      try {
+        await leadsService.delete(lead.id);
+      } catch (error) {
+        console.error('Error deleting lead:', error);
+      }
+      setLeads(leads.filter((l) => l.id !== lead.id));
+      setLeadModalVisible(false);
     };
 
-    setLeads([...leads, newLead]);
-    setNewLeadForm({ name: '', company: '', email: '', phone: '' });
-    setNewLeadModalVisible(false);
-    Alert.alert('Succès', `Lead "${newLead.name}" créé avec succès!`);
+    if (Platform.OS === 'web') {
+      if (window.confirm('Etes-vous sur de vouloir supprimer ce lead ?')) confirmDelete();
+    } else {
+      Alert.alert('Confirmer', 'Etes-vous sur de vouloir supprimer ce lead ?', [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Supprimer', onPress: confirmDelete, style: 'destructive' },
+      ]);
+    }
   };
 
-  const handleResetForm = () => {
-    setNewLeadForm({ name: '', company: '', email: '', phone: '' });
-    setNewLeadModalVisible(false);
+  const handleChangeStatus = async (lead: Lead, newStatus: Lead['status']) => {
+    try {
+      await leadsService.update(lead.id, { status: newStatus });
+    } catch (error) {
+      console.error('Error updating lead status:', error);
+    }
+    setLeads(leads.map((l) => (l.id === lead.id ? { ...l, status: newStatus } : l)));
+    setLeadModalVisible(false);
   };
 
-  const renderLeadCard = ({ item }: { item: Lead }) => (
-    <Pressable
-      style={styles.leadCard}
-      onPress={() => {
-        setSelectedLead(item);
-        setSelectedLeadBreakdown(getScoreBreakdown(item));
-      }}
-    >
-      <View style={styles.leadHeader}>
-        <View style={styles.scoreCircle}>
-          <Text style={[styles.scoreText, { color: getScoreColor(item.score) }]}>
-            {item.score}
-          </Text>
-        </View>
-        <View style={styles.leadTitleSection}>
-          <Text style={styles.leadName} numberOfLines={1}>{item.name}</Text>
-          <Text style={styles.leadCompany}>{item.company}</Text>
-        </View>
-        <View style={[styles.statusBadge, { 
-          backgroundColor: item.status === 'hot' ? '#34C75920' : 
-                          item.status === 'warm' ? '#FF950020' : '#F2F2F7'
-        }]}>
-          <Text style={[styles.statusText, { 
-            color: item.status === 'hot' ? '#34C759' : 
-                   item.status === 'warm' ? '#FF9500' : '#8E8E93'
-          }]}>
-            {item.status === 'hot' ? '🔥' : item.status === 'warm' ? '⚡' : '❄️'}
-          </Text>
-        </View>
-      </View>
+  const handleConvertToContact = async (lead: Lead) => {
+    try {
+      await leadsService.convert(lead.id);
+      const msg = 'Lead converti en contact avec succes';
+      Platform.OS === 'web' ? alert(msg) : Alert.alert('Succes', msg);
+      fetchLeads();
+    } catch (error) {
+      console.error('Error converting lead:', error);
+      const msg = 'Impossible de convertir le lead';
+      Platform.OS === 'web' ? alert(msg) : Alert.alert('Erreur', msg);
+    }
+    setLeadModalVisible(false);
+  };
 
-      <View style={styles.leadMeta}>
-        <View style={styles.metaItem}>
-          <UsersIcon size={14} color="#8E8E93" />
-          <Text style={styles.metaText}>{item.contacts} contacts</Text>
-        </View>
-        <View style={styles.metaItem}>
-          <TrendingUpIcon size={14} color={item.trend === 'up' ? '#34C759' : item.trend === 'down' ? '#FF3B30' : '#8E8E93'} />
-          <Text style={styles.metaText}>{item.trend}</Text>
-        </View>
-        <View style={styles.metaItem}>
-          <Text style={styles.metaText}>📊 {item.deals} deals</Text>
-        </View>
-        <View style={styles.metaItem}>
-          <Text style={styles.metaText}>⏱ {item.lastActivity}</Text>
-        </View>
-      </View>
+  const resetLeadForm = () => {
+    setLeadForm({
+      first_name: '',
+      last_name: '',
+      email: '',
+      phone: '',
+      company: '',
+      title: '',
+      source: 'website',
+      notes: '',
+    });
+    setEditingLead(null);
+  };
 
-      <View style={styles.scoreBar}>
-        <View style={[styles.scoreBarFill, { 
-          width: `${item.score}%`,
-          backgroundColor: getScoreColor(item.score)
-        }]} />
-      </View>
-    </Pressable>
-  );
+  const stats = {
+    total: leads.length,
+    new: leads.filter((l) => l.status === 'new').length,
+    contacted: leads.filter((l) => l.status === 'contacted').length,
+    qualified: leads.filter((l) => l.status === 'qualified').length,
+    avgScore: leads.length > 0 ? Math.round(leads.reduce((sum, l) => sum + (l.score || 0), 0) / leads.length) : 0,
+  };
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Chargement des leads...</Text>
-      </View>
+      <GlassLayout>
+        <View style={styles.loadingContainer}>
+          <GlassLoadingState
+            type="spinner"
+            message="Chargement des leads..."
+            size="large"
+          />
+        </View>
+      </GlassLayout>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View>
-            <Text style={styles.headerTitle}>🎯 Lead Scoring</Text>
-            <Text style={styles.headerSubtitle}>Priorisez vos prospects</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setNewLeadModalVisible(true)}
-          >
-            <Text style={styles.addButtonText}>+</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <ScrollView
-        style={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        showsVerticalScrollIndicator={false}
+    <GlassLayout>
+      <Animated.View
+        style={[
+          styles.container,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          }
+        ]}
       >
-        {/* Summary Cards */}
-        <View style={styles.summaryCards}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Hot Leads</Text>
-            <Text style={styles.summaryValue}>{leads.filter(l => l.status === 'hot').length}</Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <View>
+              <Text style={styles.headerTitle}>Leads</Text>
+              <Text style={styles.headerSubtitle}>{stats.total} leads au total</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setNewLeadModalVisible(true)}
+            >
+              <LinearGradient
+                colors={['#007AFF', '#5AC8FA']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.addButtonGradient}
+              >
+                <PlusIcon size={20} color="#FFFFFF" />
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Score Moyen</Text>
-            <Text style={styles.summaryValue}>
-              {Math.round(leads.reduce((a, b) => a + b.score, 0) / leads.length)}
-            </Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Total Leads</Text>
-            <Text style={styles.summaryValue}>{leads.length}</Text>
-          </View>
-        </View>
 
-        {/* Filters & Sort */}
-        <View style={styles.filterSection}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-            <TouchableOpacity
-              style={[styles.filterButton, filterStatus === 'all' && styles.filterButtonActive]}
-              onPress={() => setFilterStatus('all')}
-            >
-              <Text style={[styles.filterText, filterStatus === 'all' && styles.filterTextActive]}>
-                Tous
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.filterButton, filterStatus === 'hot' && styles.filterButtonActive]}
-              onPress={() => setFilterStatus('hot')}
-            >
-              <Text style={[styles.filterText, filterStatus === 'hot' && styles.filterTextActive]}>
-                🔥 Chauds
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.filterButton, filterStatus === 'warm' && styles.filterButtonActive]}
-              onPress={() => setFilterStatus('warm')}
-            >
-              <Text style={[styles.filterText, filterStatus === 'warm' && styles.filterTextActive]}>
-                ⚡ Tièdes
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.filterButton, filterStatus === 'cold' && styles.filterButtonActive]}
-              onPress={() => setFilterStatus('cold')}
-            >
-              <Text style={[styles.filterText, filterStatus === 'cold' && styles.filterTextActive]}>
-                ❄️ Froids
-              </Text>
-            </TouchableOpacity>
+          {/* Stats Overview */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.statsScroll}
+            contentContainerStyle={styles.statsContainer}
+          >
+            <View style={styles.statCard}>
+              <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
+                <UsersIcon size={18} color="#007AFF" />
+              </View>
+              <View style={styles.statContent}>
+                <Text style={styles.statValue}>{stats.new}</Text>
+                <Text style={styles.statLabel}>Nouveaux</Text>
+              </View>
+            </View>
+            <View style={styles.statCard}>
+              <View style={[styles.statIconContainer, { backgroundColor: 'rgba(255, 149, 0, 0.1)' }]}>
+                <PhoneIcon size={18} color="#FF9500" />
+              </View>
+              <View style={styles.statContent}>
+                <Text style={styles.statValue}>{stats.contacted}</Text>
+                <Text style={styles.statLabel}>Contactes</Text>
+              </View>
+            </View>
+            <View style={styles.statCard}>
+              <View style={[styles.statIconContainer, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}>
+                <StarIcon size={18} color="#34C759" />
+              </View>
+              <View style={styles.statContent}>
+                <Text style={styles.statValue}>{stats.qualified}</Text>
+                <Text style={styles.statLabel}>Qualifies</Text>
+              </View>
+            </View>
+            <View style={styles.statCard}>
+              <View style={[styles.statIconContainer, { backgroundColor: 'rgba(88, 86, 214, 0.1)' }]}>
+                <TrendingUpIcon size={18} color="#5856D6" />
+              </View>
+              <View style={styles.statContent}>
+                <Text style={styles.statValue}>{stats.avgScore}%</Text>
+                <Text style={styles.statLabel}>Score moyen</Text>
+              </View>
+            </View>
           </ScrollView>
-        </View>
 
-        {/* Sort Options */}
-        <View style={styles.sortSection}>
-          <Text style={styles.sortLabel}>Trier par:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <TouchableOpacity
-              style={[styles.sortButton, sortBy === 'score' && styles.sortButtonActive]}
-              onPress={() => setSortBy('score')}
-            >
-              <Text style={[styles.sortText, sortBy === 'score' && styles.sortTextActive]}>
-                Score
-              </Text>
-            </TouchableOpacity>
+          {/* Filter Tabs */}
+          <GlassTabBar
+            tabs={[
+              { key: 'all', label: `Tous (${leads.length})` },
+              { key: 'new', label: `Nouveaux (${stats.new})` },
+              { key: 'contacted', label: `Contactes (${stats.contacted})` },
+              { key: 'qualified', label: `Qualifies (${stats.qualified})` },
+            ]}
+            activeTab={selectedStatus}
+            onTabChange={(key) => setSelectedStatus(key)}
+            variant="pills"
+            scrollable
+          />
 
-            <TouchableOpacity
-              style={[styles.sortButton, sortBy === 'trend' && styles.sortButtonActive]}
-              onPress={() => setSortBy('trend')}
-            >
-              <Text style={[styles.sortText, sortBy === 'trend' && styles.sortTextActive]}>
-                Tendance
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.sortButton, sortBy === 'activity' && styles.sortButtonActive]}
-              onPress={() => setSortBy('activity')}
-            >
-              <Text style={[styles.sortText, sortBy === 'activity' && styles.sortTextActive]}>
-                Activité
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
+          {/* Search Bar */}
+          <View style={styles.searchWrapper}>
+            <GlassSearchBar
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Rechercher un lead..."
+            />
+          </View>
         </View>
 
         {/* Leads List */}
-        <FlatList
-          data={filteredLeads}
-          renderItem={renderLeadCard}
-          keyExtractor={item => item.id}
-          scrollEnabled={false}
-          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+        <ScrollView
+          style={styles.list}
           contentContainerStyle={styles.listContent}
-        />
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#007AFF" />}
+          showsVerticalScrollIndicator={false}
+        >
+          {filteredLeads.length > 0 ? (
+            filteredLeads.map((lead, index) => (
+              <Animated.View
+                key={lead.id}
+                style={[
+                  styles.cardWrapper,
+                  {
+                    opacity: fadeAnim,
+                    transform: [{
+                      translateY: fadeAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [20 * (index % 5), 0],
+                      }),
+                    }],
+                  },
+                ]}
+              >
+                <TouchableOpacity
+                  style={styles.card}
+                  onPress={() => openLeadDetails(lead)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.cardContent}>
+                    <GlassAvatar
+                      name={getLeadFullName(lead)}
+                      size="md"
+                      gradient={[getScoreColor(getLeadScore(lead)), getScoreColor(getLeadScore(lead))]}
+                    />
+                    <View style={styles.cardInfo}>
+                      <View style={styles.cardNameRow}>
+                        <Text style={styles.cardName}>{getLeadFullName(lead)}</Text>
+                        <GlassBadge
+                          label={statusConfig[lead.status].label}
+                          variant={lead.status === 'qualified' ? 'success' : lead.status === 'contacted' ? 'warning' : 'info'}
+                          size="sm"
+                        />
+                      </View>
+                      {lead.company && (
+                        <Text style={styles.cardCompany}>{lead.company}</Text>
+                      )}
+                      {lead.email && (
+                        <Text style={styles.cardEmail} numberOfLines={1}>{lead.email}</Text>
+                      )}
 
-        {/* Score Breakdown Modal (Bottom Sheet Alternative) */}
-        {selectedLead && selectedLeadBreakdown && (
-          <View style={styles.detailsCard}>
-            <View style={styles.detailsHeader}>
-              <Text style={styles.detailsTitle}>{selectedLead.name}</Text>
-              <TouchableOpacity onPress={() => setSelectedLead(null)}>
-                <Text style={styles.closeButton}>✕</Text>
-              </TouchableOpacity>
-            </View>
+                      {/* Score Bar */}
+                      <View style={styles.scoreContainer}>
+                        <View style={styles.scoreHeader}>
+                          <Text style={styles.scoreLabel}>Score</Text>
+                          <Text style={[styles.scoreValue, { color: getScoreColor(getLeadScore(lead)) }]}>
+                            {getLeadScore(lead)}%
+                          </Text>
+                        </View>
+                        <View style={styles.scoreTrack}>
+                          <View
+                            style={[
+                              styles.scoreFill,
+                              {
+                                width: `${getLeadScore(lead)}%`,
+                                backgroundColor: getScoreColor(getLeadScore(lead)),
+                              }
+                            ]}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.cardActions}>
+                      {lead.phone && (
+                        <TouchableOpacity
+                          style={styles.quickAction}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            Platform.OS === 'web' && window.open(`tel:${lead.phone}`);
+                          }}
+                        >
+                          <PhoneIcon size={16} color="#007AFF" />
+                        </TouchableOpacity>
+                      )}
+                      {lead.email && (
+                        <TouchableOpacity
+                          style={styles.quickAction}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            Platform.OS === 'web' && window.open(`mailto:${lead.email}`);
+                          }}
+                        >
+                          <MailIcon size={16} color="#007AFF" />
+                        </TouchableOpacity>
+                      )}
+                      <ChevronRightIcon size={20} color="#C7C7CC" />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </Animated.View>
+            ))
+          ) : (
+            <GlassEmptyState
+              icon={<UsersIcon size={48} color="#C7C7CC" />}
+              title="Aucun lead trouve"
+              description={searchQuery || selectedStatus !== 'all' ? "Essayez de modifier vos filtres" : "Ajoutez votre premier lead pour commencer"}
+              actionLabel="Nouveau lead"
+              onAction={() => setNewLeadModalVisible(true)}
+            />
+          )}
+        </ScrollView>
 
-            <View style={styles.detailsInfo}>
-              <Text style={styles.detailsLabel}>Email:</Text>
-              <Text style={styles.detailsValue}>{selectedLead.email}</Text>
-
-              <Text style={styles.detailsLabel}>Téléphone:</Text>
-              <Text style={styles.detailsValue}>{selectedLead.phone}</Text>
-
-              <Text style={styles.detailsLabel}>Dernière activité:</Text>
-              <Text style={styles.detailsValue}>{selectedLead.lastActivity}</Text>
-            </View>
-
-            <View style={styles.scoreBreakdownSection}>
-              <Text style={styles.detailsLabel}>Breakdown du Score</Text>
-              <View style={styles.scoreBreakdownGrid}>
-                <View style={styles.breakdownItem}>
-                  <Text style={styles.breakdownLabel}>Email</Text>
-                  <Text style={styles.breakdownValue}>{selectedLeadBreakdown.email}pts</Text>
-                </View>
-                <View style={styles.breakdownItem}>
-                  <Text style={styles.breakdownLabel}>Téléphone</Text>
-                  <Text style={styles.breakdownValue}>{selectedLeadBreakdown.phone}pts</Text>
-                </View>
-                <View style={styles.breakdownItem}>
-                  <Text style={styles.breakdownLabel}>Entreprise</Text>
-                  <Text style={styles.breakdownValue}>{selectedLeadBreakdown.company}pts</Text>
-                </View>
-                <View style={styles.breakdownItem}>
-                  <Text style={styles.breakdownLabel}>LinkedIn</Text>
-                  <Text style={styles.breakdownValue}>{selectedLeadBreakdown.linkedin}pts</Text>
-                </View>
-                <View style={styles.breakdownItem}>
-                  <Text style={styles.breakdownLabel}>Type</Text>
-                  <Text style={styles.breakdownValue}>{selectedLeadBreakdown.type}pts</Text>
-                </View>
-                <View style={styles.breakdownItem}>
-                  <Text style={styles.breakdownLabel}>Source</Text>
-                  <Text style={styles.breakdownValue}>{selectedLeadBreakdown.source}pts</Text>
-                </View>
-                <View style={styles.breakdownItem}>
-                  <Text style={styles.breakdownLabel}>Activités</Text>
-                  <Text style={styles.breakdownValue}>{selectedLeadBreakdown.activities}pts</Text>
-                </View>
-                <View style={styles.breakdownItem}>
-                  <Text style={styles.breakdownLabel}>Deals</Text>
-                  <Text style={styles.breakdownValue}>{selectedLeadBreakdown.deals}pts</Text>
+        {/* Lead Details Modal */}
+        <GlassModal
+          visible={leadModalVisible}
+          onClose={() => setLeadModalVisible(false)}
+          title={selectedLead ? getLeadFullName(selectedLead) : ''}
+          size="large"
+        >
+          {selectedLead && (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Lead Header */}
+              <View style={styles.modalLeadHeader}>
+                <GlassAvatar
+                  name={getLeadFullName(selectedLead)}
+                  size="xl"
+                  gradient={[getScoreColor(getLeadScore(selectedLead)), getScoreColor(getLeadScore(selectedLead))]}
+                />
+                <View style={styles.modalLeadInfo}>
+                  <Text style={styles.modalLeadName}>{getLeadFullName(selectedLead)}</Text>
+                  {selectedLead.title && <Text style={styles.modalLeadTitle}>{selectedLead.title}</Text>}
+                  {selectedLead.company && <Text style={styles.modalLeadCompany}>{selectedLead.company}</Text>}
+                  <View style={styles.modalBadges}>
+                    <GlassBadge
+                      label={statusConfig[selectedLead.status].label}
+                      variant={selectedLead.status === 'qualified' ? 'success' : selectedLead.status === 'contacted' ? 'warning' : 'info'}
+                    />
+                    {selectedLead.source && (
+                      <GlassBadge
+                        label={sourceConfig[selectedLead.source]?.label || selectedLead.source}
+                        variant="default"
+                      />
+                    )}
+                  </View>
                 </View>
               </View>
-            </View>
-          </View>
-        )}
 
-        <View style={{ height: 40 }} />
-      </ScrollView>
+              {/* Score Section */}
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionTitle}>SCORE DE QUALIFICATION</Text>
+                <View style={styles.scoreCard}>
+                  <View style={styles.scoreBigValue}>
+                    <Text style={[styles.scoreBigNumber, { color: getScoreColor(getLeadScore(selectedLead)) }]}>
+                      {getLeadScore(selectedLead)}
+                    </Text>
+                    <Text style={styles.scoreBigSuffix}>/ 100</Text>
+                  </View>
+                  <GlassProgressBar
+                    value={getLeadScore(selectedLead)}
+                    maxValue={100}
+                    gradient={[getScoreColor(getLeadScore(selectedLead)), getScoreColor(getLeadScore(selectedLead))]}
+                    height={10}
+                    showValue={false}
+                  />
+                  <Text style={styles.scoreDescription}>
+                    {getLeadScore(selectedLead) >= 80 ? 'Lead tres qualifie - A contacter en priorite' :
+                      getLeadScore(selectedLead) >= 50 ? 'Lead interessant - Necessite plus d\'informations' :
+                        'Lead a qualifier - Score faible'}
+                  </Text>
+                </View>
+              </View>
 
-      {/* Create Lead Modal */}
-      <Modal
-        visible={newLeadModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={handleResetForm}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nouveau Lead</Text>
-              <TouchableOpacity onPress={handleResetForm}>
-                <Text style={styles.closeButton}>✕</Text>
-              </TouchableOpacity>
-            </View>
+              {/* Contact Info */}
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionTitle}>INFORMATIONS</Text>
+                <View style={styles.infoGrid}>
+                  {selectedLead.email && (
+                    <TouchableOpacity
+                      style={styles.infoCard}
+                      onPress={() => Platform.OS === 'web' && window.open(`mailto:${selectedLead.email}`)}
+                    >
+                      <View style={[styles.infoIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
+                        <MailIcon size={18} color="#007AFF" />
+                      </View>
+                      <View style={styles.infoCardContent}>
+                        <Text style={styles.infoLabel}>Email</Text>
+                        <Text style={styles.infoValue}>{selectedLead.email}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                  {selectedLead.phone && (
+                    <TouchableOpacity
+                      style={styles.infoCard}
+                      onPress={() => Platform.OS === 'web' && window.open(`tel:${selectedLead.phone}`)}
+                    >
+                      <View style={[styles.infoIconContainer, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}>
+                        <PhoneIcon size={18} color="#34C759" />
+                      </View>
+                      <View style={styles.infoCardContent}>
+                        <Text style={styles.infoLabel}>Telephone</Text>
+                        <Text style={styles.infoValue}>{selectedLead.phone}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                  <View style={styles.infoCard}>
+                    <View style={[styles.infoIconContainer, { backgroundColor: 'rgba(255, 149, 0, 0.1)' }]}>
+                      <ClockIcon size={18} color="#FF9500" />
+                    </View>
+                    <View style={styles.infoCardContent}>
+                      <Text style={styles.infoLabel}>Cree le</Text>
+                      <Text style={styles.infoValue}>
+                        {new Date(selectedLead.created_at).toLocaleDateString('fr-FR', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                        })}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
 
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Nom du lead *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ex: Jean Dupont"
-                  value={newLeadForm.name}
-                  onChangeText={(text) => setNewLeadForm({ ...newLeadForm, name: text })}
-                  placeholderTextColor="#C7C7CC"
+              {/* Change Status */}
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionTitle}>CHANGER LE STATUT</Text>
+                <View style={styles.statusButtons}>
+                  {(['new', 'contacted', 'qualified', 'unqualified'] as const).map((status) => (
+                    <TouchableOpacity
+                      key={status}
+                      style={[
+                        styles.statusButton,
+                        {
+                          borderColor: statusConfig[status].color,
+                          backgroundColor: selectedLead.status === status ? statusConfig[status].bgColor : 'transparent',
+                        }
+                      ]}
+                      onPress={() => handleChangeStatus(selectedLead, status)}
+                    >
+                      <View style={[styles.statusDot, { backgroundColor: statusConfig[status].color }]} />
+                      <Text style={[
+                        styles.statusButtonText,
+                        { color: selectedLead.status === status ? statusConfig[status].color : glassTheme.colors.text.secondary }
+                      ]}>
+                        {statusConfig[status].label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Notes */}
+              {selectedLead.notes && (
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>NOTES</Text>
+                  <View style={styles.notesCard}>
+                    <Text style={styles.notesText}>{selectedLead.notes}</Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Actions */}
+              <View style={styles.modalActions}>
+                <GlassButton
+                  title="Convertir en Contact"
+                  onPress={() => handleConvertToContact(selectedLead)}
+                  variant="primary"
+                  icon={<UsersIcon size={16} color="#FFFFFF" />}
+                  fullWidth
                 />
               </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Entreprise *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ex: Acme Corporation"
-                  value={newLeadForm.company}
-                  onChangeText={(text) => setNewLeadForm({ ...newLeadForm, company: text })}
-                  placeholderTextColor="#C7C7CC"
+              <View style={styles.modalActionsSecondary}>
+                <GlassButton
+                  title="Modifier"
+                  onPress={() => handleEditLead(selectedLead)}
+                  variant="outline"
+                  icon={<EditIcon size={16} color="#007AFF" />}
+                  style={{ flex: 1 }}
+                />
+                <GlassButton
+                  title="Supprimer"
+                  onPress={() => handleDeleteLead(selectedLead)}
+                  variant="danger"
+                  icon={<TrashIcon size={16} color="#FF3B30" />}
+                  style={{ flex: 1 }}
                 />
               </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Email</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="contact@example.com"
-                  value={newLeadForm.email}
-                  onChangeText={(text) => setNewLeadForm({ ...newLeadForm, email: text })}
-                  keyboardType="email-address"
-                  placeholderTextColor="#C7C7CC"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Téléphone</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="+33 6 12 34 56 78"
-                  value={newLeadForm.phone}
-                  onChangeText={(text) => setNewLeadForm({ ...newLeadForm, phone: text })}
-                  keyboardType="phone-pad"
-                  placeholderTextColor="#C7C7CC"
-                />
-              </View>
-
-              <Text style={styles.formNote}>
-                Les champs avec * sont obligatoires. Le score sera calculé automatiquement.
-              </Text>
             </ScrollView>
+          )}
+        </GlassModal>
 
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.button, styles.buttonSecondary]}
-                onPress={handleResetForm}
-              >
-                <Text style={styles.buttonSecondaryText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.button, styles.buttonPrimary]}
-                onPress={handleCreateLead}
-              >
-                <Text style={styles.buttonPrimaryText}>Créer Lead</Text>
-              </TouchableOpacity>
+        {/* New/Edit Lead Modal */}
+        <GlassModal
+          visible={newLeadModalVisible}
+          onClose={() => { setNewLeadModalVisible(false); resetLeadForm(); }}
+          title={editingLead ? 'Modifier le lead' : 'Nouveau lead'}
+          size="large"
+        >
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <GlassInput
+              label="Prenom *"
+              placeholder="Prenom"
+              value={leadForm.first_name}
+              onChangeText={(text) => setLeadForm({ ...leadForm, first_name: text })}
+            />
+            <GlassInput
+              label="Nom"
+              placeholder="Nom de famille"
+              value={leadForm.last_name}
+              onChangeText={(text) => setLeadForm({ ...leadForm, last_name: text })}
+            />
+            <GlassInput
+              label="Email"
+              placeholder="email@example.com"
+              value={leadForm.email}
+              onChangeText={(text) => setLeadForm({ ...leadForm, email: text })}
+              keyboardType="email-address"
+            />
+            <GlassInput
+              label="Telephone"
+              placeholder="+33 6 XX XX XX XX"
+              value={leadForm.phone}
+              onChangeText={(text) => setLeadForm({ ...leadForm, phone: text })}
+              keyboardType="phone-pad"
+            />
+            <GlassInput
+              label="Entreprise"
+              placeholder="Nom de l'entreprise"
+              value={leadForm.company}
+              onChangeText={(text) => setLeadForm({ ...leadForm, company: text })}
+            />
+            <GlassInput
+              label="Titre/Poste"
+              placeholder="Directeur Commercial"
+              value={leadForm.title}
+              onChangeText={(text) => setLeadForm({ ...leadForm, title: text })}
+            />
+
+            {/* Source Selection */}
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Source</Text>
+              <View style={styles.sourceGrid}>
+                {Object.entries(sourceConfig).map(([key, config]) => (
+                  <TouchableOpacity
+                    key={key}
+                    style={[
+                      styles.sourceOption,
+                      leadForm.source === key && { borderColor: config.color, backgroundColor: `${config.color}10` }
+                    ]}
+                    onPress={() => setLeadForm({ ...leadForm, source: key })}
+                  >
+                    <Text style={[
+                      styles.sourceOptionText,
+                      leadForm.source === key && { color: config.color, fontWeight: '600' }
+                    ]}>
+                      {config.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
+
+            <GlassInput
+              label="Notes"
+              placeholder="Notes sur le lead..."
+              value={leadForm.notes}
+              onChangeText={(text) => setLeadForm({ ...leadForm, notes: text })}
+              multiline
+              numberOfLines={4}
+            />
+          </ScrollView>
+          <View style={styles.modalFooter}>
+            <GlassButton
+              title="Annuler"
+              onPress={() => { setNewLeadModalVisible(false); resetLeadForm(); }}
+              variant="outline"
+              style={{ flex: 1 }}
+            />
+            <GlassButton
+              title={editingLead ? 'Modifier' : 'Creer'}
+              onPress={handleCreateLead}
+              variant="primary"
+              style={{ flex: 1 }}
+            />
           </View>
-        </View>
-      </Modal>
-    </View>
+        </GlassModal>
+      </Animated.View>
+    </GlassLayout>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
-    backgroundColor: '#FFFFFF',
-    paddingTop: Platform.OS === 'ios' ? 60 : 20,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingTop: glassTheme.spacing.md,
+    paddingHorizontal: glassTheme.spacing.md,
+    paddingBottom: glassTheme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+    borderBottomColor: 'rgba(0, 0, 0, 0.04)',
+    ...(Platform.OS === 'web' ? {
+      // @ts-ignore
+      backdropFilter: 'blur(20px)',
+    } : {}),
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#000000',
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#8E8E93',
-  },
-  headerContent: {
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    marginBottom: glassTheme.spacing.md,
+  },
+  headerTitle: {
+    ...glassTheme.typography.displaySmall,
+    color: glassTheme.colors.text.primary,
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    ...glassTheme.typography.body,
+    color: glassTheme.colors.text.tertiary,
   },
   addButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#007AFF',
+    borderRadius: glassTheme.radius.full,
+    overflow: 'hidden',
+    ...withShadow('md'),
+  },
+  addButtonGradient: {
+    width: 44,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  addButtonText: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  statsScroll: {
+    marginBottom: glassTheme.spacing.md,
+    marginHorizontal: -glassTheme.spacing.md,
   },
-  content: {
-    flex: 1,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 14,
-    color: '#8E8E93',
-  },
-  summaryCards: {
+  statsContainer: {
+    paddingHorizontal: glassTheme.spacing.md,
+    gap: glassTheme.spacing.sm,
     flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingTop: 16,
   },
-  summaryCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 12,
+  statCard: {
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: glassTheme.radius.md,
+    padding: glassTheme.spacing.sm,
+    gap: glassTheme.spacing.sm,
+    minWidth: 130,
+    ...withShadow('sm'),
   },
-  summaryLabel: {
-    fontSize: 11,
-    color: '#8E8E93',
-    fontWeight: '500',
-    marginBottom: 8,
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: glassTheme.radius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  summaryValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000000',
+  statContent: {
+    flex: 1,
   },
-  filterSection: {
-    marginTop: 16,
-    paddingLeft: 16,
+  statValue: {
+    ...glassTheme.typography.h2,
+    color: glassTheme.colors.text.primary,
   },
-  filterScroll: {
-    marginRight: 16,
+  statLabel: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
   },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
+  searchWrapper: {
+    marginTop: glassTheme.spacing.md,
   },
-  filterButtonActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  filterText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  filterTextActive: {
-    color: '#FFFFFF',
-  },
-  sortSection: {
-    marginTop: 12,
-    paddingHorizontal: 16,
-  },
-  sortLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-    marginBottom: 8,
-  },
-  sortButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#FFFFFF',
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-  },
-  sortButtonActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  sortText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#8E8E93',
-  },
-  sortTextActive: {
-    color: '#FFFFFF',
+  list: {
+    flex: 1,
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    padding: glassTheme.spacing.md,
+    gap: glassTheme.spacing.sm,
   },
-  leadCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+  cardWrapper: {
+    marginBottom: glassTheme.spacing.sm,
   },
-  leadHeader: {
+  card: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: glassTheme.radius.lg,
+    padding: glassTheme.spacing.md,
+    ...withShadow('sm'),
+    ...(Platform.OS === 'web' ? {
+      // @ts-ignore
+      backdropFilter: 'blur(10px)',
+      transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+    } : {}),
+  },
+  cardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
   },
-  scoreCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#F2F2F7',
-    justifyContent: 'center',
+  cardInfo: {
+    flex: 1,
+    marginLeft: glassTheme.spacing.sm,
+    gap: 2,
+  },
+  cardNameRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 12,
+    justifyContent: 'space-between',
+    gap: glassTheme.spacing.sm,
   },
-  scoreText: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  leadTitleSection: {
+  cardName: {
+    ...glassTheme.typography.h3,
+    color: glassTheme.colors.text.primary,
     flex: 1,
   },
-  leadName: {
-    fontSize: 14,
+  cardCompany: {
+    ...glassTheme.typography.bodySmall,
+    color: glassTheme.colors.text.secondary,
+  },
+  cardEmail: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+  },
+  scoreContainer: {
+    marginTop: glassTheme.spacing.sm,
+  },
+  scoreHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  scoreLabel: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+  },
+  scoreValue: {
+    ...glassTheme.typography.caption,
     fontWeight: '700',
-    color: '#000000',
-    marginBottom: 2,
   },
-  leadCompany: {
-    fontSize: 12,
-    color: '#8E8E93',
-  },
-  statusBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statusText: {
-    fontSize: 20,
-  },
-  leadMeta: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 12,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  metaText: {
-    fontSize: 11,
-    color: '#8E8E93',
-    fontWeight: '500',
-  },
-  scoreBar: {
+  scoreTrack: {
     height: 4,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: 'rgba(0, 0, 0, 0.06)',
     borderRadius: 2,
     overflow: 'hidden',
   },
-  scoreBarFill: {
+  scoreFill: {
     height: '100%',
     borderRadius: 2,
   },
-  detailsCard: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    marginTop: 24,
-    marginHorizontal: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  detailsHeader: {
+  cardActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    gap: glassTheme.spacing.sm,
   },
-  detailsTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000000',
+  quickAction: {
+    width: 36,
+    height: 36,
+    borderRadius: glassTheme.radius.full,
+    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  closeButton: {
-    fontSize: 24,
-    color: '#8E8E93',
+  // Modal styles
+  modalLeadHeader: {
+    alignItems: 'center',
+    paddingVertical: glassTheme.spacing.lg,
+    gap: glassTheme.spacing.md,
   },
-  detailsInfo: {
-    marginBottom: 20,
+  modalLeadInfo: {
+    alignItems: 'center',
+    gap: 4,
   },
-  detailsLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-    marginTop: 8,
-    marginBottom: 4,
+  modalLeadName: {
+    ...glassTheme.typography.h1,
+    color: glassTheme.colors.text.primary,
+    textAlign: 'center',
   },
-  detailsValue: {
-    fontSize: 14,
-    color: '#000000',
+  modalLeadTitle: {
+    ...glassTheme.typography.body,
+    color: glassTheme.colors.text.secondary,
+  },
+  modalLeadCompany: {
+    ...glassTheme.typography.bodySmall,
+    color: glassTheme.colors.text.tertiary,
+  },
+  modalBadges: {
+    flexDirection: 'row',
+    gap: glassTheme.spacing.sm,
+    marginTop: glassTheme.spacing.sm,
+  },
+  modalSection: {
+    marginBottom: glassTheme.spacing.lg,
+  },
+  sectionTitle: {
+    ...glassTheme.typography.label,
+    color: glassTheme.colors.text.tertiary,
+    marginBottom: glassTheme.spacing.sm,
+  },
+  scoreCard: {
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: glassTheme.radius.lg,
+    padding: glassTheme.spacing.lg,
+    alignItems: 'center',
+    gap: glassTheme.spacing.md,
+  },
+  scoreBigValue: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  scoreBigNumber: {
+    ...glassTheme.typography.displayLarge,
+  },
+  scoreBigSuffix: {
+    ...glassTheme.typography.h2,
+    color: glassTheme.colors.text.tertiary,
+    marginLeft: 4,
+  },
+  scoreDescription: {
+    ...glassTheme.typography.bodySmall,
+    color: glassTheme.colors.text.secondary,
+    textAlign: 'center',
+  },
+  infoGrid: {
+    gap: glassTheme.spacing.sm,
+  },
+  infoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: glassTheme.radius.md,
+    padding: glassTheme.spacing.sm,
+    gap: glassTheme.spacing.sm,
+  },
+  infoIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: glassTheme.radius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  infoCardContent: {
+    flex: 1,
+  },
+  infoLabel: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+  },
+  infoValue: {
+    ...glassTheme.typography.body,
+    color: glassTheme.colors.text.primary,
     fontWeight: '500',
   },
-  scoreBreakdownSection: {
-    borderTopWidth: 1,
-    borderTopColor: '#F2F2F7',
-    paddingTop: 16,
-  },
-  scoreBreakdownGrid: {
+  statusButtons: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 12,
+    gap: glassTheme.spacing.sm,
   },
-  breakdownItem: {
-    width: (width - 64) / 2,
-    backgroundColor: '#F2F2F7',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-  },
-  breakdownLabel: {
-    fontSize: 11,
-    color: '#8E8E93',
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  breakdownValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#007AFF',
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    maxHeight: '90%',
-  },
-  modalHeader: {
+  statusButton: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    gap: 6,
+    paddingHorizontal: glassTheme.spacing.md,
+    paddingVertical: glassTheme.spacing.sm,
+    borderRadius: glassTheme.radius.full,
+    borderWidth: 1.5,
+    backgroundColor: 'transparent',
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000000',
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  modalBody: {
-    maxHeight: 400,
-    marginBottom: 16,
-  },
-  formGroup: {
-    marginBottom: 16,
-  },
-  formLabel: {
-    fontSize: 12,
+  statusButtonText: {
+    ...glassTheme.typography.bodySmall,
     fontWeight: '600',
-    color: '#8E8E93',
-    marginBottom: 8,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#000000',
+  notesCard: {
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: glassTheme.radius.md,
+    padding: glassTheme.spacing.md,
   },
-  formNote: {
-    fontSize: 11,
-    color: '#8E8E93',
-    fontStyle: 'italic',
-    marginTop: 16,
-    marginBottom: 8,
+  notesText: {
+    ...glassTheme.typography.body,
+    color: glassTheme.colors.text.secondary,
+  },
+  modalActions: {
+    marginTop: glassTheme.spacing.lg,
+  },
+  modalActionsSecondary: {
+    flexDirection: 'row',
+    gap: glassTheme.spacing.sm,
+    marginTop: glassTheme.spacing.sm,
   },
   modalFooter: {
     flexDirection: 'row',
-    gap: 8,
-    paddingTop: 16,
-    paddingBottom: 20,
+    gap: glassTheme.spacing.sm,
+    marginTop: glassTheme.spacing.lg,
+    paddingTop: glassTheme.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.06)',
   },
-  button: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
+  formSection: {
+    marginBottom: glassTheme.spacing.md,
   },
-  buttonPrimary: {
-    backgroundColor: '#007AFF',
+  formLabel: {
+    ...glassTheme.typography.bodySmall,
+    fontWeight: '600',
+    color: glassTheme.colors.text.secondary,
+    marginBottom: glassTheme.spacing.sm,
   },
-  buttonPrimaryText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  sourceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: glassTheme.spacing.sm,
   },
-  buttonSecondary: {
-    backgroundColor: '#F2F2F7',
+  sourceOption: {
+    paddingHorizontal: glassTheme.spacing.md,
+    paddingVertical: glassTheme.spacing.sm,
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: glassTheme.radius.full,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
-  buttonSecondaryText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#8E8E93',
+  sourceOptionText: {
+    ...glassTheme.typography.bodySmall,
+    color: glassTheme.colors.text.secondary,
   },
 });
-
-export default withGlassLayout(LeadsScreen);

@@ -290,6 +290,14 @@ const menuCategories: MenuCategory[] = [
         screen: 'Profile',
         icon: SettingsIcon,
       },
+      {
+        id: 'testall',
+        title: 'Tests API',
+        subtitle: 'Tester toutes les fonctionnalités',
+        screen: 'TestAll',
+        icon: ZapIcon,
+        isNew: true,
+      },
     ],
   },
 ];

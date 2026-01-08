@@ -139,6 +139,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/pipeline', pipelineRouter);
+app.use('/api/pipelines', pipelineRouter); // Alias for /api/pipeline
 app.use('/api/campaigns', campaignsRouter);
 app.use('/api/invoices', invoicesRouter);
 app.use('/api/payments', paymentsRouter);
@@ -156,6 +157,8 @@ app.use('/api/expenses', expensesRouter);
 app.use('/api/logs', logsRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/templates', templatesRouter);
+app.use('/api/email-templates', templatesRouter); // Alias for email templates
+app.use('/api/invoice-templates', templatesRouter); // Alias for invoice templates
 app.use('/api/upload', uploadRouter);
 app.use('/api/showcase', showcaseRouter);
 app.use('/api/company-profile', companyProfileRouter);

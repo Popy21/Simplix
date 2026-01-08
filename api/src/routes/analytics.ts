@@ -74,11 +74,11 @@ router.get('/sales', async (req: Request, res: Response) => {
         SELECT
           p.name as product_name,
           COUNT(*) as quantity_sold,
-          SUM(si.quantity * si.unit_price) as revenue
-        FROM sale_items si
-        JOIN products p ON si.product_id = p.id
-        JOIN sales s ON si.sale_id = s.id
-        WHERE s.status = 'completed' AND s.sale_date >= $1
+          COALESCE(SUM(ii.quantity * ii.unit_price), 0) as revenue
+        FROM invoice_items ii
+        JOIN products p ON ii.product_id = p.id
+        JOIN invoices i ON ii.invoice_id = i.id
+        WHERE i.status = 'paid' AND i.invoice_date >= $1
         GROUP BY p.id, p.name
         ORDER BY revenue DESC
         LIMIT 10
@@ -696,6 +696,108 @@ router.get('/', async (req: Request, res: Response) => {
     res.json(analytics);
   } catch (err: any) {
     console.error('Error fetching analytics:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Revenue analytics
+router.get('/revenue', async (req: Request, res: Response) => {
+  try {
+    const { period = 'month' } = req.query;
+    const now = new Date();
+    let startDate: Date;
+
+    switch (period) {
+      case 'week':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      case 'month':
+      default:
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    const [totalRevenue, monthlyRevenue, revenueByProduct] = await Promise.all([
+      db.query(`
+        SELECT
+          COALESCE(SUM(total_amount), 0) as total,
+          COUNT(*) as invoice_count,
+          COALESCE(AVG(total_amount), 0) as avg_invoice
+        FROM invoices
+        WHERE status = 'paid' AND invoice_date >= $1
+      `, [startDate]),
+
+      db.query(`
+        SELECT
+          DATE_TRUNC('month', invoice_date) as month,
+          COALESCE(SUM(total_amount), 0) as revenue,
+          COUNT(*) as invoice_count
+        FROM invoices
+        WHERE status = 'paid' AND invoice_date >= NOW() - INTERVAL '12 months'
+        GROUP BY DATE_TRUNC('month', invoice_date)
+        ORDER BY month DESC
+      `),
+
+      db.query(`
+        SELECT
+          p.name as product_name,
+          COALESCE(SUM(ii.quantity * ii.unit_price), 0) as revenue,
+          COUNT(DISTINCT i.id) as invoice_count
+        FROM invoice_items ii
+        JOIN products p ON ii.product_id = p.id
+        JOIN invoices i ON ii.invoice_id = i.id
+        WHERE i.status = 'paid' AND i.invoice_date >= $1
+        GROUP BY p.id, p.name
+        ORDER BY revenue DESC
+        LIMIT 10
+      `, [startDate])
+    ]);
+
+    res.json({
+      total: totalRevenue.rows[0],
+      monthly_trend: monthlyRevenue.rows,
+      by_product: revenueByProduct.rows
+    });
+  } catch (err: any) {
+    console.error('Error fetching revenue analytics:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Contacts analytics
+router.get('/contacts', async (req: Request, res: Response) => {
+  try {
+    const contactsStats = await db.query(`
+      SELECT
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE type = 'lead') as leads,
+        COUNT(*) FILTER (WHERE type = 'prospect') as prospects,
+        COUNT(*) FILTER (WHERE type = 'customer') as customers,
+        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days') as new_this_week,
+        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days') as new_this_month,
+        AVG(score)::numeric(10,2) as avg_score
+      FROM contacts
+      WHERE deleted_at IS NULL
+    `);
+
+    const bySource = await db.query(`
+      SELECT
+        source,
+        COUNT(*) as count
+      FROM contacts
+      WHERE deleted_at IS NULL AND source IS NOT NULL
+      GROUP BY source
+      ORDER BY count DESC
+    `);
+
+    res.json({
+      summary: contactsStats.rows[0],
+      by_source: bySource.rows
+    });
+  } catch (err: any) {
+    console.error('Error fetching contacts analytics:', err);
     res.status(500).json({ error: err.message });
   }
 });

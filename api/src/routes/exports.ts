@@ -40,17 +40,18 @@ router.get('/contacts', authenticateToken, requireOrganization, async (req: Auth
         c.last_name as "Nom",
         c.email as "Email",
         c.phone as "Téléphone",
-        c.company as "Société",
-        c.position as "Fonction",
+        co.name as "Société",
+        c.title as "Fonction",
         c.type as "Type",
         c.source as "Source",
         c.score as "Score",
-        c.address as "Adresse",
-        c.city as "Ville",
-        c.postal_code as "Code postal",
-        c.country as "Pays",
+        COALESCE(c.address->>'street', '') as "Adresse",
+        COALESCE(c.address->>'city', '') as "Ville",
+        COALESCE(c.address->>'postal_code', '') as "Code postal",
+        COALESCE(c.address->>'country', '') as "Pays",
         c.created_at as "Date création"
       FROM contacts c
+      LEFT JOIN companies co ON c.company_id = co.id
       WHERE c.organization_id = $1 AND c.deleted_at IS NULL
     `;
     const params: any[] = [orgId];

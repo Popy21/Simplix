@@ -82,6 +82,13 @@ const ALL_MODULES: NavModule[] = [
   // Finance
   { id: 'expenses', name: 'Expenses', label: 'Dépenses', icon: ShoppingCartIcon, gradient: ['#FF9500', '#FFCC00'], category: 'Finance' },
   { id: 'suppliers', name: 'Suppliers', label: 'Fournisseurs', icon: TruckIcon, gradient: ['#8E8E93', '#AEAEB2'], category: 'Finance' },
+  { id: 'creditnotes', name: 'CreditNotes', label: 'Avoirs', icon: FileTextIcon, gradient: ['#FF3B30', '#FF6B6B'], category: 'Finance' },
+  { id: 'recurring', name: 'RecurringInvoices', label: 'Récurrences', icon: RepeatIcon, gradient: ['#5856D6', '#AF52DE'], category: 'Finance' },
+  { id: 'cashflow', name: 'Cashflow', label: 'Trésorerie', icon: TrendingUpIcon, gradient: ['#34C759', '#30D158'], category: 'Finance' },
+  { id: 'reconciliation', name: 'BankReconciliation', label: 'Rapprochement', icon: LayersIcon, gradient: ['#007AFF', '#5AC8FA'], category: 'Finance' },
+  { id: 'reminders', name: 'Reminders', label: 'Relances', icon: SendIcon, gradient: ['#FF9500', '#FFCC00'], category: 'Finance' },
+  { id: 'accounting', name: 'Accounting', label: 'Comptabilité', icon: BarChartIcon, gradient: ['#5856D6', '#AF52DE'], category: 'Finance' },
+  { id: 'reports', name: 'Reports', label: 'Rapports', icon: PieChartIcon, gradient: ['#007AFF', '#5AC8FA'], category: 'Finance' },
 
   // Automatisation
   { id: 'workflows', name: 'Workflows', label: 'Workflows', icon: RepeatIcon, gradient: ['#5AC8FA', '#007AFF'], category: 'Automatisation' },

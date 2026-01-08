@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,15 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Modal,
   Alert,
   RefreshControl,
   Platform,
   Image,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { contactService, companyService, activitiesService, customerService } from '../services/api';
@@ -26,59 +28,49 @@ import {
   TrashIcon,
   PlusIcon,
   FileTextIcon,
+  SearchIcon,
+  FilterIcon,
+  ChevronRightIcon,
 } from '../components/Icons';
 import GlassLayout from '../components/GlassLayout';
 import { useAuth } from '../context/AuthContext';
 import ImageUpload from '../components/ImageUpload';
+import { glassTheme, withShadow } from '../theme/glassTheme';
+import { isMobile, isTablet, responsiveSpacing } from '../theme/responsive';
+import {
+  GlassSearchBar,
+  GlassModal,
+  GlassButton,
+  GlassInput,
+  GlassEmptyState,
+  GlassLoadingState,
+  GlassAvatar,
+  GlassBadge,
+  GlassTabBar,
+  GlassStats,
+} from '../components/ui';
 
-// Mapping département (2 premiers chiffres du code postal) vers région
+// French regions mapping
 const departmentToRegion: { [key: string]: string } = {
-  '01': 'Auvergne-Rhône-Alpes', '03': 'Auvergne-Rhône-Alpes', '07': 'Auvergne-Rhône-Alpes', '15': 'Auvergne-Rhône-Alpes',
-  '26': 'Auvergne-Rhône-Alpes', '38': 'Auvergne-Rhône-Alpes', '42': 'Auvergne-Rhône-Alpes', '43': 'Auvergne-Rhône-Alpes',
-  '63': 'Auvergne-Rhône-Alpes', '69': 'Auvergne-Rhône-Alpes', '73': 'Auvergne-Rhône-Alpes', '74': 'Auvergne-Rhône-Alpes',
-  '21': 'Bourgogne-Franche-Comté', '25': 'Bourgogne-Franche-Comté', '39': 'Bourgogne-Franche-Comté', '58': 'Bourgogne-Franche-Comté',
-  '70': 'Bourgogne-Franche-Comté', '71': 'Bourgogne-Franche-Comté', '89': 'Bourgogne-Franche-Comté', '90': 'Bourgogne-Franche-Comté',
+  '01': 'Auvergne-Rhone-Alpes', '03': 'Auvergne-Rhone-Alpes', '07': 'Auvergne-Rhone-Alpes', '15': 'Auvergne-Rhone-Alpes',
+  '26': 'Auvergne-Rhone-Alpes', '38': 'Auvergne-Rhone-Alpes', '42': 'Auvergne-Rhone-Alpes', '43': 'Auvergne-Rhone-Alpes',
+  '63': 'Auvergne-Rhone-Alpes', '69': 'Auvergne-Rhone-Alpes', '73': 'Auvergne-Rhone-Alpes', '74': 'Auvergne-Rhone-Alpes',
+  '21': 'Bourgogne-Franche-Comte', '25': 'Bourgogne-Franche-Comte', '39': 'Bourgogne-Franche-Comte', '58': 'Bourgogne-Franche-Comte',
+  '70': 'Bourgogne-Franche-Comte', '71': 'Bourgogne-Franche-Comte', '89': 'Bourgogne-Franche-Comte', '90': 'Bourgogne-Franche-Comte',
   '22': 'Bretagne', '29': 'Bretagne', '35': 'Bretagne', '56': 'Bretagne',
   '18': 'Centre-Val de Loire', '28': 'Centre-Val de Loire', '36': 'Centre-Val de Loire', '37': 'Centre-Val de Loire',
   '41': 'Centre-Val de Loire', '45': 'Centre-Val de Loire',
-  '08': 'Grand Est', '10': 'Grand Est', '51': 'Grand Est', '52': 'Grand Est', '54': 'Grand Est', '55': 'Grand Est',
-  '57': 'Grand Est', '67': 'Grand Est', '68': 'Grand Est', '88': 'Grand Est',
-  '02': 'Hauts-de-France', '59': 'Hauts-de-France', '60': 'Hauts-de-France', '62': 'Hauts-de-France', '80': 'Hauts-de-France',
-  '75': 'Île-de-France', '77': 'Île-de-France', '78': 'Île-de-France', '91': 'Île-de-France', '92': 'Île-de-France',
-  '93': 'Île-de-France', '94': 'Île-de-France', '95': 'Île-de-France',
-  '14': 'Normandie', '27': 'Normandie', '50': 'Normandie', '61': 'Normandie', '76': 'Normandie',
-  '16': 'Nouvelle-Aquitaine', '17': 'Nouvelle-Aquitaine', '19': 'Nouvelle-Aquitaine', '23': 'Nouvelle-Aquitaine',
-  '24': 'Nouvelle-Aquitaine', '33': 'Nouvelle-Aquitaine', '40': 'Nouvelle-Aquitaine', '47': 'Nouvelle-Aquitaine',
-  '64': 'Nouvelle-Aquitaine', '79': 'Nouvelle-Aquitaine', '86': 'Nouvelle-Aquitaine', '87': 'Nouvelle-Aquitaine',
-  '09': 'Occitanie', '11': 'Occitanie', '12': 'Occitanie', '30': 'Occitanie', '31': 'Occitanie', '32': 'Occitanie',
-  '34': 'Occitanie', '46': 'Occitanie', '48': 'Occitanie', '65': 'Occitanie', '66': 'Occitanie', '81': 'Occitanie', '82': 'Occitanie',
-  '44': 'Pays de la Loire', '49': 'Pays de la Loire', '53': 'Pays de la Loire', '72': 'Pays de la Loire', '85': 'Pays de la Loire',
-  '04': 'Provence-Alpes-Côte d\'Azur', '05': 'Provence-Alpes-Côte d\'Azur', '06': 'Provence-Alpes-Côte d\'Azur',
-  '13': 'Provence-Alpes-Côte d\'Azur', '83': 'Provence-Alpes-Côte d\'Azur', '84': 'Provence-Alpes-Côte d\'Azur',
-  '20': 'Corse', '2A': 'Corse', '2B': 'Corse',
-  '971': 'Guadeloupe', '972': 'Martinique', '973': 'Guyane', '974': 'La Réunion', '976': 'Mayotte',
+  '75': 'Ile-de-France', '77': 'Ile-de-France', '78': 'Ile-de-France', '91': 'Ile-de-France', '92': 'Ile-de-France',
+  '93': 'Ile-de-France', '94': 'Ile-de-France', '95': 'Ile-de-France',
 };
 
 const frenchRegions = [
-  'Auvergne-Rhône-Alpes',
-  'Bourgogne-Franche-Comté',
-  'Bretagne',
-  'Centre-Val de Loire',
-  'Corse',
-  'Grand Est',
-  'Guadeloupe',
-  'Guyane',
-  'Hauts-de-France',
-  'Île-de-France',
-  'La Réunion',
-  'Martinique',
-  'Mayotte',
-  'Normandie',
-  'Nouvelle-Aquitaine',
-  'Occitanie',
-  'Pays de la Loire',
-  'Provence-Alpes-Côte d\'Azur',
+  'Auvergne-Rhone-Alpes', 'Bourgogne-Franche-Comte', 'Bretagne', 'Centre-Val de Loire',
+  'Corse', 'Grand Est', 'Hauts-de-France', 'Ile-de-France', 'Normandie',
+  'Nouvelle-Aquitaine', 'Occitanie', 'Pays de la Loire', 'Provence-Alpes-Cote d\'Azur',
 ];
+
+const { width } = Dimensions.get('window');
 
 type ContactsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Contacts'>;
@@ -185,16 +177,37 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
     subject: '',
   });
 
+  // Animation refs
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
   const activityConfig = {
-    call: { label: 'Appel', icon: '📞', color: '#007AFF' },
-    email: { label: 'Email', icon: '📧', color: '#FF9500' },
-    meeting: { label: 'Réunion', icon: '🤝', color: '#34C759' },
-    note: { label: 'Note', icon: '📝', color: '#8E8E93' },
+    call: { label: 'Appel', icon: PhoneIcon, color: '#007AFF' },
+    email: { label: 'Email', icon: MailIcon, color: '#FF9500' },
+    meeting: { label: 'Reunion', icon: UsersIcon, color: '#34C759' },
+    note: { label: 'Note', icon: FileTextIcon, color: '#8E8E93' },
   };
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [loading]);
 
   useEffect(() => {
     filterData();
@@ -271,7 +284,7 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
 
   const handleCreateContact = async () => {
     if (!contactForm.first_name.trim() && !contactForm.last_name.trim()) {
-      Platform.OS === 'web' ? alert('Le prénom ou le nom est obligatoire') : Alert.alert('Erreur', 'Le prénom ou le nom est obligatoire');
+      Platform.OS === 'web' ? alert('Le prenom ou le nom est obligatoire') : Alert.alert('Erreur', 'Le prenom ou le nom est obligatoire');
       return;
     }
     try {
@@ -312,9 +325,9 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
       });
     };
     if (Platform.OS === 'web') {
-      if (window.confirm('Êtes-vous sûr de vouloir supprimer ce contact ?')) confirmDelete();
+      if (window.confirm('Etes-vous sur de vouloir supprimer ce contact ?')) confirmDelete();
     } else {
-      Alert.alert('Confirmer', 'Êtes-vous sûr de vouloir supprimer ce contact ?', [
+      Alert.alert('Confirmer', 'Etes-vous sur de vouloir supprimer ce contact ?', [
         { text: 'Annuler', style: 'cancel' },
         { text: 'Supprimer', onPress: confirmDelete, style: 'destructive' },
       ]);
@@ -382,9 +395,9 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
       });
     };
     if (Platform.OS === 'web') {
-      if (window.confirm('Êtes-vous sûr de vouloir supprimer cette entreprise ?')) confirmDelete();
+      if (window.confirm('Etes-vous sur de vouloir supprimer cette entreprise ?')) confirmDelete();
     } else {
-      Alert.alert('Confirmer', 'Êtes-vous sûr ?', [
+      Alert.alert('Confirmer', 'Etes-vous sur ?', [
         { text: 'Annuler', style: 'cancel' },
         { text: 'Supprimer', onPress: confirmDelete, style: 'destructive' },
       ]);
@@ -411,14 +424,12 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
     setEditingCompany(null);
   };
 
-  // Auto-detect region based on postal code
   const handlePostalCodeChange = (text: string) => {
     setCompanyForm({
       ...companyForm,
       address: { ...companyForm.address, postal_code: text }
     });
 
-    // Try to detect region from postal code
     if (text.length >= 2) {
       const departmentCode = text.substring(0, 2);
       const region = departmentToRegion[departmentCode];
@@ -468,905 +479,1330 @@ export default function ContactsScreen({ navigation }: ContactsScreenProps) {
     contactsWithPhone: contacts.filter((c) => c.phone).length,
   };
 
+  const getContactInitials = (contact: Contact) => {
+    const name = contact.full_name || `${contact.first_name || ''} ${contact.last_name || ''}`.trim();
+    return name ? name.charAt(0).toUpperCase() : 'U';
+  };
+
+  const getContactFullName = (contact: Contact) => {
+    return contact.full_name || `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || 'Sans nom';
+  };
+
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Chargement...</Text>
-      </View>
+      <GlassLayout>
+        <View style={styles.loadingContainer}>
+          <GlassLoadingState
+            type="spinner"
+            message="Chargement des contacts..."
+            size="large"
+          />
+        </View>
+      </GlassLayout>
     );
   }
 
   return (
     <GlassLayout>
-      <View style={styles.container}>
-      
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Contacts</Text>
-          <Text style={styles.headerSubtitle}>
-            {viewMode === 'contacts' ? `${stats.totalContacts} contacts` : `${stats.totalCompanies} entreprises`}
-          </Text>
-        </View>
-        <TouchableOpacity style={styles.addButton} onPress={() => viewMode === 'contacts' ? setNewContactModalVisible(true) : setNewCompanyModalVisible(true)}>
-          <Text style={styles.addButtonText}>+ Nouveau</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.toggleContainer}>
-        <TouchableOpacity style={[styles.toggleButton, viewMode === 'contacts' && styles.toggleButtonActive]} onPress={() => setViewMode('contacts')}>
-          <UsersIcon size={18} color={viewMode === 'contacts' ? '#FFFFFF' : '#8E8E93'} />
-          <Text style={[styles.toggleText, viewMode === 'contacts' && styles.toggleTextActive]}>Contacts ({stats.totalContacts})</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.toggleButton, viewMode === 'companies' && styles.toggleButtonActive]} onPress={() => setViewMode('companies')}>
-          <BuildingIcon size={18} color={viewMode === 'companies' ? '#FFFFFF' : '#8E8E93'} />
-          <Text style={[styles.toggleText, viewMode === 'companies' && styles.toggleTextActive]}>Entreprises ({stats.totalCompanies})</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.statsContainer}>
-        {viewMode === 'contacts' ? (
-          <>
-            <View style={styles.statCard}>
-              <MailIcon size={20} color="#007AFF" />
-              <Text style={styles.statValue}>{stats.contactsWithEmail}</Text>
-              <Text style={styles.statLabel}>Avec email</Text>
+      <Animated.View
+        style={[
+          styles.container,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          }
+        ]}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <View>
+              <Text style={styles.headerTitle}>Contacts</Text>
+              <Text style={styles.headerSubtitle}>
+                {viewMode === 'contacts'
+                  ? `${stats.totalContacts} contacts`
+                  : `${stats.totalCompanies} entreprises`}
+              </Text>
             </View>
-            <View style={styles.statCard}>
-              <PhoneIcon size={20} color="#34C759" />
-              <Text style={styles.statValue}>{stats.contactsWithPhone}</Text>
-              <Text style={styles.statLabel}>Avec téléphone</Text>
-            </View>
-          </>
-        ) : (
-          <>
-            <View style={styles.statCard}>
-              <BuildingIcon size={20} color="#34C759" />
-              <Text style={styles.statValue}>{stats.totalCompanies}</Text>
-              <Text style={styles.statLabel}>Entreprises</Text>
-            </View>
-            <View style={styles.statCard}>
-              <UsersIcon size={20} color="#007AFF" />
-              <Text style={styles.statValue}>{stats.totalContacts}</Text>
-              <Text style={styles.statLabel}>Contacts</Text>
-            </View>
-          </>
-        )}
-      </View>
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder={viewMode === 'contacts' ? 'Rechercher un contact...' : 'Rechercher une entreprise...'}
-          placeholderTextColor="#8E8E93"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-      <ScrollView style={styles.list} contentContainerStyle={styles.listContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        {viewMode === 'contacts' ? (
-          filteredContacts.length > 0 ? (
-            filteredContacts.map((contact) => (
-              <View key={contact.id} style={styles.cardWrapper}>
-                <TouchableOpacity style={styles.card} onPress={() => openContactDetails(contact)}>
-                  <View style={styles.cardHeader}>
-                    {contact.avatar_url ? (
-                      <Image source={{ uri: contact.avatar_url }} style={styles.avatar} />
-                    ) : (
-                      <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>{(contact.full_name || contact.first_name || contact.last_name || 'U').charAt(0).toUpperCase()}</Text>
-                      </View>
-                    )}
-                    <View style={styles.cardInfo}>
-                      <Text style={styles.cardName}>{contact.full_name || `${contact.first_name || ''} ${contact.last_name || ''}`.trim()}</Text>
-                      {contact.title && <Text style={styles.cardCompany}>{contact.title}</Text>}
-                      {contact.company_name && <Text style={styles.cardCompany}>{contact.company_name}</Text>}
-                      {contact.email && <Text style={styles.cardMetaText} numberOfLines={1}>{contact.email}</Text>}
-                    </View>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => viewMode === 'contacts' ? setNewContactModalVisible(true) : setNewCompanyModalVisible(true)}
+            >
+              <LinearGradient
+                colors={['#007AFF', '#5AC8FA']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.addButtonGradient}
+              >
+                <PlusIcon size={20} color="#FFFFFF" />
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+
+          {/* View Mode Toggle */}
+          <View style={styles.toggleContainer}>
+            <GlassTabBar
+              tabs={[
+                { key: 'contacts', label: `Contacts (${stats.totalContacts})`, icon: <UsersIcon size={16} color={viewMode === 'contacts' ? '#FFFFFF' : '#8E8E93'} /> },
+                { key: 'companies', label: `Entreprises (${stats.totalCompanies})`, icon: <BuildingIcon size={16} color={viewMode === 'companies' ? '#FFFFFF' : '#8E8E93'} /> },
+              ]}
+              activeTab={viewMode}
+              onTabChange={(key) => setViewMode(key as ViewMode)}
+              variant="pills"
+            />
+          </View>
+
+          {/* Stats Cards */}
+          <View style={styles.statsContainer}>
+            {viewMode === 'contacts' ? (
+              <>
+                <View style={styles.statCard}>
+                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
+                    <MailIcon size={18} color="#007AFF" />
                   </View>
-                </TouchableOpacity>
-                <View style={styles.cardQuickActions}>
-                  {contact.phone && (
-                    <TouchableOpacity style={styles.quickAction} onPress={() => Platform.OS === 'web' ? window.open(`tel:${contact.phone}`) : null}>
-                      <PhoneIcon size={16} color="#007AFF" />
-                    </TouchableOpacity>
-                  )}
-                  {contact.email && (
-                    <TouchableOpacity style={styles.quickAction} onPress={() => Platform.OS === 'web' ? window.open(`mailto:${contact.email}`) : null}>
-                      <MailIcon size={16} color="#007AFF" />
-                    </TouchableOpacity>
-                  )}
+                  <View style={styles.statContent}>
+                    <Text style={styles.statValue}>{stats.contactsWithEmail}</Text>
+                    <Text style={styles.statLabel}>Avec email</Text>
+                  </View>
+                </View>
+                <View style={styles.statCard}>
+                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}>
+                    <PhoneIcon size={18} color="#34C759" />
+                  </View>
+                  <View style={styles.statContent}>
+                    <Text style={styles.statValue}>{stats.contactsWithPhone}</Text>
+                    <Text style={styles.statLabel}>Avec telephone</Text>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.statCard}>
+                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}>
+                    <BuildingIcon size={18} color="#34C759" />
+                  </View>
+                  <View style={styles.statContent}>
+                    <Text style={styles.statValue}>{stats.totalCompanies}</Text>
+                    <Text style={styles.statLabel}>Entreprises</Text>
+                  </View>
+                </View>
+                <View style={styles.statCard}>
+                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
+                    <UsersIcon size={18} color="#007AFF" />
+                  </View>
+                  <View style={styles.statContent}>
+                    <Text style={styles.statValue}>{stats.totalContacts}</Text>
+                    <Text style={styles.statLabel}>Contacts</Text>
+                  </View>
+                </View>
+              </>
+            )}
+          </View>
+
+          {/* Search Bar */}
+          <GlassSearchBar
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder={viewMode === 'contacts' ? 'Rechercher un contact...' : 'Rechercher une entreprise...'}
+          />
+        </View>
+
+        {/* Content */}
+        <ScrollView
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#007AFF" />}
+          showsVerticalScrollIndicator={false}
+        >
+          {viewMode === 'contacts' ? (
+            filteredContacts.length > 0 ? (
+              filteredContacts.map((contact, index) => (
+                <Animated.View
+                  key={contact.id}
+                  style={[
+                    styles.cardWrapper,
+                    {
+                      opacity: fadeAnim,
+                      transform: [{
+                        translateY: fadeAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [20 * (index % 5), 0],
+                        }),
+                      }],
+                    },
+                  ]}
+                >
                   <TouchableOpacity
-                    style={styles.quickAction}
-                    onPress={() => navigation.navigate('Invoices' as any, {
-                      action: 'createQuote',
-                      customerId: contact.id,
-                      customerType: 'contact'
-                    })}
+                    style={styles.card}
+                    onPress={() => openContactDetails(contact)}
+                    activeOpacity={0.7}
                   >
-                    <FileTextIcon size={16} color="#007AFF" />
+                    <View style={styles.cardContent}>
+                      <GlassAvatar
+                        name={getContactFullName(contact)}
+                        image={contact.avatar_url}
+                        size="md"
+                      />
+                      <View style={styles.cardInfo}>
+                        <Text style={styles.cardName}>{getContactFullName(contact)}</Text>
+                        {contact.title && <Text style={styles.cardTitle}>{contact.title}</Text>}
+                        {contact.company_name && (
+                          <View style={styles.companyBadge}>
+                            <BuildingIcon size={12} color="#8E8E93" />
+                            <Text style={styles.cardCompany}>{contact.company_name}</Text>
+                          </View>
+                        )}
+                        {contact.email && (
+                          <Text style={styles.cardMetaText} numberOfLines={1}>
+                            {contact.email}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={styles.cardActions}>
+                        {contact.phone && (
+                          <TouchableOpacity
+                            style={styles.quickAction}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              Platform.OS === 'web' ? window.open(`tel:${contact.phone}`) : null;
+                            }}
+                          >
+                            <PhoneIcon size={16} color="#007AFF" />
+                          </TouchableOpacity>
+                        )}
+                        {contact.email && (
+                          <TouchableOpacity
+                            style={styles.quickAction}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              Platform.OS === 'web' ? window.open(`mailto:${contact.email}`) : null;
+                            }}
+                          >
+                            <MailIcon size={16} color="#007AFF" />
+                          </TouchableOpacity>
+                        )}
+                        <ChevronRightIcon size={20} color="#C7C7CC" />
+                      </View>
+                    </View>
                   </TouchableOpacity>
+                </Animated.View>
+              ))
+            ) : (
+              <GlassEmptyState
+                icon={<UsersIcon size={48} color="#C7C7CC" />}
+                title="Aucun contact trouve"
+                description={searchQuery ? "Essayez de modifier votre recherche" : "Ajoutez votre premier contact pour commencer"}
+                actionLabel="Nouveau contact"
+                onAction={() => setNewContactModalVisible(true)}
+              />
+            )
+          ) : (
+            filteredCompanies.length > 0 ? (
+              filteredCompanies.map((company, index) => (
+                <Animated.View
+                  key={company.id}
+                  style={[
+                    styles.cardWrapper,
+                    {
+                      opacity: fadeAnim,
+                      transform: [{
+                        translateY: fadeAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [20 * (index % 5), 0],
+                        }),
+                      }],
+                    },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={styles.card}
+                    onPress={() => openCompanyDetails(company)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.cardContent}>
+                      <GlassAvatar
+                        name={company.name}
+                        image={company.logo_url}
+                        size="md"
+                        gradient={['#34C759', '#30D158']}
+                      />
+                      <View style={styles.cardInfo}>
+                        <Text style={styles.cardName}>{company.name}</Text>
+                        {company.industry && (
+                          <GlassBadge label={company.industry} variant="info" size="sm" />
+                        )}
+                        {company.email && (
+                          <Text style={styles.cardMetaText} numberOfLines={1}>
+                            {company.email}
+                          </Text>
+                        )}
+                      </View>
+                      <ChevronRightIcon size={20} color="#C7C7CC" />
+                    </View>
+                  </TouchableOpacity>
+                </Animated.View>
+              ))
+            ) : (
+              <GlassEmptyState
+                icon={<BuildingIcon size={48} color="#C7C7CC" />}
+                title="Aucune entreprise trouvee"
+                description={searchQuery ? "Essayez de modifier votre recherche" : "Ajoutez votre premiere entreprise pour commencer"}
+                actionLabel="Nouvelle entreprise"
+                onAction={() => setNewCompanyModalVisible(true)}
+              />
+            )
+          )}
+        </ScrollView>
+
+        {/* Contact Detail Modal */}
+        <GlassModal
+          visible={contactModalVisible}
+          onClose={() => setContactModalVisible(false)}
+          title={selectedContact ? getContactFullName(selectedContact) : ''}
+          size="large"
+        >
+          {selectedContact && (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Contact Header */}
+              <View style={styles.modalContactHeader}>
+                <GlassAvatar
+                  name={getContactFullName(selectedContact)}
+                  image={selectedContact.avatar_url}
+                  size="xl"
+                />
+                <View style={styles.modalContactInfo}>
+                  <Text style={styles.modalContactName}>{getContactFullName(selectedContact)}</Text>
+                  {selectedContact.title && <Text style={styles.modalContactTitle}>{selectedContact.title}</Text>}
+                  {selectedContact.company_name && (
+                    <View style={styles.modalCompanyBadge}>
+                      <BuildingIcon size={14} color="#8E8E93" />
+                      <Text style={styles.modalCompanyName}>{selectedContact.company_name}</Text>
+                    </View>
+                  )}
                 </View>
               </View>
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <UsersIcon size={64} color="#D1D1D6" />
-              <Text style={styles.emptyText}>Aucun contact trouvé</Text>
-            </View>
-          )
-        ) : (
-          filteredCompanies.length > 0 ? (
-            filteredCompanies.map((company) => (
-              <TouchableOpacity key={company.id} style={styles.card} onPress={() => openCompanyDetails(company)}>
-                <View style={styles.cardHeader}>
-                  {company.logo_url ? (
-                    <Image source={{ uri: company.logo_url }} style={styles.avatar} />
-                  ) : (
-                    <View style={[styles.avatar, { backgroundColor: '#34C759' }]}>
-                      <BuildingIcon size={24} color="#FFFFFF" />
-                    </View>
-                  )}
-                  <View style={styles.cardInfo}>
-                    <Text style={styles.cardName}>{company.name}</Text>
-                    {company.industry && <Text style={styles.cardCompany}>{company.industry}</Text>}
-                    {company.email && <Text style={styles.cardMetaText} numberOfLines={1}>{company.email}</Text>}
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <BuildingIcon size={64} color="#D1D1D6" />
-              <Text style={styles.emptyText}>Aucune entreprise trouvée</Text>
-            </View>
-          )
-        )}
-      </ScrollView>
 
-      {/* Contact Detail Modal */}
-      <Modal visible={contactModalVisible} animationType="slide" transparent onRequestClose={() => setContactModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {selectedContact && (
-              <>
-                <View style={styles.modalHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.modalTitle}>{selectedContact.full_name || `${selectedContact.first_name || ''} ${selectedContact.last_name || ''}`.trim()}</Text>
-                    {selectedContact.title && <Text style={styles.modalSubtitle}>{selectedContact.title}</Text>}
-                    {selectedContact.company_name && <Text style={styles.modalSubtitle}>{selectedContact.company_name}</Text>}
-                  </View>
-                  <TouchableOpacity onPress={() => setContactModalVisible(false)}>
-                    <Text style={styles.closeButton}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-                <ScrollView style={styles.modalBody}>
-                  {selectedContact.avatar_url && (
-                    <View style={{ alignItems: 'center', paddingVertical: 20 }}>
-                      <Image source={{ uri: selectedContact.avatar_url }} style={{ width: 100, height: 100, borderRadius: 50 }} />
-                    </View>
-                  )}
-                  <View style={styles.modalSection}>
-                    <Text style={styles.sectionTitle}>INFORMATIONS</Text>
-                    {selectedContact.email && (
-                      <View style={styles.infoRow}>
-                        <MailIcon size={16} color="#8E8E93" />
+              {/* Contact Info Section */}
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionTitle}>INFORMATIONS</Text>
+                <View style={styles.infoGrid}>
+                  {selectedContact.email && (
+                    <TouchableOpacity
+                      style={styles.infoCard}
+                      onPress={() => Platform.OS === 'web' && window.open(`mailto:${selectedContact.email}`)}
+                    >
+                      <View style={[styles.infoIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
+                        <MailIcon size={18} color="#007AFF" />
+                      </View>
+                      <View style={styles.infoCardContent}>
+                        <Text style={styles.infoLabel}>Email</Text>
                         <Text style={styles.infoValue}>{selectedContact.email}</Text>
                       </View>
-                    )}
-                    {selectedContact.phone && (
-                      <View style={styles.infoRow}>
-                        <PhoneIcon size={16} color="#8E8E93" />
+                    </TouchableOpacity>
+                  )}
+                  {selectedContact.phone && (
+                    <TouchableOpacity
+                      style={styles.infoCard}
+                      onPress={() => Platform.OS === 'web' && window.open(`tel:${selectedContact.phone}`)}
+                    >
+                      <View style={[styles.infoIconContainer, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}>
+                        <PhoneIcon size={18} color="#34C759" />
+                      </View>
+                      <View style={styles.infoCardContent}>
+                        <Text style={styles.infoLabel}>Telephone</Text>
                         <Text style={styles.infoValue}>{selectedContact.phone}</Text>
                       </View>
-                    )}
-                  </View>
-                  {/* Onglets d'historique */}
-                  <View style={styles.historyTabs}>
-                    <TouchableOpacity
-                      style={[styles.historyTab, contactHistoryTab === 'activities' && styles.historyTabActive]}
-                      onPress={() => setContactHistoryTab('activities')}
-                    >
-                      <Text style={[styles.historyTabText, contactHistoryTab === 'activities' && styles.historyTabTextActive]}>
-                        Activités
-                      </Text>
                     </TouchableOpacity>
+                  )}
+                  {selectedContact.mobile && (
                     <TouchableOpacity
-                      style={[styles.historyTab, contactHistoryTab === 'quotes' && styles.historyTabActive]}
-                      onPress={() => setContactHistoryTab('quotes')}
+                      style={styles.infoCard}
+                      onPress={() => Platform.OS === 'web' && window.open(`tel:${selectedContact.mobile}`)}
                     >
-                      <Text style={[styles.historyTabText, contactHistoryTab === 'quotes' && styles.historyTabTextActive]}>
-                        Devis ({contactQuotes.length})
-                      </Text>
+                      <View style={[styles.infoIconContainer, { backgroundColor: 'rgba(255, 149, 0, 0.1)' }]}>
+                        <PhoneIcon size={18} color="#FF9500" />
+                      </View>
+                      <View style={styles.infoCardContent}>
+                        <Text style={styles.infoLabel}>Mobile</Text>
+                        <Text style={styles.infoValue}>{selectedContact.mobile}</Text>
+                      </View>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.historyTab, contactHistoryTab === 'invoices' && styles.historyTabActive]}
-                      onPress={() => setContactHistoryTab('invoices')}
-                    >
-                      <Text style={[styles.historyTabText, contactHistoryTab === 'invoices' && styles.historyTabTextActive]}>
-                        Factures ({contactInvoices.length})
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.historyTab, contactHistoryTab === 'payments' && styles.historyTabActive]}
-                      onPress={() => setContactHistoryTab('payments')}
-                    >
-                      <Text style={[styles.historyTabText, contactHistoryTab === 'payments' && styles.historyTabTextActive]}>
-                        Paiements ({contactPayments.length})
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
+                  )}
+                </View>
+              </View>
 
-                  {/* Contenu des onglets */}
-                  <View style={styles.modalSection}>
-                    {contactHistoryTab === 'activities' && (
-                      <>
-                        {contactActivities.length > 0 ? (
-                          contactActivities.map((activity) => (
-                            <View key={activity.id} style={styles.activityCard}>
-                              <Text style={styles.activityIcon}>{activityConfig[activity.type].icon}</Text>
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.activityDescription}>{activity.description}</Text>
-                                <Text style={styles.activityDate}>
-                                  {new Date(activity.created_at).toLocaleDateString('fr-FR')}
-                                </Text>
-                              </View>
+              {/* History Tabs */}
+              <View style={styles.historySection}>
+                <GlassTabBar
+                  tabs={[
+                    { key: 'activities', label: 'Activites' },
+                    { key: 'quotes', label: `Devis (${contactQuotes.length})` },
+                    { key: 'invoices', label: `Factures (${contactInvoices.length})` },
+                    { key: 'payments', label: `Paiements (${contactPayments.length})` },
+                  ]}
+                  activeTab={contactHistoryTab}
+                  onTabChange={(key) => setContactHistoryTab(key as any)}
+                  variant="segmented"
+                  scrollable
+                />
+
+                <View style={styles.historyContent}>
+                  {contactHistoryTab === 'activities' && (
+                    contactActivities.length > 0 ? (
+                      contactActivities.map((activity) => {
+                        const config = activityConfig[activity.type];
+                        const IconComponent = config.icon;
+                        return (
+                          <View key={activity.id} style={styles.activityCard}>
+                            <View style={[styles.activityIconContainer, { backgroundColor: `${config.color}15` }]}>
+                              <IconComponent size={18} color={config.color} />
                             </View>
-                          ))
-                        ) : (
-                          <Text style={styles.emptyText}>Aucune activité</Text>
-                        )}
-                      </>
-                    )}
-
-                    {contactHistoryTab === 'quotes' && (
-                      <>
-                        {contactQuotes.length > 0 ? (
-                          contactQuotes.map((quote) => (
-                            <TouchableOpacity
-                              key={quote.id}
-                              style={styles.historyItem}
-                              onPress={() => {
-                                setContactModalVisible(false);
-                                navigation.navigate('Invoices' as any, { quoteId: quote.id });
-                              }}
-                            >
-                              <View style={styles.historyItemLeft}>
-                                <Text style={styles.historyItemTitle}>{quote.quote_number}</Text>
-                                <Text style={styles.historyItemDate}>
-                                  {new Date(quote.created_at).toLocaleDateString('fr-FR')}
-                                </Text>
-                              </View>
-                              <View style={styles.historyItemRight}>
-                                <Text style={styles.historyItemAmount}>
-                                  {parseFloat(quote.total_amount).toFixed(2)} €
-                                </Text>
-                                <View style={[styles.historyStatusBadge, { backgroundColor: quote.status === 'sent' ? '#FF9500' : '#8E8E93' }]}>
-                                  <Text style={styles.historyStatusText}>
-                                    {quote.status === 'sent' ? 'Envoyé' : quote.status === 'accepted' ? 'Accepté' : 'Brouillon'}
-                                  </Text>
-                                </View>
-                              </View>
-                            </TouchableOpacity>
-                          ))
-                        ) : (
-                          <Text style={styles.emptyText}>Aucun devis</Text>
-                        )}
-                      </>
-                    )}
-
-                    {contactHistoryTab === 'invoices' && (
-                      <>
-                        {contactInvoices.length > 0 ? (
-                          contactInvoices.map((invoice) => (
-                            <TouchableOpacity
-                              key={invoice.id}
-                              style={styles.historyItem}
-                              onPress={() => {
-                                setContactModalVisible(false);
-                                navigation.navigate('Invoices' as any, { invoiceId: invoice.id });
-                              }}
-                            >
-                              <View style={styles.historyItemLeft}>
-                                <Text style={styles.historyItemTitle}>{invoice.invoice_number}</Text>
-                                <Text style={styles.historyItemDate}>
-                                  Échéance: {new Date(invoice.due_date).toLocaleDateString('fr-FR')}
-                                </Text>
-                              </View>
-                              <View style={styles.historyItemRight}>
-                                <Text style={styles.historyItemAmount}>
-                                  {parseFloat(invoice.total_amount).toFixed(2)} €
-                                </Text>
-                                <View style={[styles.historyStatusBadge, { backgroundColor: invoice.status === 'paid' ? '#34C759' : '#FF3B30' }]}>
-                                  <Text style={styles.historyStatusText}>
-                                    {invoice.status === 'paid' ? 'Payée' : 'En attente'}
-                                  </Text>
-                                </View>
-                              </View>
-                            </TouchableOpacity>
-                          ))
-                        ) : (
-                          <Text style={styles.emptyText}>Aucune facture</Text>
-                        )}
-                      </>
-                    )}
-
-                    {contactHistoryTab === 'payments' && (
-                      <>
-                        {contactPayments.length > 0 ? (
-                          contactPayments.map((payment) => (
-                            <View key={payment.id} style={styles.historyItem}>
-                              <View style={styles.historyItemLeft}>
-                                <Text style={styles.historyItemTitle}>
-                                  Paiement - {payment.invoice_number}
-                                </Text>
-                                <Text style={styles.historyItemDate}>
-                                  {new Date(payment.payment_date).toLocaleDateString('fr-FR')}
-                                </Text>
-                              </View>
-                              <View style={styles.historyItemRight}>
-                                <Text style={[styles.historyItemAmount, { color: '#34C759' }]}>
-                                  +{parseFloat(payment.amount).toFixed(2)} €
-                                </Text>
-                                <Text style={styles.historyPaymentMethod}>
-                                  {payment.payment_method === 'stripe' ? 'Carte' : payment.payment_method}
-                                </Text>
-                              </View>
+                            <View style={styles.activityContent}>
+                              <Text style={styles.activityDescription}>{activity.description}</Text>
+                              <Text style={styles.activityDate}>
+                                {new Date(activity.created_at).toLocaleDateString('fr-FR', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  year: 'numeric',
+                                })}
+                              </Text>
                             </View>
-                          ))
-                        ) : (
-                          <Text style={styles.emptyText}>Aucun paiement</Text>
-                        )}
-                      </>
-                    )}
-                  </View>
-                </ScrollView>
-                <View style={styles.modalActions}>
-                  <TouchableOpacity style={styles.actionButtonPrimary} onPress={() => {
+                          </View>
+                        );
+                      })
+                    ) : (
+                      <View style={styles.emptyHistoryState}>
+                        <Text style={styles.emptyHistoryText}>Aucune activite</Text>
+                      </View>
+                    )
+                  )}
+
+                  {contactHistoryTab === 'quotes' && (
+                    contactQuotes.length > 0 ? (
+                      contactQuotes.map((quote) => (
+                        <TouchableOpacity
+                          key={quote.id}
+                          style={styles.historyItem}
+                          onPress={() => {
+                            setContactModalVisible(false);
+                            navigation.navigate('Invoices' as any, { quoteId: quote.id });
+                          }}
+                        >
+                          <View style={styles.historyItemLeft}>
+                            <Text style={styles.historyItemTitle}>{quote.quote_number}</Text>
+                            <Text style={styles.historyItemDate}>
+                              {new Date(quote.created_at).toLocaleDateString('fr-FR')}
+                            </Text>
+                          </View>
+                          <View style={styles.historyItemRight}>
+                            <Text style={styles.historyItemAmount}>
+                              {parseFloat(quote.total_amount).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} EUR
+                            </Text>
+                            <GlassBadge
+                              label={quote.status === 'sent' ? 'Envoye' : quote.status === 'accepted' ? 'Accepte' : 'Brouillon'}
+                              variant={quote.status === 'accepted' ? 'success' : quote.status === 'sent' ? 'warning' : 'default'}
+                              size="sm"
+                            />
+                          </View>
+                        </TouchableOpacity>
+                      ))
+                    ) : (
+                      <View style={styles.emptyHistoryState}>
+                        <Text style={styles.emptyHistoryText}>Aucun devis</Text>
+                      </View>
+                    )
+                  )}
+
+                  {contactHistoryTab === 'invoices' && (
+                    contactInvoices.length > 0 ? (
+                      contactInvoices.map((invoice) => (
+                        <TouchableOpacity
+                          key={invoice.id}
+                          style={styles.historyItem}
+                          onPress={() => {
+                            setContactModalVisible(false);
+                            navigation.navigate('Invoices' as any, { invoiceId: invoice.id });
+                          }}
+                        >
+                          <View style={styles.historyItemLeft}>
+                            <Text style={styles.historyItemTitle}>{invoice.invoice_number}</Text>
+                            <Text style={styles.historyItemDate}>
+                              Echeance: {new Date(invoice.due_date).toLocaleDateString('fr-FR')}
+                            </Text>
+                          </View>
+                          <View style={styles.historyItemRight}>
+                            <Text style={styles.historyItemAmount}>
+                              {parseFloat(invoice.total_amount).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} EUR
+                            </Text>
+                            <GlassBadge
+                              label={invoice.status === 'paid' ? 'Payee' : 'En attente'}
+                              variant={invoice.status === 'paid' ? 'success' : 'error'}
+                              size="sm"
+                            />
+                          </View>
+                        </TouchableOpacity>
+                      ))
+                    ) : (
+                      <View style={styles.emptyHistoryState}>
+                        <Text style={styles.emptyHistoryText}>Aucune facture</Text>
+                      </View>
+                    )
+                  )}
+
+                  {contactHistoryTab === 'payments' && (
+                    contactPayments.length > 0 ? (
+                      contactPayments.map((payment) => (
+                        <View key={payment.id} style={styles.historyItem}>
+                          <View style={styles.historyItemLeft}>
+                            <Text style={styles.historyItemTitle}>
+                              Paiement - {payment.invoice_number}
+                            </Text>
+                            <Text style={styles.historyItemDate}>
+                              {new Date(payment.payment_date).toLocaleDateString('fr-FR')}
+                            </Text>
+                          </View>
+                          <View style={styles.historyItemRight}>
+                            <Text style={[styles.historyItemAmount, { color: '#34C759' }]}>
+                              +{parseFloat(payment.amount).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} EUR
+                            </Text>
+                            <Text style={styles.paymentMethod}>
+                              {payment.payment_method === 'stripe' ? 'Carte' : payment.payment_method}
+                            </Text>
+                          </View>
+                        </View>
+                      ))
+                    ) : (
+                      <View style={styles.emptyHistoryState}>
+                        <Text style={styles.emptyHistoryText}>Aucun paiement</Text>
+                      </View>
+                    )
+                  )}
+                </View>
+              </View>
+
+              {/* Action Buttons */}
+              <View style={styles.modalActions}>
+                <GlassButton
+                  title="Creer Devis"
+                  onPress={() => {
                     setContactModalVisible(false);
                     navigation.navigate('Invoices' as any, {
                       action: 'createQuote',
                       customerId: selectedContact.id,
                       customerType: 'contact'
                     });
-                  }}>
-                    <FileTextIcon size={16} color="#FFFFFF" />
-                    <Text style={styles.actionButtonPrimaryText}>Créer Devis</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => handleEditContact(selectedContact)}>
-                    <EditIcon size={16} color="#007AFF" />
-                    <Text style={styles.actionButtonSecondaryText}>Modifier</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButtonPrimary} onPress={() => setActivityModalVisible(true)}>
-                    <PlusIcon size={16} color="#FFFFFF" />
-                    <Text style={styles.actionButtonPrimaryText}>Activité</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButtonDanger} onPress={() => handleDeleteContact(selectedContact)}>
-                    <TrashIcon size={16} color="#FF3B30" />
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
+                  }}
+                  variant="primary"
+                  icon={<FileTextIcon size={16} color="#FFFFFF" />}
+                  style={{ flex: 1 }}
+                />
+                <GlassButton
+                  title="Activite"
+                  onPress={() => setActivityModalVisible(true)}
+                  variant="secondary"
+                  icon={<PlusIcon size={16} color="#007AFF" />}
+                  style={{ flex: 1 }}
+                />
+              </View>
+              <View style={styles.modalActionsSecondary}>
+                <GlassButton
+                  title="Modifier"
+                  onPress={() => handleEditContact(selectedContact)}
+                  variant="outline"
+                  icon={<EditIcon size={16} color="#007AFF" />}
+                  style={{ flex: 1 }}
+                />
+                <GlassButton
+                  title="Supprimer"
+                  onPress={() => handleDeleteContact(selectedContact)}
+                  variant="danger"
+                  icon={<TrashIcon size={16} color="#FF3B30" />}
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </ScrollView>
+          )}
+        </GlassModal>
 
-      {/* Company Detail Modal */}
-      <Modal visible={companyModalVisible} animationType="slide" transparent onRequestClose={() => setCompanyModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {selectedCompany && (
-              <>
-                <View style={styles.modalHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.modalTitle}>{selectedCompany.name}</Text>
-                    {selectedCompany.industry && <Text style={styles.modalSubtitle}>{selectedCompany.industry}</Text>}
-                  </View>
-                  <TouchableOpacity onPress={() => setCompanyModalVisible(false)}>
-                    <Text style={styles.closeButton}>✕</Text>
-                  </TouchableOpacity>
+        {/* Company Detail Modal */}
+        <GlassModal
+          visible={companyModalVisible}
+          onClose={() => setCompanyModalVisible(false)}
+          title={selectedCompany?.name || ''}
+          size="large"
+        >
+          {selectedCompany && (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.modalContactHeader}>
+                <GlassAvatar
+                  name={selectedCompany.name}
+                  image={selectedCompany.logo_url}
+                  size="xl"
+                  gradient={['#34C759', '#30D158']}
+                />
+                <View style={styles.modalContactInfo}>
+                  <Text style={styles.modalContactName}>{selectedCompany.name}</Text>
+                  {selectedCompany.industry && (
+                    <GlassBadge label={selectedCompany.industry} variant="info" size="md" />
+                  )}
                 </View>
-                <ScrollView style={styles.modalBody}>
-                  <View style={styles.modalSection}>
-                    <Text style={styles.sectionTitle}>INFORMATIONS</Text>
-                    {selectedCompany.email && (
-                      <View style={styles.infoRow}>
-                        <MailIcon size={16} color="#8E8E93" />
+              </View>
+
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionTitle}>INFORMATIONS</Text>
+                <View style={styles.infoGrid}>
+                  {selectedCompany.email && (
+                    <View style={styles.infoCard}>
+                      <View style={[styles.infoIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
+                        <MailIcon size={18} color="#007AFF" />
+                      </View>
+                      <View style={styles.infoCardContent}>
+                        <Text style={styles.infoLabel}>Email</Text>
                         <Text style={styles.infoValue}>{selectedCompany.email}</Text>
                       </View>
-                    )}
-                    {selectedCompany.phone && (
-                      <View style={styles.infoRow}>
-                        <PhoneIcon size={16} color="#8E8E93" />
+                    </View>
+                  )}
+                  {selectedCompany.phone && (
+                    <View style={styles.infoCard}>
+                      <View style={[styles.infoIconContainer, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}>
+                        <PhoneIcon size={18} color="#34C759" />
+                      </View>
+                      <View style={styles.infoCardContent}>
+                        <Text style={styles.infoLabel}>Telephone</Text>
                         <Text style={styles.infoValue}>{selectedCompany.phone}</Text>
                       </View>
-                    )}
-                    {selectedCompany.website && (
-                      <View style={styles.infoRow}>
-                        <Text style={styles.infoLabel}>🌐</Text>
+                    </View>
+                  )}
+                  {selectedCompany.website && (
+                    <View style={styles.infoCard}>
+                      <View style={[styles.infoIconContainer, { backgroundColor: 'rgba(88, 86, 214, 0.1)' }]}>
+                        <Text style={{ fontSize: 16 }}>🌐</Text>
+                      </View>
+                      <View style={styles.infoCardContent}>
+                        <Text style={styles.infoLabel}>Site web</Text>
                         <Text style={styles.infoValue}>{selectedCompany.website}</Text>
                       </View>
-                    )}
-                    {selectedCompany.address && (
-                      <View style={styles.infoRow}>
-                        <MapPinIcon size={16} color="#8E8E93" />
+                    </View>
+                  )}
+                  {selectedCompany.address && (
+                    <View style={styles.infoCard}>
+                      <View style={[styles.infoIconContainer, { backgroundColor: 'rgba(255, 149, 0, 0.1)' }]}>
+                        <MapPinIcon size={18} color="#FF9500" />
+                      </View>
+                      <View style={styles.infoCardContent}>
+                        <Text style={styles.infoLabel}>Adresse</Text>
                         <Text style={styles.infoValue}>
-                          {typeof selectedCompany.address === 'string' ? selectedCompany.address : JSON.stringify(selectedCompany.address)}
+                          {typeof selectedCompany.address === 'string'
+                            ? selectedCompany.address
+                            : `${selectedCompany.address.street_number || ''} ${selectedCompany.address.street || ''}, ${selectedCompany.address.city || ''}`}
                         </Text>
                       </View>
-                    )}
-                  </View>
-                </ScrollView>
-                <View style={styles.modalActions}>
-                  <TouchableOpacity style={styles.actionButtonPrimary} onPress={() => {
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.modalActions}>
+                <GlassButton
+                  title="Creer Devis"
+                  onPress={() => {
                     setCompanyModalVisible(false);
                     navigation.navigate('Invoices' as any, {
                       action: 'createQuote',
                       customerId: selectedCompany.id,
                       customerType: 'company'
                     });
-                  }}>
-                    <FileTextIcon size={16} color="#FFFFFF" />
-                    <Text style={styles.actionButtonPrimaryText}>Créer Devis</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => handleEditCompany(selectedCompany)}>
-                    <EditIcon size={16} color="#007AFF" />
-                    <Text style={styles.actionButtonSecondaryText}>Modifier</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButtonDanger} onPress={() => handleDeleteCompany(selectedCompany)}>
-                    <TrashIcon size={16} color="#FF3B30" />
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* New/Edit Contact Modal */}
-      <Modal visible={newContactModalVisible} transparent animationType="slide" onRequestClose={() => { setNewContactModalVisible(false); resetContactForm(); }}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{editingContact ? 'Modifier le contact' : 'Nouveau contact'}</Text>
-              <TouchableOpacity onPress={() => { setNewContactModalVisible(false); resetContactForm(); }}>
-                <Text style={styles.closeButton}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalBody}>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Prénom *</Text>
-                <TextInput style={styles.input} placeholder="Prénom" value={contactForm.first_name} onChangeText={(text) => setContactForm({ ...contactForm, first_name: text })} placeholderTextColor="#8E8E93" />
+                  }}
+                  variant="primary"
+                  icon={<FileTextIcon size={16} color="#FFFFFF" />}
+                  style={{ flex: 1 }}
+                />
+                <GlassButton
+                  title="Modifier"
+                  onPress={() => handleEditCompany(selectedCompany)}
+                  variant="secondary"
+                  icon={<EditIcon size={16} color="#007AFF" />}
+                  style={{ flex: 1 }}
+                />
               </View>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Nom</Text>
-                <TextInput style={styles.input} placeholder="Nom de famille" value={contactForm.last_name} onChangeText={(text) => setContactForm({ ...contactForm, last_name: text })} placeholderTextColor="#8E8E93" />
-              </View>
-              <ImageUpload
-                label="Avatar"
-                value={contactForm.avatar_url}
-                onChange={(url) => setContactForm({ ...contactForm, avatar_url: url as string })}
-                multiple={false}
-              />
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Titre/Poste</Text>
-                <TextInput style={styles.input} placeholder="Directeur Commercial" value={contactForm.title} onChangeText={(text) => setContactForm({ ...contactForm, title: text })} placeholderTextColor="#8E8E93" />
-              </View>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Email</Text>
-                <TextInput style={styles.input} placeholder="email@example.com" value={contactForm.email} onChangeText={(text) => setContactForm({ ...contactForm, email: text })} keyboardType="email-address" placeholderTextColor="#8E8E93" />
-              </View>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Téléphone</Text>
-                <TextInput style={styles.input} placeholder="+33 1 XX XX XX XX" value={contactForm.phone} onChangeText={(text) => setContactForm({ ...contactForm, phone: text })} keyboardType="phone-pad" placeholderTextColor="#8E8E93" />
-              </View>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Mobile</Text>
-                <TextInput style={styles.input} placeholder="+33 6 XX XX XX XX" value={contactForm.mobile} onChangeText={(text) => setContactForm({ ...contactForm, mobile: text })} keyboardType="phone-pad" placeholderTextColor="#8E8E93" />
+              <View style={styles.modalActionsSecondary}>
+                <GlassButton
+                  title="Supprimer"
+                  onPress={() => handleDeleteCompany(selectedCompany)}
+                  variant="danger"
+                  icon={<TrashIcon size={16} color="#FF3B30" />}
+                  fullWidth
+                />
               </View>
             </ScrollView>
-            <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.buttonSecondary} onPress={() => { setNewContactModalVisible(false); resetContactForm(); }}>
-                <Text style={styles.buttonSecondaryText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.buttonPrimary} onPress={handleCreateContact}>
-                <Text style={styles.buttonPrimaryText}>{editingContact ? 'Modifier' : 'Créer'}</Text>
-              </TouchableOpacity>
-            </View>
+          )}
+        </GlassModal>
+
+        {/* New/Edit Contact Modal */}
+        <GlassModal
+          visible={newContactModalVisible}
+          onClose={() => { setNewContactModalVisible(false); resetContactForm(); }}
+          title={editingContact ? 'Modifier le contact' : 'Nouveau contact'}
+          size="large"
+        >
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <GlassInput
+              label="Prenom *"
+              placeholder="Prenom"
+              value={contactForm.first_name}
+              onChangeText={(text) => setContactForm({ ...contactForm, first_name: text })}
+            />
+            <GlassInput
+              label="Nom"
+              placeholder="Nom de famille"
+              value={contactForm.last_name}
+              onChangeText={(text) => setContactForm({ ...contactForm, last_name: text })}
+            />
+            <ImageUpload
+              label="Avatar"
+              value={contactForm.avatar_url}
+              onChange={(url) => setContactForm({ ...contactForm, avatar_url: url as string })}
+              multiple={false}
+            />
+            <GlassInput
+              label="Titre/Poste"
+              placeholder="Directeur Commercial"
+              value={contactForm.title}
+              onChangeText={(text) => setContactForm({ ...contactForm, title: text })}
+            />
+            <GlassInput
+              label="Email"
+              placeholder="email@example.com"
+              value={contactForm.email}
+              onChangeText={(text) => setContactForm({ ...contactForm, email: text })}
+              keyboardType="email-address"
+            />
+            <GlassInput
+              label="Telephone"
+              placeholder="+33 1 XX XX XX XX"
+              value={contactForm.phone}
+              onChangeText={(text) => setContactForm({ ...contactForm, phone: text })}
+              keyboardType="phone-pad"
+            />
+            <GlassInput
+              label="Mobile"
+              placeholder="+33 6 XX XX XX XX"
+              value={contactForm.mobile}
+              onChangeText={(text) => setContactForm({ ...contactForm, mobile: text })}
+              keyboardType="phone-pad"
+            />
+          </ScrollView>
+          <View style={styles.modalFooter}>
+            <GlassButton
+              title="Annuler"
+              onPress={() => { setNewContactModalVisible(false); resetContactForm(); }}
+              variant="outline"
+              style={{ flex: 1 }}
+            />
+            <GlassButton
+              title={editingContact ? 'Modifier' : 'Creer'}
+              onPress={handleCreateContact}
+              variant="primary"
+              style={{ flex: 1 }}
+            />
           </View>
-        </View>
-      </Modal>
+        </GlassModal>
 
-      {/* New/Edit Company Modal */}
-      <Modal visible={newCompanyModalVisible} transparent animationType="slide" onRequestClose={() => { setNewCompanyModalVisible(false); resetCompanyForm(); }}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{editingCompany ? 'Modifier l\'entreprise' : 'Nouvelle entreprise'}</Text>
-              <TouchableOpacity onPress={() => { setNewCompanyModalVisible(false); resetCompanyForm(); }}>
-                <Text style={styles.closeButton}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalBody}>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Nom *</Text>
-                <TextInput style={styles.input} placeholder="Nom de l'entreprise" value={companyForm.name} onChangeText={(text) => setCompanyForm({ ...companyForm, name: text })} placeholderTextColor="#8E8E93" />
-              </View>
-              <ImageUpload
-                label="Logo"
-                value={companyForm.logo_url}
-                onChange={(url) => setCompanyForm({ ...companyForm, logo_url: url as string })}
-                multiple={false}
-              />
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Secteur</Text>
-                <TextInput style={styles.input} placeholder="ex: Technologie" value={companyForm.industry} onChangeText={(text) => setCompanyForm({ ...companyForm, industry: text })} placeholderTextColor="#8E8E93" />
-              </View>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Site web</Text>
-                <TextInput style={styles.input} placeholder="https://example.com" value={companyForm.website} onChangeText={(text) => setCompanyForm({ ...companyForm, website: text })} keyboardType="url" placeholderTextColor="#8E8E93" />
-              </View>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Email</Text>
-                <TextInput style={styles.input} placeholder="contact@entreprise.com" value={companyForm.email} onChangeText={(text) => setCompanyForm({ ...companyForm, email: text })} keyboardType="email-address" placeholderTextColor="#8E8E93" />
-              </View>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Téléphone</Text>
-                <TextInput style={styles.input} placeholder="+33 1 XX XX XX XX" value={companyForm.phone} onChangeText={(text) => setCompanyForm({ ...companyForm, phone: text })} keyboardType="phone-pad" placeholderTextColor="#8E8E93" />
-              </View>
-              {/* Adresse détaillée */}
-              <View style={styles.addressSection}>
-                <Text style={styles.sectionTitle}>📍 Adresse</Text>
+        {/* New/Edit Company Modal */}
+        <GlassModal
+          visible={newCompanyModalVisible}
+          onClose={() => { setNewCompanyModalVisible(false); resetCompanyForm(); }}
+          title={editingCompany ? 'Modifier l\'entreprise' : 'Nouvelle entreprise'}
+          size="large"
+        >
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <GlassInput
+              label="Nom *"
+              placeholder="Nom de l'entreprise"
+              value={companyForm.name}
+              onChangeText={(text) => setCompanyForm({ ...companyForm, name: text })}
+            />
+            <ImageUpload
+              label="Logo"
+              value={companyForm.logo_url}
+              onChange={(url) => setCompanyForm({ ...companyForm, logo_url: url as string })}
+              multiple={false}
+            />
+            <GlassInput
+              label="Secteur"
+              placeholder="ex: Technologie"
+              value={companyForm.industry}
+              onChangeText={(text) => setCompanyForm({ ...companyForm, industry: text })}
+            />
+            <GlassInput
+              label="Site web"
+              placeholder="https://example.com"
+              value={companyForm.website}
+              onChangeText={(text) => setCompanyForm({ ...companyForm, website: text })}
+              keyboardType="url"
+            />
+            <GlassInput
+              label="Email"
+              placeholder="contact@entreprise.com"
+              value={companyForm.email}
+              onChangeText={(text) => setCompanyForm({ ...companyForm, email: text })}
+              keyboardType="email-address"
+            />
+            <GlassInput
+              label="Telephone"
+              placeholder="+33 1 XX XX XX XX"
+              value={companyForm.phone}
+              onChangeText={(text) => setCompanyForm({ ...companyForm, phone: text })}
+              keyboardType="phone-pad"
+            />
 
-                <View style={styles.formRow}>
-                  <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                    <Text style={styles.formLabel}>N°</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="123"
-                      value={companyForm.address.street_number}
-                      onChangeText={(text) => setCompanyForm({
-                        ...companyForm,
-                        address: { ...companyForm.address, street_number: text }
-                      })}
-                      placeholderTextColor="#8E8E93"
-                    />
-                  </View>
-                  <View style={[styles.formGroup, { flex: 3 }]}>
-                    <Text style={styles.formLabel}>Nom de la voie</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Rue de la République"
-                      value={companyForm.address.street}
-                      onChangeText={(text) => setCompanyForm({
-                        ...companyForm,
-                        address: { ...companyForm.address, street: text }
-                      })}
-                      placeholderTextColor="#8E8E93"
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.formRow}>
-                  <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                    <Text style={styles.formLabel}>Code Postal</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="75001"
-                      value={companyForm.address.postal_code}
-                      onChangeText={handlePostalCodeChange}
-                      keyboardType="number-pad"
-                      placeholderTextColor="#8E8E93"
-                    />
-                  </View>
-                  <View style={[styles.formGroup, { flex: 2 }]}>
-                    <Text style={styles.formLabel}>Ville</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Paris"
-                      value={companyForm.address.city}
-                      onChangeText={(text) => setCompanyForm({
-                        ...companyForm,
-                        address: { ...companyForm.address, city: text }
-                      })}
-                      placeholderTextColor="#8E8E93"
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>Région</Text>
-                  <View style={styles.pickerContainer}>
-                    <Picker
-                      selectedValue={companyForm.address.state}
-                      onValueChange={(itemValue) => setCompanyForm({
-                        ...companyForm,
-                        address: { ...companyForm.address, state: itemValue }
-                      })}
-                      style={styles.picker}
-                    >
-                      <Picker.Item label="Sélectionnez une région..." value="" />
-                      {frenchRegions.map((region) => (
-                        <Picker.Item key={region} label={region} value={region} />
-                      ))}
-                    </Picker>
-                  </View>
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>Pays</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="France"
-                    value={companyForm.address.country}
+            {/* Address Section */}
+            <View style={styles.addressSection}>
+              <Text style={styles.addressSectionTitle}>Adresse</Text>
+              <View style={styles.formRow}>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <GlassInput
+                    label="N"
+                    placeholder="123"
+                    value={companyForm.address.street_number}
                     onChangeText={(text) => setCompanyForm({
                       ...companyForm,
-                      address: { ...companyForm.address, country: text }
+                      address: { ...companyForm.address, street_number: text }
                     })}
-                    placeholderTextColor="#8E8E93"
+                  />
+                </View>
+                <View style={{ flex: 3 }}>
+                  <GlassInput
+                    label="Nom de la voie"
+                    placeholder="Rue de la Republique"
+                    value={companyForm.address.street}
+                    onChangeText={(text) => setCompanyForm({
+                      ...companyForm,
+                      address: { ...companyForm.address, street: text }
+                    })}
                   />
                 </View>
               </View>
-            </ScrollView>
-            <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.buttonSecondary} onPress={() => { setNewCompanyModalVisible(false); resetCompanyForm(); }}>
-                <Text style={styles.buttonSecondaryText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.buttonPrimary} onPress={handleCreateCompany}>
-                <Text style={styles.buttonPrimaryText}>{editingCompany ? 'Modifier' : 'Créer'}</Text>
-              </TouchableOpacity>
+              <View style={styles.formRow}>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <GlassInput
+                    label="Code Postal"
+                    placeholder="75001"
+                    value={companyForm.address.postal_code}
+                    onChangeText={handlePostalCodeChange}
+                    keyboardType="number-pad"
+                  />
+                </View>
+                <View style={{ flex: 2 }}>
+                  <GlassInput
+                    label="Ville"
+                    placeholder="Paris"
+                    value={companyForm.address.city}
+                    onChangeText={(text) => setCompanyForm({
+                      ...companyForm,
+                      address: { ...companyForm.address, city: text }
+                    })}
+                  />
+                </View>
+              </View>
+              <View style={styles.pickerWrapper}>
+                <Text style={styles.pickerLabel}>Region</Text>
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    selectedValue={companyForm.address.state}
+                    onValueChange={(itemValue) => setCompanyForm({
+                      ...companyForm,
+                      address: { ...companyForm.address, state: itemValue }
+                    })}
+                    style={styles.picker}
+                  >
+                    <Picker.Item label="Selectionnez une region..." value="" />
+                    {frenchRegions.map((region) => (
+                      <Picker.Item key={region} label={region} value={region} />
+                    ))}
+                  </Picker>
+                </View>
+              </View>
+              <GlassInput
+                label="Pays"
+                placeholder="France"
+                value={companyForm.address.country}
+                onChangeText={(text) => setCompanyForm({
+                  ...companyForm,
+                  address: { ...companyForm.address, country: text }
+                })}
+              />
             </View>
+          </ScrollView>
+          <View style={styles.modalFooter}>
+            <GlassButton
+              title="Annuler"
+              onPress={() => { setNewCompanyModalVisible(false); resetCompanyForm(); }}
+              variant="outline"
+              style={{ flex: 1 }}
+            />
+            <GlassButton
+              title={editingCompany ? 'Modifier' : 'Creer'}
+              onPress={handleCreateCompany}
+              variant="primary"
+              style={{ flex: 1 }}
+            />
           </View>
-        </View>
-      </Modal>
+        </GlassModal>
 
-      {/* Activity Modal */}
-      <Modal visible={activityModalVisible} transparent animationType="slide" onRequestClose={() => { setActivityModalVisible(false); resetActivityForm(); }}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nouvelle activité</Text>
-              <TouchableOpacity onPress={() => { setActivityModalVisible(false); resetActivityForm(); }}>
-                <Text style={styles.closeButton}>✕</Text>
-              </TouchableOpacity>
+        {/* Activity Modal */}
+        <GlassModal
+          visible={activityModalVisible}
+          onClose={() => { setActivityModalVisible(false); resetActivityForm(); }}
+          title="Nouvelle activite"
+          size="medium"
+        >
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <Text style={styles.formLabel}>Type</Text>
+            <View style={styles.activityTypeSelect}>
+              {(['call', 'email', 'meeting', 'note'] as const).map((type) => {
+                const config = activityConfig[type];
+                const IconComponent = config.icon;
+                const isActive = activityForm.type === type;
+                return (
+                  <TouchableOpacity
+                    key={type}
+                    style={[
+                      styles.activityTypeButton,
+                      isActive && { borderColor: config.color, backgroundColor: `${config.color}10` }
+                    ]}
+                    onPress={() => setActivityForm({ ...activityForm, type })}
+                  >
+                    <IconComponent size={20} color={isActive ? config.color : '#8E8E93'} />
+                    <Text style={[
+                      styles.activityTypeLabel,
+                      isActive && { color: config.color }
+                    ]}>
+                      {config.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-            <ScrollView style={styles.modalBody}>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Type</Text>
-                <View style={styles.activityTypeSelect}>
-                  {(['call', 'email', 'meeting', 'note'] as const).map((type) => (
-                    <TouchableOpacity key={type} style={[styles.activityTypeButton, activityForm.type === type && styles.activityTypeButtonActive]} onPress={() => setActivityForm({ ...activityForm, type })}>
-                      <Text style={styles.activityTypeIcon}>{activityConfig[type].icon}</Text>
-                      <Text style={styles.activityTypeLabel}>{activityConfig[type].label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-              {activityForm.type === 'call' && (
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>Durée (minutes)</Text>
-                  <TextInput style={styles.input} placeholder="30" value={activityForm.duration_minutes} onChangeText={(text) => setActivityForm({ ...activityForm, duration_minutes: text })} keyboardType="numeric" placeholderTextColor="#8E8E93" />
-                </View>
-              )}
-              {(activityForm.type === 'email' || activityForm.type === 'meeting') && (
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>{activityForm.type === 'email' ? 'Sujet' : 'Titre'}</Text>
-                  <TextInput style={styles.input} placeholder={activityForm.type === 'email' ? 'Sujet de l\'email' : 'Titre de la réunion'} value={activityForm.subject} onChangeText={(text) => setActivityForm({ ...activityForm, subject: text })} placeholderTextColor="#8E8E93" />
-                </View>
-              )}
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>{activityForm.type === 'note' ? 'Note' : 'Description'}</Text>
-                <TextInput style={[styles.input, styles.textArea]} placeholder="Détails..." value={activityForm.description} onChangeText={(text) => setActivityForm({ ...activityForm, description: text })} placeholderTextColor="#8E8E93" multiline numberOfLines={4} />
-              </View>
-            </ScrollView>
-            <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.buttonSecondary} onPress={() => { setActivityModalVisible(false); resetActivityForm(); }}>
-                <Text style={styles.buttonSecondaryText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.buttonPrimary} onPress={handleCreateActivity}>
-                <Text style={styles.buttonPrimaryText}>Enregistrer</Text>
-              </TouchableOpacity>
-            </View>
+
+            {activityForm.type === 'call' && (
+              <GlassInput
+                label="Duree (minutes)"
+                placeholder="30"
+                value={activityForm.duration_minutes}
+                onChangeText={(text) => setActivityForm({ ...activityForm, duration_minutes: text })}
+                keyboardType="numeric"
+              />
+            )}
+            {(activityForm.type === 'email' || activityForm.type === 'meeting') && (
+              <GlassInput
+                label={activityForm.type === 'email' ? 'Sujet' : 'Titre'}
+                placeholder={activityForm.type === 'email' ? 'Sujet de l\'email' : 'Titre de la reunion'}
+                value={activityForm.subject}
+                onChangeText={(text) => setActivityForm({ ...activityForm, subject: text })}
+              />
+            )}
+            <GlassInput
+              label={activityForm.type === 'note' ? 'Note' : 'Description'}
+              placeholder="Details..."
+              value={activityForm.description}
+              onChangeText={(text) => setActivityForm({ ...activityForm, description: text })}
+              multiline
+              numberOfLines={4}
+            />
+          </ScrollView>
+          <View style={styles.modalFooter}>
+            <GlassButton
+              title="Annuler"
+              onPress={() => { setActivityModalVisible(false); resetActivityForm(); }}
+              variant="outline"
+              style={{ flex: 1 }}
+            />
+            <GlassButton
+              title="Enregistrer"
+              onPress={handleCreateActivity}
+              variant="primary"
+              style={{ flex: 1 }}
+            />
           </View>
-        </View>
-      </Modal>
-    </View>
+        </GlassModal>
+      </Animated.View>
     </GlassLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F2F2F7' },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F2F2F7' },
-  loadingText: { fontSize: 17, color: '#8E8E93', fontWeight: '500' },
-  header: { backgroundColor: '#FFFFFF', paddingTop: 16, paddingHorizontal: 20, paddingBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerTitle: { fontSize: 32, fontWeight: '700', color: '#000000', letterSpacing: -0.6, marginBottom: 4 },
-  headerSubtitle: { fontSize: 15, color: '#8E8E93', letterSpacing: -0.2 },
-  addButton: { backgroundColor: '#007AFF', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
-  addButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  toggleContainer: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 12, gap: 8 },
-  toggleButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: '#FFFFFF', gap: 6 },
-  toggleButtonActive: { backgroundColor: '#007AFF' },
-  toggleText: { fontSize: 14, fontWeight: '600', color: '#8E8E93' },
-  toggleTextActive: { color: '#FFFFFF' },
-  statsContainer: { flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 12, gap: 12 },
-  statCard: { flex: 1, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 12, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, gap: 4 },
-  statValue: { fontSize: 20, fontWeight: '700', color: '#000000' },
-  statLabel: { fontSize: 12, color: '#8E8E93' },
-  searchContainer: { paddingHorizontal: 20, paddingBottom: 12 },
-  searchInput: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 12, fontSize: 16, color: '#000000', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  list: { flex: 1 },
-  listContent: { padding: 20, gap: 12 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center' },
-  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  avatarText: { fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
-  cardInfo: { flex: 1 },
-  cardName: { fontSize: 16, fontWeight: '600', color: '#000000', marginBottom: 2 },
-  cardCompany: { fontSize: 14, color: '#8E8E93', marginBottom: 4 },
-  cardMetaText: { fontSize: 13, color: '#8E8E93' },
-  emptyState: { alignItems: 'center', paddingVertical: 60 },
-  emptyText: { marginTop: 16, fontSize: 17, color: '#8E8E93' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F2F2F7' },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: '#000000' },
-  modalSubtitle: { fontSize: 15, color: '#8E8E93', marginTop: 2 },
-  closeButton: { fontSize: 28, color: '#8E8E93', fontWeight: '300' },
-  modalBody: { flex: 1 },
-  modalSection: { padding: 20, borderBottomWidth: 1, borderBottomColor: '#F2F2F7' },
-  sectionTitle: { fontSize: 13, fontWeight: '600', color: '#8E8E93', marginBottom: 12, letterSpacing: -0.1 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 8 },
-  infoLabel: { fontSize: 15, color: '#8E8E93' },
-  infoValue: { fontSize: 15, fontWeight: '500', color: '#000000', flex: 1 },
-  activityCard: { flexDirection: 'row', backgroundColor: '#F2F2F7', borderRadius: 12, padding: 12, marginBottom: 8 },
-  activityIcon: { fontSize: 24, marginRight: 12 },
-  activityDescription: { fontSize: 15, fontWeight: '500', color: '#000000', marginBottom: 2 },
-  activityDate: { fontSize: 13, color: '#8E8E93' },
-  modalActions: { flexDirection: 'row', padding: 20, borderTopWidth: 1, borderTopColor: '#F2F2F7', gap: 8 },
-  actionButtonPrimary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 10, gap: 6, backgroundColor: '#007AFF' },
-  actionButtonPrimaryText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  actionButtonSecondary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 10, gap: 6, backgroundColor: '#F2F2F7' },
-  actionButtonSecondaryText: { color: '#007AFF', fontSize: 15, fontWeight: '600' },
-  actionButtonDanger: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#FF3B30', flex: 0, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10 },
-  modalFooter: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#F2F2F7' },
-  buttonPrimary: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#007AFF' },
-  buttonPrimaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  buttonSecondary: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F2F2F7' },
-  buttonSecondaryText: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
-  formGroup: { marginBottom: 16 },
-  formLabel: { fontSize: 15, fontWeight: '600', color: '#000000', marginBottom: 8 },
-  input: { borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, color: '#000000' },
-  textArea: { textAlignVertical: 'top', paddingTop: 10, height: 100 },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  picker: {
-    fontSize: 16,
-    color: '#000000',
-    height: Platform.OS === 'web' ? 44 : undefined,
-  },
-  addressSection: {
-    backgroundColor: '#F9F9F9',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#000000',
-    marginBottom: 16,
-  },
-  formRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  activityTypeSelect: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  activityTypeButton: { flex: 1, minWidth: '48%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E5E5EA', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#FFFFFF', gap: 6 },
-  activityTypeButtonActive: { borderColor: '#007AFF', backgroundColor: '#007AFF10' },
-  activityTypeIcon: { fontSize: 18 },
-  activityTypeLabel: { fontSize: 14, fontWeight: '600', color: '#000000' },
-  historyTabs: {
-    flexDirection: 'row',
-    backgroundColor: '#F2F2F7',
-    borderRadius: 10,
-    padding: 4,
-    marginHorizontal: 16,
-    marginTop: 16,
-  },
-  historyTab: {
+  container: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  historyTabActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+  header: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingTop: glassTheme.spacing.md,
+    paddingHorizontal: glassTheme.spacing.md,
+    paddingBottom: glassTheme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.04)',
+    ...(Platform.OS === 'web' ? {
+      // @ts-ignore
+      backdropFilter: 'blur(20px)',
+    } : {}),
   },
-  historyTabText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: glassTheme.spacing.md,
   },
-  historyTabTextActive: {
-    color: '#007AFF',
+  headerTitle: {
+    ...glassTheme.typography.displaySmall,
+    color: glassTheme.colors.text.primary,
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    ...glassTheme.typography.body,
+    color: glassTheme.colors.text.tertiary,
+  },
+  addButton: {
+    borderRadius: glassTheme.radius.full,
+    overflow: 'hidden',
+    ...withShadow('md'),
+  },
+  addButtonGradient: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toggleContainer: {
+    marginBottom: glassTheme.spacing.md,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    gap: glassTheme.spacing.sm,
+    marginBottom: glassTheme.spacing.md,
+  },
+  statCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: glassTheme.radius.md,
+    padding: glassTheme.spacing.sm,
+    gap: glassTheme.spacing.sm,
+    ...withShadow('sm'),
+  },
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: glassTheme.radius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statContent: {
+    flex: 1,
+  },
+  statValue: {
+    ...glassTheme.typography.h2,
+    color: glassTheme.colors.text.primary,
+  },
+  statLabel: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+  },
+  list: {
+    flex: 1,
+  },
+  listContent: {
+    padding: glassTheme.spacing.md,
+    gap: glassTheme.spacing.sm,
+  },
+  cardWrapper: {
+    marginBottom: glassTheme.spacing.sm,
+  },
+  card: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: glassTheme.radius.lg,
+    padding: glassTheme.spacing.md,
+    ...withShadow('sm'),
+    ...(Platform.OS === 'web' ? {
+      // @ts-ignore
+      backdropFilter: 'blur(10px)',
+      transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+    } : {}),
+  },
+  cardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cardInfo: {
+    flex: 1,
+    marginLeft: glassTheme.spacing.sm,
+    gap: 2,
+  },
+  cardName: {
+    ...glassTheme.typography.h3,
+    color: glassTheme.colors.text.primary,
+  },
+  cardTitle: {
+    ...glassTheme.typography.bodySmall,
+    color: glassTheme.colors.text.secondary,
+  },
+  companyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  cardCompany: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+  },
+  cardMetaText: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: glassTheme.spacing.sm,
+  },
+  quickAction: {
+    width: 36,
+    height: 36,
+    borderRadius: glassTheme.radius.full,
+    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Modal styles
+  modalContactHeader: {
+    alignItems: 'center',
+    paddingVertical: glassTheme.spacing.lg,
+    gap: glassTheme.spacing.md,
+  },
+  modalContactInfo: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  modalContactName: {
+    ...glassTheme.typography.h1,
+    color: glassTheme.colors.text.primary,
+    textAlign: 'center',
+  },
+  modalContactTitle: {
+    ...glassTheme.typography.body,
+    color: glassTheme.colors.text.secondary,
+  },
+  modalCompanyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  modalCompanyName: {
+    ...glassTheme.typography.bodySmall,
+    color: glassTheme.colors.text.tertiary,
+  },
+  modalSection: {
+    marginBottom: glassTheme.spacing.lg,
+  },
+  sectionTitle: {
+    ...glassTheme.typography.label,
+    color: glassTheme.colors.text.tertiary,
+    marginBottom: glassTheme.spacing.sm,
+  },
+  infoGrid: {
+    gap: glassTheme.spacing.sm,
+  },
+  infoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: glassTheme.radius.md,
+    padding: glassTheme.spacing.sm,
+    gap: glassTheme.spacing.sm,
+  },
+  infoIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: glassTheme.radius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  infoCardContent: {
+    flex: 1,
+  },
+  infoLabel: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+  },
+  infoValue: {
+    ...glassTheme.typography.body,
+    color: glassTheme.colors.text.primary,
+    fontWeight: '500',
+  },
+  historySection: {
+    marginTop: glassTheme.spacing.md,
+  },
+  historyContent: {
+    marginTop: glassTheme.spacing.md,
+    gap: glassTheme.spacing.sm,
+  },
+  activityCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: glassTheme.radius.md,
+    padding: glassTheme.spacing.sm,
+    gap: glassTheme.spacing.sm,
+  },
+  activityIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: glassTheme.radius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityDescription: {
+    ...glassTheme.typography.body,
+    color: glassTheme.colors.text.primary,
+    marginBottom: 2,
+  },
+  activityDate: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+  },
+  emptyHistoryState: {
+    alignItems: 'center',
+    paddingVertical: glassTheme.spacing.xl,
+  },
+  emptyHistoryText: {
+    ...glassTheme.typography.body,
+    color: glassTheme.colors.text.tertiary,
   },
   historyItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: glassTheme.radius.md,
+    padding: glassTheme.spacing.sm,
   },
   historyItemLeft: {
     flex: 1,
   },
   historyItemRight: {
     alignItems: 'flex-end',
+    gap: 4,
   },
   historyItemTitle: {
-    fontSize: 15,
+    ...glassTheme.typography.body,
     fontWeight: '600',
-    color: '#1C1C1E',
-    marginBottom: 4,
+    color: glassTheme.colors.text.primary,
   },
   historyItemDate: {
-    fontSize: 13,
-    color: '#8E8E93',
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
   },
   historyItemAmount: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1C1C1E',
-    marginBottom: 4,
+    ...glassTheme.typography.h3,
+    color: glassTheme.colors.text.primary,
   },
-  historyStatusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  historyStatusText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  historyPaymentMethod: {
-    fontSize: 12,
-    color: '#8E8E93',
+  paymentMethod: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
     fontWeight: '500',
   },
-  cardWrapper: {
-    position: 'relative',
-    marginBottom: 12,
-  },
-  cardQuickActions: {
-    position: 'absolute',
-    right: 12,
-    top: '50%',
-    transform: [{ translateY: -18 }],
+  modalActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: glassTheme.spacing.sm,
+    marginTop: glassTheme.spacing.lg,
   },
-  quickAction: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F2F2F7',
+  modalActionsSecondary: {
+    flexDirection: 'row',
+    gap: glassTheme.spacing.sm,
+    marginTop: glassTheme.spacing.sm,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: glassTheme.spacing.sm,
+    marginTop: glassTheme.spacing.lg,
+    paddingTop: glassTheme.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.06)',
+  },
+  formLabel: {
+    ...glassTheme.typography.bodySmall,
+    fontWeight: '600',
+    color: glassTheme.colors.text.secondary,
+    marginBottom: glassTheme.spacing.sm,
+  },
+  activityTypeSelect: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: glassTheme.spacing.sm,
+    marginBottom: glassTheme.spacing.md,
+  },
+  activityTypeButton: {
+    flex: 1,
+    minWidth: '45%',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    borderRadius: glassTheme.radius.md,
+    paddingVertical: glassTheme.spacing.sm,
+    paddingHorizontal: glassTheme.spacing.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    gap: 8,
+  },
+  activityTypeLabel: {
+    ...glassTheme.typography.bodySmall,
+    fontWeight: '600',
+    color: glassTheme.colors.text.secondary,
+  },
+  addressSection: {
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    padding: glassTheme.spacing.md,
+    borderRadius: glassTheme.radius.lg,
+    marginTop: glassTheme.spacing.md,
+  },
+  addressSectionTitle: {
+    ...glassTheme.typography.h3,
+    color: glassTheme.colors.text.primary,
+    marginBottom: glassTheme.spacing.md,
+  },
+  formRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  pickerWrapper: {
+    marginBottom: glassTheme.spacing.md,
+  },
+  pickerLabel: {
+    ...glassTheme.typography.bodySmall,
+    fontWeight: '600',
+    color: glassTheme.colors.text.secondary,
+    marginBottom: glassTheme.spacing.xs,
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    borderRadius: glassTheme.radius.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    overflow: 'hidden',
+  },
+  picker: {
+    fontSize: 16,
+    color: glassTheme.colors.text.primary,
+    height: Platform.OS === 'web' ? 44 : undefined,
   },
 });

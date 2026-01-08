@@ -12,14 +12,14 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 
     // Récupérer l'organisation
     const orgResult = await db.query(
-      `SELECT id, name, domain, settings, created_at, updated_at
+      `SELECT id, name, slug as domain, website, settings, created_at, updated_at
        FROM organizations WHERE id = $1`,
       [organizationId]
     );
 
     // Récupérer le profil utilisateur
     const userResult = await db.query(
-      `SELECT id, email, first_name, last_name, role, settings, avatar_url
+      `SELECT id, email, first_name, last_name, status, metadata as settings, avatar_url
        FROM users WHERE id = $1`,
       [userId]
     );
@@ -603,6 +603,58 @@ router.get('/notifications', authenticateToken, async (req: AuthRequest, res: Re
   } catch (error) {
     console.error('Error fetching notification settings:', error);
     res.status(500).json({ error: 'Failed to fetch notification settings' });
+  }
+});
+
+// GET /api/settings/numbering - Retourne les paramètres de numérotation
+router.get('/numbering', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id;
+
+    // Try to get numbering settings from organization settings
+    const orgResult = await db.query(
+      `SELECT settings FROM organizations WHERE id = $1`,
+      [organizationId]
+    );
+
+    const settings = orgResult.rows[0]?.settings || {};
+    const numbering = settings.numbering || {
+      invoice: {
+        prefix: 'INV-',
+        startNumber: 1,
+        format: '{prefix}{year}{number:5}',
+        currentNumber: 1
+      },
+      quote: {
+        prefix: 'QUO-',
+        startNumber: 1,
+        format: '{prefix}{year}{number:5}',
+        currentNumber: 1
+      },
+      creditNote: {
+        prefix: 'CN-',
+        startNumber: 1,
+        format: '{prefix}{year}{number:5}',
+        currentNumber: 1
+      },
+      purchaseOrder: {
+        prefix: 'PO-',
+        startNumber: 1,
+        format: '{prefix}{year}{number:5}',
+        currentNumber: 1
+      },
+      deliveryNote: {
+        prefix: 'DN-',
+        startNumber: 1,
+        format: '{prefix}{year}{number:5}',
+        currentNumber: 1
+      }
+    };
+
+    res.json(numbering);
+  } catch (error) {
+    console.error('Error fetching numbering settings:', error);
+    res.status(500).json({ error: 'Failed to fetch numbering settings' });
   }
 });
 

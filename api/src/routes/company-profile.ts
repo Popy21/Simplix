@@ -48,11 +48,20 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     `, [userId]);
 
     if (result.rows.length === 0) {
-      res.status(404).json({ error: 'Company profile not found' });
+      // Return empty profile instead of 404
+      res.json({
+        id: null,
+        user_id: userId,
+        company_name: '',
+        company_email: '',
+        company_phone: '',
+        company_siret: '',
+        is_setup_complete: false
+      });
       return;
     }
 
-    res.json(result.rows[0]);
+    res.json({ ...result.rows[0], is_setup_complete: true });
   } catch (error: any) {
     console.error('Error fetching company profile:', error);
     res.status(500).json({ error: error.message });

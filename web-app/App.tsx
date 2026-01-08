@@ -35,6 +35,13 @@ import WorkflowsScreen from './src/screens/WorkflowsScreen';
 import EmailsScreen from './src/screens/EmailsScreen';
 import DocumentsScreen from './src/screens/DocumentsScreen';
 import TeamsScreen from './src/screens/TeamsScreen';
+import CreditNotesScreen from './src/screens/CreditNotesScreen';
+import RecurringInvoicesScreen from './src/screens/RecurringInvoicesScreen';
+import CashflowScreen from './src/screens/CashflowScreen';
+import BankReconciliationScreen from './src/screens/BankReconciliationScreen';
+import RemindersScreen from './src/screens/RemindersScreen';
+import AccountingScreen from './src/screens/AccountingScreen';
+import ReportsScreen from './src/screens/ReportsScreen';
 
 import { RootStackParamList } from './src/navigation/types';
 import { SearchIcon } from './src/components/Icons';
@@ -275,6 +282,69 @@ function Navigation() {
               component={TeamsScreen}
               options={{
                 title: 'Équipes',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="CreditNotes"
+              component={CreditNotesScreen}
+              options={{
+                title: 'Avoirs',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="RecurringInvoices"
+              component={RecurringInvoicesScreen}
+              options={{
+                title: 'Factures récurrentes',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Cashflow"
+              component={CashflowScreen}
+              options={{
+                title: 'Trésorerie',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="BankReconciliation"
+              component={BankReconciliationScreen}
+              options={{
+                title: 'Rapprochement bancaire',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Reminders"
+              component={RemindersScreen}
+              options={{
+                title: 'Relances',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Accounting"
+              component={AccountingScreen}
+              options={{
+                title: 'Comptabilité',
+                headerShown: true,
+                headerStyle: { backgroundColor: '#F2F2F7' },
+              }}
+            />
+            <Stack.Screen
+              name="Reports"
+              component={ReportsScreen}
+              options={{
+                title: 'Rapports',
                 headerShown: true,
                 headerStyle: { backgroundColor: '#F2F2F7' },
               }}

@@ -25,10 +25,39 @@ interface RolePermission {
  */
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
+    // Check if permissions table exists
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'permissions'
+      )
+    `);
+
+    if (!tableCheck.rows[0].exists) {
+      // Return default permissions if table doesn't exist
+      return res.json({
+        success: true,
+        permissions: [
+          { id: 1, module: 'contacts', action: 'read', description: 'Voir les contacts' },
+          { id: 2, module: 'contacts', action: 'write', description: 'Modifier les contacts' },
+          { id: 3, module: 'invoices', action: 'read', description: 'Voir les factures' },
+          { id: 4, module: 'invoices', action: 'write', description: 'Créer/modifier les factures' },
+          { id: 5, module: 'quotes', action: 'read', description: 'Voir les devis' },
+          { id: 6, module: 'quotes', action: 'write', description: 'Créer/modifier les devis' },
+          { id: 7, module: 'products', action: 'read', description: 'Voir les produits' },
+          { id: 8, module: 'products', action: 'write', description: 'Modifier les produits' },
+          { id: 9, module: 'reports', action: 'read', description: 'Voir les rapports' },
+          { id: 10, module: 'settings', action: 'admin', description: 'Administrer les paramètres' }
+        ],
+        total: 10,
+      });
+    }
+
     const result = await pool.query(
-      `SELECT id, module, action, description, created_at 
-       FROM permissions 
-       ORDER BY module, action`
+      `SELECT id, resource as module, action,
+              resource || ' - ' || action as description, created_at
+       FROM permissions
+       ORDER BY resource, action`
     );
 
     res.json({
@@ -86,11 +115,11 @@ router.get('/by-role/:roleId', authenticateToken, async (req: AuthRequest, res: 
     const { roleId } = req.params;
 
     const result = await pool.query(
-      `SELECT p.id, p.module, p.action, p.description
+      `SELECT p.id, p.resource as module, p.action, p.resource || ' - ' || p.action as description
        FROM permissions p
        INNER JOIN role_permissions rp ON p.id = rp.permission_id
        WHERE rp.role_id = $1
-       ORDER BY p.module, p.action`,
+       ORDER BY p.resource, p.action`,
       [roleId]
     );
 
@@ -196,7 +225,7 @@ router.post('/check', authenticateToken, async (req: AuthRequest, res: Response)
        INNER JOIN role_permissions rp ON p.id = rp.permission_id
        INNER JOIN roles r ON rp.role_id = r.id
        INNER JOIN users u ON u.role_id = r.id
-       WHERE u.id = $1 AND p.module = $2 AND p.action = $3`,
+       WHERE u.id = $1 AND p.resource = $2 AND p.action = $3`,
       [userId, module, action]
     );
 
@@ -225,12 +254,12 @@ router.get('/user/:userId', authenticateToken, async (req: AuthRequest, res: Res
     const { userId } = req.params;
 
     const result = await pool.query(
-      `SELECT DISTINCT p.module, p.action, p.description
+      `SELECT DISTINCT p.resource as module, p.action, p.resource || ' - ' || p.action as description
        FROM permissions p
        INNER JOIN role_permissions rp ON p.id = rp.permission_id
        INNER JOIN users u ON u.role_id = rp.role_id
        WHERE u.id = $1
-       ORDER BY p.module, p.action`,
+       ORDER BY p.resource, p.action`,
       [userId]
     );
 

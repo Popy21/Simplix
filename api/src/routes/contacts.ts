@@ -123,7 +123,7 @@ router.get('/stats', authenticateToken, requireOrganization, async (req: AuthReq
         COUNT(*) FILTER (WHERE type = 'lead' AND deleted_at IS NULL) as leads,
         COUNT(*) FILTER (WHERE type = 'prospect' AND deleted_at IS NULL) as prospects,
         COUNT(*) FILTER (WHERE type = 'customer' AND deleted_at IS NULL) as customers,
-        COUNT(*) FILTER (WHERE type = 'contact' AND deleted_at IS NULL) as contacts,
+        COUNT(*) FILTER (WHERE type IN ('partner', 'other') AND deleted_at IS NULL) as others,
         COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days' AND deleted_at IS NULL) as new_this_month,
         COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days' AND deleted_at IS NULL) as new_this_week
       FROM contacts

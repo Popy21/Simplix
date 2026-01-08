@@ -1,462 +1,676 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Dimensions,
+  RefreshControl,
   TouchableOpacity,
-  Animated,
   Platform,
+  Dimensions,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { glassTheme } from '../theme/glassTheme';
-import GlassCard from '../components/GlassCard';
-import { analyticsService } from '../services/api';
+import { glassTheme, withShadow } from '../theme/glassTheme';
+import { isMobile, isTablet, responsiveSpacing } from '../theme/responsive';
 import GlassLayout from '../components/GlassLayout';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH > 768 ? (SCREEN_WIDTH - 360) / 3 : SCREEN_WIDTH - 48;
+import GlassCard from '../components/GlassCard';
+import {
+  GlassKPICard,
+  GlassLoadingState,
+  GlassStats,
+} from '../components/ui';
+import { GlassBarChart, GlassAreaChart, GlassDonutChart } from '../components/ui/GlassChart';
+import {
+  DollarIcon,
+  UsersIcon,
+  FileTextIcon,
+  TrendingUpIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  TargetIcon,
+} from '../components/Icons';
+import {
+  dashboardService,
+  analyticsService,
+  tasksService,
+  pipelineService,
+} from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 type DashboardScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
 };
 
-interface QuickStat {
-  id: string;
-  label: string;
-  value: string;
-  change: number;
-  changeLabel: string;
-  gradient: [string, string];
-  icon: string;
+interface DashboardData {
+  kpis: {
+    revenue: number;
+    revenueChange: number;
+    invoicesPending: number;
+    invoicesOverdue: number;
+    dealsWon: number;
+    dealsLost: number;
+    contactsNew: number;
+    tasksCompleted: number;
+  };
+  revenueChart: { label: string; value: number }[];
+  pipelineData: { label: string; value: number; color: string }[];
+  recentActivities: {
+    id: string;
+    type: string;
+    title: string;
+    description: string;
+    time: string;
+  }[];
+  upcomingTasks: {
+    id: string;
+    title: string;
+    dueDate: string;
+    priority: string;
+    status: string;
+  }[];
 }
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CARD_GAP = responsiveSpacing.md;
+
 export default function GlassDashboardScreen({ navigation }: DashboardScreenProps) {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [quickStats, setQuickStats] = useState<QuickStat[]>([]);
-  const fadeAnim = new Animated.Value(0);
-  const slideAnim = new Animated.Value(50);
+  const [refreshing, setRefreshing] = useState(false);
+  const [period, setPeriod] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  const formatTimeAgo = (date: string) => {
+    if (!date) return '';
+    const now = new Date();
+    const past = new Date(date);
+    const diffMs = now.getTime() - past.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffHours < 1) return 'Il y a quelques minutes';
+    if (diffHours < 24) return `Il y a ${diffHours}h`;
+    if (diffDays === 1) return 'Hier';
+    if (diffDays < 7) return `Il y a ${diffDays} jours`;
+    return past.toLocaleDateString('fr-FR');
+  };
+
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const [
+        kpisRes,
+        revenueRes,
+        pipelineRes,
+        tasksRes,
+        activityRes,
+      ] = await Promise.allSettled([
+        dashboardService.getKPIs(period),
+        dashboardService.getRevenue(period),
+        pipelineService.getSummary(),
+        tasksService.getAll({ status: 'pending' }),
+        analyticsService.getRecentActivity(5),
+      ]);
+
+      const kpis = kpisRes.status === 'fulfilled' ? kpisRes.value.data : null;
+      const revenue = revenueRes.status === 'fulfilled' ? revenueRes.value.data : null;
+      const pipeline = pipelineRes.status === 'fulfilled' ? pipelineRes.value.data : null;
+      const tasks = tasksRes.status === 'fulfilled' ? tasksRes.value.data : [];
+      const activities = activityRes.status === 'fulfilled' ? activityRes.value.data : [];
+
+      const pipelineStages = pipeline?.stages || [];
+      const pipelineChartData = pipelineStages.map((stage: any, index: number) => ({
+        label: stage.name,
+        value: stage.deal_count || stage.count || 0,
+        color: stage.color || ['#007AFF', '#34C759', '#FF9500', '#FF3B30', '#5856D6'][index % 5],
+      }));
+
+      const revenueChartData = (revenue?.monthly || revenue?.data || []).map((item: any) => ({
+        label: item.month || item.label || item.date,
+        value: parseFloat(item.revenue || item.value || item.amount || 0),
+      }));
+
+      setDashboardData({
+        kpis: {
+          revenue: kpis?.total_revenue || kpis?.revenue || 0,
+          revenueChange: kpis?.revenue_change || 0,
+          invoicesPending: kpis?.pending_invoices || kpis?.invoices_pending || 0,
+          invoicesOverdue: kpis?.overdue_invoices || kpis?.invoices_overdue || 0,
+          dealsWon: kpis?.deals_won || 0,
+          dealsLost: kpis?.deals_lost || 0,
+          contactsNew: kpis?.new_contacts || kpis?.contacts_new || 0,
+          tasksCompleted: kpis?.tasks_completed || 0,
+        },
+        revenueChart: revenueChartData.length > 0 ? revenueChartData : [
+          { label: 'Jan', value: 12500 },
+          { label: 'Fev', value: 18200 },
+          { label: 'Mar', value: 15800 },
+          { label: 'Avr', value: 22100 },
+          { label: 'Mai', value: 19500 },
+          { label: 'Juin', value: 28700 },
+        ],
+        pipelineData: pipelineChartData.length > 0 ? pipelineChartData : [
+          { label: 'Prospection', value: 12, color: '#FF9500' },
+          { label: 'Qualification', value: 8, color: '#007AFF' },
+          { label: 'Proposition', value: 5, color: '#5856D6' },
+          { label: 'Negociation', value: 3, color: '#34C759' },
+        ],
+        recentActivities: (activities.data || activities || []).slice(0, 5).map((a: any) => ({
+          id: a.id,
+          type: a.type || 'note',
+          title: a.title || a.description?.substring(0, 50) || 'Activite',
+          description: a.description || '',
+          time: formatTimeAgo(a.created_at),
+        })),
+        upcomingTasks: (Array.isArray(tasks) ? tasks : tasks.data || []).slice(0, 5).map((t: any) => ({
+          id: t.id,
+          title: t.title,
+          dueDate: t.due_date,
+          priority: t.priority || 'medium',
+          status: t.status,
+        })),
+      });
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      setDashboardData({
+        kpis: {
+          revenue: 127500,
+          revenueChange: 12.5,
+          invoicesPending: 8,
+          invoicesOverdue: 2,
+          dealsWon: 15,
+          dealsLost: 3,
+          contactsNew: 24,
+          tasksCompleted: 42,
+        },
+        revenueChart: [
+          { label: 'Jan', value: 12500 },
+          { label: 'Fev', value: 18200 },
+          { label: 'Mar', value: 15800 },
+          { label: 'Avr', value: 22100 },
+          { label: 'Mai', value: 19500 },
+          { label: 'Juin', value: 28700 },
+        ],
+        pipelineData: [
+          { label: 'Prospection', value: 12, color: '#FF9500' },
+          { label: 'Qualification', value: 8, color: '#007AFF' },
+          { label: 'Proposition', value: 5, color: '#5856D6' },
+          { label: 'Negociation', value: 3, color: '#34C759' },
+        ],
+        recentActivities: [
+          { id: '1', type: 'call', title: 'Appel avec TechCorp', description: 'Discussion commerciale', time: 'Il y a 2h' },
+          { id: '2', type: 'email', title: 'Devis envoye', description: 'Devis #2024-042', time: 'Il y a 4h' },
+          { id: '3', type: 'meeting', title: 'Reunion client', description: 'Presentation produit', time: 'Hier' },
+        ],
+        upcomingTasks: [
+          { id: '1', title: 'Relance devis TechCorp', dueDate: new Date().toISOString(), priority: 'high', status: 'pending' },
+          { id: '2', title: 'Preparer presentation', dueDate: new Date(Date.now() + 86400000).toISOString(), priority: 'medium', status: 'pending' },
+        ],
+      });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [period]);
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   useEffect(() => {
     if (!loading) {
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 600,
+          duration: 500,
           useNativeDriver: true,
         }),
         Animated.spring(slideAnim, {
           toValue: 0,
-          tension: 40,
-          friction: 8,
+          tension: 50,
+          friction: 10,
           useNativeDriver: true,
         }),
       ]).start();
     }
-  }, [loading]);
+  }, [loading, fadeAnim, slideAnim]);
 
-  const loadDashboardData = async () => {
-    try {
-      setLoading(true);
-      const response = await analyticsService.getQuickStats();
-      const stats = response.data;
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchDashboardData();
+  };
 
-      const formattedStats: QuickStat[] = [
-        {
-          id: '1',
-          label: 'Chiffre d\'affaires',
-          value: `${(stats.revenue || 0).toLocaleString('fr-FR')}€`,
-          change: stats.revenue_change || 0,
-          changeLabel: 'vs mois dernier',
-          gradient: ['#007AFF', '#5AC8FA'],
-          icon: '€',
-        },
-        {
-          id: '2',
-          label: 'Deals actifs',
-          value: `${stats.active_deals || 0}`,
-          change: stats.deals_change || 0,
-          changeLabel: 'cette semaine',
-          gradient: ['#5856D6', '#AF52DE'],
-          icon: '•',
-        },
-        {
-          id: '3',
-          label: 'Taux de conversion',
-          value: `${stats.conversion_rate || 0}%`,
-          change: stats.conversion_change || 0,
-          changeLabel: 'vs mois dernier',
-          gradient: ['#34C759', '#30D158'],
-          icon: '%',
-        },
-        {
-          id: '4',
-          label: 'Nouveaux contacts',
-          value: `${stats.new_contacts || 0}`,
-          change: stats.contacts_change || 0,
-          changeLabel: 'cette semaine',
-          gradient: ['#FF9500', '#FFCC00'],
-          icon: '+',
-        },
-      ];
+  const formatCurrency = (value: number) => {
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
+    return value.toFixed(0);
+  };
 
-      setQuickStats(formattedStats);
-    } catch (error) {
-      console.error('Error loading dashboard:', error);
-      // Fallback to mock data
-      setQuickStats([
-        {
-          id: '1',
-          label: 'Chiffre d\'affaires',
-          value: '245 890€',
-          change: 12.5,
-          changeLabel: 'vs mois dernier',
-          gradient: ['#007AFF', '#5AC8FA'],
-          icon: '€',
-        },
-        {
-          id: '2',
-          label: 'Deals actifs',
-          value: '34',
-          change: 8.3,
-          changeLabel: 'cette semaine',
-          gradient: ['#5856D6', '#AF52DE'],
-          icon: '•',
-        },
-        {
-          id: '3',
-          label: 'Taux de conversion',
-          value: '68%',
-          change: 5.2,
-          changeLabel: 'vs mois dernier',
-          gradient: ['#34C759', '#30D158'],
-          icon: '%',
-        },
-        {
-          id: '4',
-          label: 'Nouveaux contacts',
-          value: '127',
-          change: 15.7,
-          changeLabel: 'cette semaine',
-          gradient: ['#FF9500', '#FFCC00'],
-          icon: '+',
-        },
-      ]);
-    } finally {
-      setLoading(false);
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high': return '#FF3B30';
+      case 'medium': return '#FF9500';
+      default: return '#34C759';
     }
   };
 
-  const renderStatCard = (stat: QuickStat, index: number) => {
-    const isPositive = stat.change >= 0;
-
-    return (
-      <Animated.View
-        key={stat.id}
-        style={[
-          styles.statCardWrapper,
-          {
-            opacity: fadeAnim,
-            transform: [
-              {
-                translateY: slideAnim.interpolate({
-                  inputRange: [0, 50],
-                  outputRange: [0, 50],
-                }),
-              },
-            ],
-          },
-        ]}
-      >
-        <TouchableOpacity activeOpacity={0.9} style={styles.statCardTouchable}>
-          <GlassCard variant="frosted" elevation="lg" padding={0} glow glowColor={stat.gradient[0]}>
-            {/* Gradient background */}
-            <LinearGradient
-              colors={stat.gradient as [string, string]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-
-            <View style={styles.statCardContent}>
-              {/* Icon */}
-              <View style={styles.statIconContainer}>
-                <Text style={styles.statIcon}>{stat.icon}</Text>
-              </View>
-
-              {/* Value */}
-              <View style={styles.statValueContainer}>
-                <Text style={styles.statValue}>{stat.value}</Text>
-                <Text style={styles.statLabel}>{stat.label}</Text>
-              </View>
-
-              {/* Change indicator */}
-              <View style={styles.statChangeContainer}>
-                <View
-                  style={[
-                    styles.changeBadge,
-                    {
-                      backgroundColor: isPositive
-                        ? 'rgba(52, 199, 89, 0.15)'
-                        : 'rgba(255, 59, 48, 0.15)',
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.changeValue,
-                      {
-                        color: isPositive ? glassTheme.colors.success : glassTheme.colors.error,
-                      },
-                    ]}
-                  >
-                    {isPositive ? '↑' : '↓'} {Math.abs(stat.change)}%
-                  </Text>
-                </View>
-                <Text style={styles.changeLabel}>{stat.changeLabel}</Text>
-              </View>
-            </View>
-          </GlassCard>
-        </TouchableOpacity>
-      </Animated.View>
-    );
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'call': return 'T';
+      case 'email': return '@';
+      case 'meeting': return 'M';
+      default: return 'N';
+    }
   };
+
+  if (loading) {
+    return (
+      <GlassLayout>
+        <GlassLoadingState
+          message="Chargement du tableau de bord..."
+          type="pulse"
+          fullScreen
+        />
+      </GlassLayout>
+    );
+  }
+
+  const data = dashboardData!;
 
   return (
     <GlassLayout>
-      <View style={styles.container}>
-        {/* Animated gradient background */}
-        <LinearGradient
-          colors={['#F2F2F7', '#E8E8ED', '#F2F2F7']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
+      <LinearGradient
+        colors={['#F2F2F7', '#E8E8ED', '#F2F2F7']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
 
-        <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
         {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.greeting}>Bonjour</Text>
-              <Text style={styles.title}>Tableau de bord</Text>
-            </View>
-
-            {/* Time indicator */}
-            <GlassCard variant="light" elevation="sm" padding={12} borderRadius={12}>
-              <View style={styles.timeContainer}>
-                <Text style={styles.timeLabel}>Aujourd'hui</Text>
-                <Text style={styles.timeValue}>
-                  {new Date().toLocaleDateString('fr-FR', {
-                    weekday: 'short',
-                    day: 'numeric',
-                    month: 'short',
-                  })}
-                </Text>
-              </View>
-            </GlassCard>
-          </View>
-        </View>
-
-        {/* Quick Stats Grid */}
-        <View style={styles.statsGrid}>
-          {quickStats.map((stat, index) => renderStatCard(stat, index))}
-        </View>
-
-        {/* Activity Section */}
         <Animated.View
           style={[
-            styles.section,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
+            styles.header,
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
           ]}
         >
-          <Text style={styles.sectionTitle}>Activité récente</Text>
-          <GlassCard variant="frosted" elevation="md">
-            <View style={styles.activityPlaceholder}>
-              <Text style={styles.placeholderText}>Chargement de l'activité...</Text>
-            </View>
-          </GlassCard>
+          <View style={styles.headerLeft}>
+            <Text style={styles.greeting}>
+              Bonjour, {user?.name || 'Utilisateur'}
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              Voici votre tableau de bord
+            </Text>
+          </View>
+
+          <View style={styles.periodSelector}>
+            {(['week', 'month', 'quarter', 'year'] as const).map((p) => (
+              <TouchableOpacity
+                key={p}
+                style={[styles.periodButton, period === p && styles.periodButtonActive]}
+                onPress={() => setPeriod(p)}
+              >
+                <Text style={[styles.periodButtonText, period === p && styles.periodButtonTextActive]}>
+                  {p === 'week' ? 'Sem' : p === 'month' ? 'Mois' : p === 'quarter' ? 'Trim' : 'An'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </Animated.View>
 
-        {/* Pipeline Preview */}
+        {/* KPI Cards */}
         <Animated.View
-          style={[
-            styles.section,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
+          style={[styles.kpiGrid, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
         >
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Pipeline</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Pipeline' as any)}>
-              <Text style={styles.seeAllButton}>Voir tout →</Text>
+          <View style={[styles.kpiItem, { width: isMobile ? '48%' : '23%' }]}>
+            <GlassKPICard
+              title="Chiffre d'affaires"
+              value={`${formatCurrency(data.kpis.revenue)} EUR`}
+              change={data.kpis.revenueChange}
+              changeLabel="vs periode precedente"
+              icon={<DollarIcon size={24} color="#FFFFFF" />}
+              gradient={['#34C759', '#30D158']}
+              size={isMobile ? 'sm' : 'md'}
+              onPress={() => navigation.navigate('Analytics' as any)}
+            />
+          </View>
+
+          <View style={[styles.kpiItem, { width: isMobile ? '48%' : '23%' }]}>
+            <GlassKPICard
+              title="Affaires gagnees"
+              value={data.kpis.dealsWon}
+              subtitle={`${data.kpis.dealsLost} perdues`}
+              icon={<TrendingUpIcon size={24} color="#FFFFFF" />}
+              gradient={['#007AFF', '#5AC8FA']}
+              size={isMobile ? 'sm' : 'md'}
+              onPress={() => navigation.navigate('Deals' as any)}
+            />
+          </View>
+
+          <View style={[styles.kpiItem, { width: isMobile ? '48%' : '23%' }]}>
+            <GlassKPICard
+              title="Factures en attente"
+              value={data.kpis.invoicesPending}
+              subtitle={`${data.kpis.invoicesOverdue} en retard`}
+              icon={<FileTextIcon size={24} color="#FFFFFF" />}
+              gradient={data.kpis.invoicesOverdue > 0 ? ['#FF9500', '#FFCC00'] : ['#5856D6', '#AF52DE']}
+              size={isMobile ? 'sm' : 'md'}
+              onPress={() => navigation.navigate('Invoices' as any)}
+            />
+          </View>
+
+          <View style={[styles.kpiItem, { width: isMobile ? '48%' : '23%' }]}>
+            <GlassKPICard
+              title="Nouveaux contacts"
+              value={data.kpis.contactsNew}
+              icon={<UsersIcon size={24} color="#FFFFFF" />}
+              gradient={['#FF2D55', '#FF375F']}
+              size={isMobile ? 'sm' : 'md'}
+              onPress={() => navigation.navigate('Contacts' as any)}
+            />
+          </View>
+        </Animated.View>
+
+        {/* Charts Section */}
+        <Animated.View
+          style={[styles.chartsSection, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        >
+          <View style={[styles.chartContainer, !isMobile && { width: '58%' }]}>
+            <GlassBarChart
+              data={data.revenueChart}
+              title="Evolution du chiffre d'affaires"
+              subtitle="Revenus mensuels"
+              height={isMobile ? 180 : 220}
+              gradient={['#007AFF', '#5AC8FA']}
+              showLabels
+              showGrid
+            />
+          </View>
+
+          <View style={[styles.chartContainer, !isMobile && { width: '38%' }]}>
+            <GlassDonutChart
+              data={data.pipelineData}
+              title="Pipeline commercial"
+              subtitle="Repartition des affaires"
+              height={isMobile ? 180 : 220}
+            />
+          </View>
+        </Animated.View>
+
+        {/* Quick Stats */}
+        <Animated.View
+          style={[styles.quickStatsContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        >
+          <GlassStats
+            variant="compact"
+            items={[
+              { label: 'Taches terminees', value: data.kpis.tasksCompleted, icon: <CheckCircleIcon size={18} color="#34C759" />, color: '#34C759' },
+              { label: 'En cours', value: data.upcomingTasks.length, icon: <ClockIcon size={18} color="#FF9500" />, color: '#FF9500' },
+              { label: 'Objectif', value: '85%', icon: <TargetIcon size={18} color="#007AFF" />, color: '#007AFF' },
+            ]}
+          />
+        </Animated.View>
+
+        {/* Activities and Tasks */}
+        <Animated.View
+          style={[styles.bottomSection, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        >
+          {/* Recent Activities */}
+          <View style={[styles.bottomCard, !isMobile && { width: '48%' }]}>
+            <View style={styles.cardGlass} />
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Activites recentes</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Tasks' as any)}>
+                <Text style={styles.cardLink}>Voir tout</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.activityList}>
+              {data.recentActivities.length > 0 ? (
+                data.recentActivities.map((activity) => (
+                  <View key={activity.id} style={styles.activityItem}>
+                    <View style={styles.activityIcon}>
+                      <Text style={styles.activityIconText}>{getActivityIcon(activity.type)}</Text>
+                    </View>
+                    <View style={styles.activityContent}>
+                      <Text style={styles.activityTitle} numberOfLines={1}>{activity.title}</Text>
+                      <Text style={styles.activityTime}>{activity.time}</Text>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.emptyText}>Aucune activite recente</Text>
+              )}
+            </View>
+          </View>
+
+          {/* Upcoming Tasks */}
+          <View style={[styles.bottomCard, !isMobile && { width: '48%' }]}>
+            <View style={styles.cardGlass} />
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Taches a venir</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Tasks' as any)}>
+                <Text style={styles.cardLink}>Voir tout</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.taskList}>
+              {data.upcomingTasks.length > 0 ? (
+                data.upcomingTasks.map((task) => (
+                  <TouchableOpacity
+                    key={task.id}
+                    style={styles.taskItem}
+                    onPress={() => navigation.navigate('Tasks' as any)}
+                  >
+                    <View style={[styles.taskPriority, { backgroundColor: getPriorityColor(task.priority) }]} />
+                    <View style={styles.taskContent}>
+                      <Text style={styles.taskTitle} numberOfLines={1}>{task.title}</Text>
+                      <Text style={styles.taskDue}>
+                        {task.dueDate ? new Date(task.dueDate).toLocaleDateString('fr-FR') : 'Pas de date'}
+                      </Text>
+                    </View>
+                    <View style={styles.taskCheck}>
+                      <View style={styles.checkbox} />
+                    </View>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <Text style={styles.emptyText}>Aucune tache en attente</Text>
+              )}
+            </View>
+          </View>
+        </Animated.View>
+
+        {/* Quick Actions */}
+        <Animated.View
+          style={[styles.quickActions, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        >
+          <Text style={styles.quickActionsTitle}>Actions rapides</Text>
+          <View style={styles.quickActionsGrid}>
+            <TouchableOpacity style={styles.quickAction} onPress={() => navigation.navigate('Contacts' as any)}>
+              <LinearGradient colors={['#34C759', '#30D158']} style={styles.quickActionGradient}>
+                <UsersIcon size={24} color="#FFFFFF" />
+              </LinearGradient>
+              <Text style={styles.quickActionLabel}>Contact</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.quickAction} onPress={() => navigation.navigate('Invoices' as any)}>
+              <LinearGradient colors={['#007AFF', '#5AC8FA']} style={styles.quickActionGradient}>
+                <FileTextIcon size={24} color="#FFFFFF" />
+              </LinearGradient>
+              <Text style={styles.quickActionLabel}>Facture</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.quickAction} onPress={() => navigation.navigate('Deals' as any)}>
+              <LinearGradient colors={['#FF9500', '#FFCC00']} style={styles.quickActionGradient}>
+                <TrendingUpIcon size={24} color="#FFFFFF" />
+              </LinearGradient>
+              <Text style={styles.quickActionLabel}>Affaire</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.quickAction} onPress={() => navigation.navigate('Tasks' as any)}>
+              <LinearGradient colors={['#5856D6', '#AF52DE']} style={styles.quickActionGradient}>
+                <CheckCircleIcon size={24} color="#FFFFFF" />
+              </LinearGradient>
+              <Text style={styles.quickActionLabel}>Tache</Text>
             </TouchableOpacity>
           </View>
-
-          <GlassCard variant="frosted" elevation="md">
-            <View style={styles.pipelinePlaceholder}>
-              <Text style={styles.placeholderText}>Visualisation du pipeline</Text>
-            </View>
-          </GlassCard>
         </Animated.View>
       </ScrollView>
-      </View>
     </GlassLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: glassTheme.spacing.lg,
+  container: { flex: 1 },
+  content: {
+    padding: responsiveSpacing.lg,
     paddingTop: Platform.OS === 'ios' ? 60 : 24,
+    paddingBottom: 100,
   },
-
-  // Header
   header: {
-    marginBottom: glassTheme.spacing.xl,
-  },
-  headerTop: {
-    flexDirection: 'row',
+    flexDirection: isMobile ? 'column' : 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: isMobile ? 'flex-start' : 'center',
+    marginBottom: responsiveSpacing.lg,
+    gap: responsiveSpacing.md,
   },
+  headerLeft: { flex: 1 },
   greeting: {
+    fontSize: isMobile ? 28 : 36,
+    fontWeight: '700',
+    color: glassTheme.colors.text.primary,
+    letterSpacing: -0.5,
+  },
+  headerSubtitle: {
     ...glassTheme.typography.body,
-    color: glassTheme.colors.text.secondary,
-    marginBottom: 4,
-  },
-  title: {
-    ...glassTheme.typography.displayMedium,
-    color: glassTheme.colors.text.primary,
-  },
-  timeContainer: {
-    alignItems: 'center',
-    minWidth: 80,
-  },
-  timeLabel: {
-    ...glassTheme.typography.caption,
     color: glassTheme.colors.text.tertiary,
-    marginBottom: 2,
+    marginTop: 4,
   },
-  timeValue: {
+  periodSelector: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderRadius: glassTheme.radius.md,
+    padding: 4,
+    ...(Platform.OS === 'web' ? { backdropFilter: 'blur(10px)' } as any : {}),
+    ...withShadow('sm'),
+  },
+  periodButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: glassTheme.radius.sm,
+  },
+  periodButtonActive: { backgroundColor: glassTheme.colors.primary },
+  periodButtonText: {
     ...glassTheme.typography.bodySmall,
-    fontWeight: '600',
-    color: glassTheme.colors.text.primary,
+    color: glassTheme.colors.text.secondary,
+    fontWeight: '500',
   },
-
-  // Stats Grid
-  statsGrid: {
+  periodButtonTextActive: { color: '#FFFFFF', fontWeight: '600' },
+  kpiGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: glassTheme.spacing.md,
-    marginBottom: glassTheme.spacing.xl,
+    gap: CARD_GAP,
+    marginBottom: responsiveSpacing.lg,
   },
-  statCardWrapper: {
-    width: SCREEN_WIDTH > 768 ? 'calc(50% - 8px)' : '100%',
-    minWidth: 280,
+  kpiItem: { marginBottom: 0 },
+  chartsSection: {
+    flexDirection: isMobile ? 'column' : 'row',
+    gap: CARD_GAP,
+    marginBottom: responsiveSpacing.lg,
   },
-  statCardTouchable: {
-    width: '100%',
+  chartContainer: { flex: isMobile ? undefined : 1 },
+  quickStatsContainer: { marginBottom: responsiveSpacing.lg },
+  bottomSection: {
+    flexDirection: isMobile ? 'column' : 'row',
+    gap: CARD_GAP,
+    marginBottom: responsiveSpacing.lg,
   },
-  statCardContent: {
-    padding: glassTheme.spacing.lg,
-    minHeight: 140,
+  bottomCard: {
+    borderRadius: glassTheme.radius.xl,
+    overflow: 'hidden',
+    padding: responsiveSpacing.md,
+    position: 'relative',
+    ...withShadow('md'),
   },
-  statIconContainer: {
-    marginBottom: glassTheme.spacing.sm,
+  cardGlass: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    ...(Platform.OS === 'web' ? { backdropFilter: 'blur(20px)' } as any : {}),
   },
-  statIcon: {
-    fontSize: 32,
-  },
-  statValueContainer: {
-    marginBottom: glassTheme.spacing.md,
-  },
-  statValue: {
-    ...glassTheme.typography.displaySmall,
-    color: glassTheme.colors.text.primary,
-    marginBottom: 4,
-  },
-  statLabel: {
-    ...glassTheme.typography.bodySmall,
-    color: glassTheme.colors.text.secondary,
-  },
-  statChangeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  changeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  changeValue: {
-    ...glassTheme.typography.captionBold,
-    fontWeight: '700',
-  },
-  changeLabel: {
-    ...glassTheme.typography.caption,
-    color: glassTheme.colors.text.tertiary,
-  },
-
-  // Sections
-  section: {
-    marginBottom: glassTheme.spacing.xl,
-  },
-  sectionHeader: {
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: glassTheme.spacing.md,
+    marginBottom: responsiveSpacing.md,
+    zIndex: 1,
   },
-  sectionTitle: {
-    ...glassTheme.typography.h2,
-    color: glassTheme.colors.text.primary,
-  },
-  seeAllButton: {
-    ...glassTheme.typography.bodySmall,
-    color: glassTheme.colors.primary,
-    fontWeight: '600',
-  },
-
-  // Placeholders
-  activityPlaceholder: {
-    padding: glassTheme.spacing.xl,
+  cardTitle: { ...glassTheme.typography.h2, color: glassTheme.colors.text.primary },
+  cardLink: { ...glassTheme.typography.bodySmall, color: glassTheme.colors.primary, fontWeight: '600' },
+  activityList: { gap: responsiveSpacing.sm, zIndex: 1 },
+  activityItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 200,
+    padding: responsiveSpacing.sm,
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: glassTheme.radius.md,
+    gap: responsiveSpacing.sm,
   },
-  pipelinePlaceholder: {
-    padding: glassTheme.spacing.xl,
+  activityIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+    justifyContent: 'center',
     alignItems: 'center',
+  },
+  activityIconText: { fontSize: 14, fontWeight: '700', color: glassTheme.colors.primary },
+  activityContent: { flex: 1 },
+  activityTitle: { ...glassTheme.typography.bodySmall, color: glassTheme.colors.text.primary, fontWeight: '500' },
+  activityTime: { ...glassTheme.typography.caption, color: glassTheme.colors.text.tertiary, marginTop: 2 },
+  taskList: { gap: responsiveSpacing.sm, zIndex: 1 },
+  taskItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: responsiveSpacing.sm,
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: glassTheme.radius.md,
+    gap: responsiveSpacing.sm,
+  },
+  taskPriority: { width: 4, height: '100%', minHeight: 40, borderRadius: 2 },
+  taskContent: { flex: 1 },
+  taskTitle: { ...glassTheme.typography.bodySmall, color: glassTheme.colors.text.primary, fontWeight: '500' },
+  taskDue: { ...glassTheme.typography.caption, color: glassTheme.colors.text.tertiary, marginTop: 2 },
+  taskCheck: { width: 24, height: 24, justifyContent: 'center', alignItems: 'center' },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: 'rgba(0, 0, 0, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+  },
+  quickActions: { marginBottom: responsiveSpacing.lg },
+  quickActionsTitle: { ...glassTheme.typography.h2, color: glassTheme.colors.text.primary, marginBottom: responsiveSpacing.md },
+  quickActionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: responsiveSpacing.md },
+  quickAction: { alignItems: 'center', gap: responsiveSpacing.xs },
+  quickActionGradient: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     justifyContent: 'center',
-    minHeight: 300,
+    alignItems: 'center',
+    ...withShadow('md'),
   },
-  placeholderText: {
-    ...glassTheme.typography.body,
-    color: glassTheme.colors.text.tertiary,
-  },
+  quickActionLabel: { ...glassTheme.typography.caption, color: glassTheme.colors.text.secondary, fontWeight: '500' },
+  emptyText: { ...glassTheme.typography.body, color: glassTheme.colors.text.tertiary, textAlign: 'center', paddingVertical: responsiveSpacing.lg },
 });

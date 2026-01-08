@@ -25,22 +25,20 @@ router.get('/income-statement', authenticateToken, async (req: AuthRequest, res:
         COALESCE(SUM(i.total_amount), 0) as amount
       FROM invoices i
       JOIN payments p ON i.id = p.invoice_id
-      WHERE i.organization_id = $1
-        AND p.payment_date BETWEEN $2 AND $3
-        AND i.deleted_at IS NULL
-    `, [organizationId, startDate, endDate]);
+      WHERE p.payment_date BETWEEN $1 AND $2
+    `, [startDate, endDate]);
 
     // Charges (dépenses payées)
     const expensesResult = await db.query(`
       SELECT
-        COALESCE(category, 'other') as category,
+        COALESCE(expense_type, 'other') as category,
         COALESCE(SUM(amount), 0) as amount
       FROM expenses
       WHERE organization_id = $1
-        AND paid_date BETWEEN $2 AND $3
-        AND status = 'paid'
+        AND payment_date BETWEEN $2 AND $3
+        AND payment_status = 'paid'
         AND deleted_at IS NULL
-      GROUP BY category
+      GROUP BY expense_type
     `, [organizationId, startDate, endDate]);
 
     // Construire le compte de résultat
@@ -122,23 +120,21 @@ router.get('/income-statement/monthly/:year', authenticateToken, async (req: Aut
         COALESCE(SUM(i.total_amount), 0) as amount
       FROM invoices i
       JOIN payments p ON i.id = p.invoice_id
-      WHERE i.organization_id = $1
-        AND EXTRACT(YEAR FROM p.payment_date) = $2
-        AND i.deleted_at IS NULL
+      WHERE EXTRACT(YEAR FROM p.payment_date) = $1
       GROUP BY EXTRACT(MONTH FROM p.payment_date)
-    `, [organizationId, year]);
+    `, [year]);
 
     // Dépenses mensuelles
     const expensesResult = await db.query(`
       SELECT
-        EXTRACT(MONTH FROM paid_date)::INTEGER as month,
+        EXTRACT(MONTH FROM payment_date)::INTEGER as month,
         COALESCE(SUM(amount), 0) as amount
       FROM expenses
       WHERE organization_id = $1
-        AND EXTRACT(YEAR FROM paid_date) = $2
-        AND status = 'paid'
+        AND EXTRACT(YEAR FROM payment_date) = $2
+        AND payment_status = 'paid'
         AND deleted_at IS NULL
-      GROUP BY EXTRACT(MONTH FROM paid_date)
+      GROUP BY EXTRACT(MONTH FROM payment_date)
     `, [organizationId, year]);
 
     const monthlyData = [];
@@ -301,6 +297,125 @@ router.post('/convert', authenticateToken, async (req: AuthRequest, res: Respons
       rate_date: targetDate
     });
   } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// EXPORT COMPTABLE
+// ==========================================
+
+// Export des données comptables
+router.get('/export', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = (req.user as any)?.organizationId;
+    const { format = 'json', start_date, end_date, type = 'all' } = req.query;
+
+    const startDate = start_date || `${new Date().getFullYear()}-01-01`;
+    const endDate = end_date || new Date().toISOString().split('T')[0];
+
+    let exportData: any = {
+      period: { start_date: startDate, end_date: endDate },
+      generated_at: new Date().toISOString(),
+      organization_id: organizationId
+    };
+
+    // Factures
+    if (type === 'all' || type === 'invoices') {
+      const invoicesResult = await db.query(`
+        SELECT
+          i.invoice_number,
+          i.invoice_date,
+          i.due_date,
+          i.status,
+          i.subtotal,
+          i.tax_rate,
+          i.tax_amount,
+          i.total_amount,
+          c.name as customer_name
+        FROM invoices i
+        LEFT JOIN customers c ON i.customer_id = c.id
+        WHERE i.invoice_date BETWEEN $1 AND $2
+        ORDER BY i.invoice_date
+      `, [startDate, endDate]);
+      exportData.invoices = invoicesResult.rows;
+    }
+
+    // Paiements reçus
+    if (type === 'all' || type === 'payments') {
+      const paymentsResult = await db.query(`
+        SELECT
+          p.id,
+          p.amount,
+          p.payment_date,
+          p.payment_method,
+          i.invoice_number,
+          c.name as customer_name
+        FROM payments p
+        JOIN invoices i ON p.invoice_id = i.id
+        LEFT JOIN customers c ON i.customer_id = c.id
+        WHERE p.payment_date BETWEEN $1 AND $2
+        ORDER BY p.payment_date
+      `, [startDate, endDate]);
+      exportData.payments = paymentsResult.rows;
+    }
+
+    // Dépenses
+    if (type === 'all' || type === 'expenses') {
+      const expensesResult = await db.query(`
+        SELECT
+          e.reference,
+          e.expense_date,
+          e.description,
+          e.expense_type,
+          e.amount,
+          e.tax_amount,
+          e.payment_status,
+          e.payment_date,
+          s.name as supplier_name
+        FROM expenses e
+        LEFT JOIN suppliers s ON e.supplier_id = s.id
+        WHERE e.organization_id = $1
+          AND e.deleted_at IS NULL
+          AND e.expense_date BETWEEN $2 AND $3
+        ORDER BY e.expense_date
+      `, [organizationId, startDate, endDate]);
+      exportData.expenses = expensesResult.rows;
+    }
+
+    // Calculer les totaux
+    exportData.summary = {
+      total_invoiced: exportData.invoices?.reduce((sum: number, i: any) => sum + parseFloat(i.total_amount || 0), 0) || 0,
+      total_received: exportData.payments?.reduce((sum: number, p: any) => sum + parseFloat(p.amount || 0), 0) || 0,
+      total_expenses: exportData.expenses?.reduce((sum: number, e: any) => sum + parseFloat(e.amount || 0), 0) || 0
+    };
+    exportData.summary.net_result = exportData.summary.total_received - exportData.summary.total_expenses;
+
+    if (format === 'csv') {
+      // Générer CSV simple
+      let csv = 'Type,Date,Reference,Description,Montant HT,TVA,Montant TTC\n';
+
+      if (exportData.invoices) {
+        for (const inv of exportData.invoices) {
+          csv += `Facture,${inv.invoice_date},${inv.invoice_number},${inv.customer_name || ''},${inv.subtotal},${inv.tax_amount},${inv.total_amount}\n`;
+        }
+      }
+
+      if (exportData.expenses) {
+        for (const exp of exportData.expenses) {
+          csv += `Dépense,${exp.expense_date},${exp.reference || ''},${exp.description || ''},${exp.amount},${exp.tax_amount || 0},${parseFloat(exp.amount) + parseFloat(exp.tax_amount || 0)}\n`;
+        }
+      }
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=export-comptable-${startDate}-${endDate}.csv`);
+      res.send(csv);
+      return;
+    }
+
+    res.json(exportData);
+  } catch (err: any) {
+    console.error('Erreur export comptable:', err);
     res.status(500).json({ error: err.message });
   }
 });

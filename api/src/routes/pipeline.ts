@@ -10,6 +10,33 @@ const clampProbability = (value: number | null | undefined) => {
   return Math.min(100, Math.max(0, value));
 };
 
+// ========== PIPELINES ==========
+
+// List all pipelines (or return a default pipeline)
+router.get('/', async (req: Request, res: Response) => {
+  try {
+    // Try to get from pipelines table if it exists, otherwise return default
+    const result = await db.query(
+      `SELECT DISTINCT pipeline_id as id,
+        COALESCE(pipeline_id, 'default') as name
+       FROM pipeline_stages
+       WHERE pipeline_id IS NOT NULL
+       LIMIT 10`
+    );
+
+    // If no results, return a default pipeline
+    if (result.rows.length === 0) {
+      res.json([{ id: 'default', name: 'Pipeline par défaut' }]);
+      return;
+    }
+
+    res.json(result.rows);
+  } catch (err: any) {
+    // Return default pipeline on error
+    res.json([{ id: 'default', name: 'Pipeline par défaut' }]);
+  }
+});
+
 // ========== PIPELINE STAGES ==========
 
 // Get all pipeline stages

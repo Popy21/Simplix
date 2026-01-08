@@ -299,7 +299,7 @@ router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) 
           COUNT(*) as total,
           COUNT(*) FILTER (WHERE status = 'won') as won,
           COUNT(*) FILTER (WHERE status = 'lost') as lost,
-          COALESCE(SUM(amount) FILTER (WHERE status = 'won'), 0) as won_value
+          COALESCE(SUM(value) FILTER (WHERE status = 'won'), 0) as won_value
         FROM deals WHERE organization_id = $1 AND deleted_at IS NULL AND created_at >= $2
       `, [organizationId, startDate]),
 
@@ -310,8 +310,8 @@ router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) 
           COUNT(*) FILTER (WHERE status = 'pending' OR status = 'sent') as pending,
           COALESCE(SUM(total_amount) FILTER (WHERE status = 'paid'), 0) as revenue,
           COALESCE(SUM(total_amount) FILTER (WHERE status IN ('pending', 'sent')), 0) as outstanding
-        FROM invoices WHERE organization_id = $1 AND deleted_at IS NULL AND invoice_date >= $2
-      `, [organizationId, startDate]),
+        FROM invoices WHERE invoice_date >= $1
+      `, [startDate]),
 
       db.query(`
         SELECT
@@ -319,8 +319,8 @@ router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) 
           COUNT(*) FILTER (WHERE status = 'accepted') as accepted,
           COUNT(*) FILTER (WHERE status = 'pending' OR status = 'sent') as pending,
           COALESCE(SUM(total_amount) FILTER (WHERE status = 'accepted'), 0) as accepted_value
-        FROM quotes WHERE organization_id = $1 AND deleted_at IS NULL AND created_at >= $2
-      `, [organizationId, startDate]),
+        FROM quotes WHERE created_at >= $1
+      `, [startDate]),
 
       db.query(`
         SELECT

@@ -287,7 +287,7 @@ router.get('/by-score', authenticateToken, async (req: AuthRequest, res: Respons
     const { min_score = 0, max_score = 100, sort = 'desc' } = req.query;
 
     const result = await db.query(
-      `SELECT 
+      `SELECT
         c.*,
         co.name as company_name,
         u.first_name || ' ' || u.last_name as owner_name,
@@ -296,9 +296,9 @@ router.get('/by-score', authenticateToken, async (req: AuthRequest, res: Respons
       FROM contacts c
       LEFT JOIN companies co ON c.company_id = co.id
       LEFT JOIN users u ON c.owner_id = u.id
-      WHERE c.organization_id = $1 
+      WHERE c.organization_id = $1
         AND c.deleted_at IS NULL
-        AND c.score >= $2 
+        AND c.score >= $2
         AND c.score <= $3
       ORDER BY c.score ${sort === 'asc' ? 'ASC' : 'DESC'}, c.created_at DESC`,
       [orgId, parseInt(min_score as string), parseInt(max_score as string)]
@@ -307,6 +307,37 @@ router.get('/by-score', authenticateToken, async (req: AuthRequest, res: Respons
     res.json(result.rows);
   } catch (err: any) {
     console.error('Error fetching leads by score:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/leads/stats
+ * Statistiques générales des leads - MUST be before /:id
+ */
+router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = '00000000-0000-0000-0000-000000000001';
+
+    const result = await db.query(
+      `SELECT
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE type = 'lead') as new_leads,
+        COUNT(*) FILTER (WHERE type = 'prospect') as prospects,
+        COUNT(*) FILTER (WHERE type = 'customer') as customers,
+        COUNT(*) FILTER (WHERE score >= 70) as hot_leads,
+        COUNT(*) FILTER (WHERE score < 30) as cold_leads,
+        AVG(score)::numeric(10,2) as avg_score,
+        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days') as new_this_week,
+        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days') as new_this_month
+      FROM contacts
+      WHERE organization_id = $1 AND deleted_at IS NULL`,
+      [orgId]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    console.error('Error fetching lead stats:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -424,7 +455,7 @@ router.get('/stats/distribution', authenticateToken, async (req: AuthRequest, re
     const orgId = '00000000-0000-0000-0000-000000000001';
 
     const result = await db.query(
-      `SELECT 
+      `SELECT
         COUNT(*) FILTER (WHERE score >= 0 AND score < 20) as very_cold,
         COUNT(*) FILTER (WHERE score >= 20 AND score < 40) as cold,
         COUNT(*) FILTER (WHERE score >= 40 AND score < 60) as warm,

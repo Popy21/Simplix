@@ -11,7 +11,7 @@ const router = express.Router();
 // Prévision de trésorerie automatique basée sur les factures
 router.get('/forecast', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const organizationId = (req.user as any)?.organizationId;
+    const organizationId = req.user?.organization_id || '00000000-0000-0000-0000-000000000001';
     const { months = 3 } = req.query;
     const numMonths = Math.min(12, Math.max(1, parseInt(months as string) || 3));
 
@@ -19,17 +19,15 @@ router.get('/forecast', authenticateToken, async (req: AuthRequest, res: Respons
     const inflows = await db.query(`
       SELECT
         date_trunc('month', due_date) as month,
-        COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as expected_amount,
+        COALESCE(SUM(total_amount), 0) as expected_amount,
         COUNT(*) as invoice_count
       FROM invoices
-      WHERE organization_id = $1
-        AND status IN ('sent', 'partial')
-        AND deleted_at IS NULL
+      WHERE status IN ('sent', 'pending', 'partial')
         AND due_date >= CURRENT_DATE
-        AND due_date < CURRENT_DATE + INTERVAL '${numMonths} months'
+        AND due_date < CURRENT_DATE + INTERVAL '3 months'
       GROUP BY date_trunc('month', due_date)
       ORDER BY month
-    `, [organizationId]);
+    `);
 
     // Décaissements prévus (factures fournisseurs, charges récurrentes)
     const outflows = await db.query(`
@@ -39,25 +37,30 @@ router.get('/forecast', authenticateToken, async (req: AuthRequest, res: Respons
         COUNT(*) as expense_count
       FROM expenses
       WHERE organization_id = $1
-        AND status = 'pending'
+        AND payment_status IN ('unpaid', 'partial')
         AND deleted_at IS NULL
         AND due_date >= CURRENT_DATE
-        AND due_date < CURRENT_DATE + INTERVAL '${numMonths} months'
+        AND due_date < CURRENT_DATE + INTERVAL '3 months'
       GROUP BY date_trunc('month', due_date)
       ORDER BY month
     `, [organizationId]);
 
     // Solde actuel estimé
-    const balance = await db.query(`
-      SELECT
-        COALESCE(SUM(amount) FILTER (WHERE p.payment_date IS NOT NULL), 0) as total_received,
-        COALESCE(SUM(e.amount) FILTER (WHERE e.status = 'paid'), 0) as total_paid
-      FROM invoices i
-      LEFT JOIN payments p ON p.invoice_id = i.id
-      CROSS JOIN expenses e
-      WHERE i.organization_id = $1 AND i.deleted_at IS NULL
-        AND e.organization_id = $1 AND e.deleted_at IS NULL
-    `, [organizationId]);
+    const receivedResult = await db.query(`
+      SELECT COALESCE(SUM(amount), 0) as total_received
+      FROM payments
+    `);
+    const paidResult = await db.query(`
+      SELECT COALESCE(SUM(amount), 0) as total_paid
+      FROM expenses
+      WHERE payment_status = 'paid' AND deleted_at IS NULL
+    `);
+    const balance = {
+      rows: [{
+        total_received: receivedResult.rows[0]?.total_received || 0,
+        total_paid: paidResult.rows[0]?.total_paid || 0
+      }]
+    };
 
     res.json({
       period: `${numMonths} months`,
@@ -77,7 +80,7 @@ router.get('/forecast', authenticateToken, async (req: AuthRequest, res: Respons
 // Liste des prévisions
 router.get('/forecasts', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const organizationId = (req.user as any)?.organizationId;
+    const organizationId = req.user?.organization_id || '00000000-0000-0000-0000-000000000001';
 
     const result = await db.query(`
       SELECT
@@ -311,13 +314,13 @@ router.get('/monthly/:year', authenticateToken, async (req: AuthRequest, res: Re
     // Décaissements réels (dépenses payées)
     const outflows = await db.query(`
       SELECT
-        EXTRACT(MONTH FROM paid_date)::INTEGER as month,
+        EXTRACT(MONTH FROM payment_date)::INTEGER as month,
         SUM(amount) as amount
       FROM expenses
       WHERE organization_id = $1
-        AND EXTRACT(YEAR FROM paid_date) = $2
-        AND status = 'paid'
-      GROUP BY EXTRACT(MONTH FROM paid_date)
+        AND EXTRACT(YEAR FROM payment_date) = $2
+        AND payment_status = 'paid'
+      GROUP BY EXTRACT(MONTH FROM payment_date)
     `, [organizationId, year]);
 
     // Construire le tableau mensuel

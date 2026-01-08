@@ -1,23 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Dimensions,
   Platform,
-  Modal,
-  TextInput,
   Alert,
+  Animated,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { TrendingUpIcon, UsersIcon, DollarIcon, CalendarIcon } from '../components/Icons';
+import {
+  TrendingUpIcon,
+  DollarIcon,
+  CalendarIcon,
+  PlusIcon,
+  ChevronRightIcon,
+  EditIcon,
+  TrashIcon,
+} from '../components/Icons';
 import { dealsService, pipelineService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { withGlassLayout } from '../components/withGlassLayout';
+import { glassTheme, withShadow } from '../theme/glassTheme';
+import {
+  GlassModal,
+  GlassButton,
+  GlassInput,
+  GlassLoadingState,
+  GlassEmptyState,
+  GlassBadge,
+  GlassProgressBar,
+} from '../components/ui';
 
 type DealsScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -44,6 +61,7 @@ interface DealStage {
 }
 
 const { width, height } = Dimensions.get('window');
+const STAGE_WIDTH = Math.min(300, width - 48);
 
 function DealsScreen({ navigation }: DealsScreenProps) {
   const { user } = useAuth();
@@ -62,15 +80,35 @@ function DealsScreen({ navigation }: DealsScreenProps) {
     expectedCloseDate: '',
   });
 
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
   useEffect(() => {
     fetchDealsData();
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [loading]);
 
   const fetchDealsData = async () => {
     try {
       setLoading(true);
 
-      // Fetch pipeline stages and deals in parallel
       const [stagesResponse, dealsResponse] = await Promise.all([
         pipelineService.getStages(),
         dealsService.getAll({ status: 'open' })
@@ -79,7 +117,6 @@ function DealsScreen({ navigation }: DealsScreenProps) {
       const pipelineStages = stagesResponse.data;
       const allDeals = dealsResponse.data;
 
-      // Group deals by stage
       const stagesWithDeals: DealStage[] = pipelineStages.map((stage: any) => ({
         id: stage.id,
         name: stage.name,
@@ -102,14 +139,11 @@ function DealsScreen({ navigation }: DealsScreenProps) {
 
       setStages(stagesWithDeals);
 
-      // Set first stage as default for new deals
       if (stagesWithDeals.length > 0) {
         setNewDealForm(prev => ({ ...prev, stageId: stagesWithDeals[0].id }));
       }
     } catch (error) {
       console.error('Error fetching deals:', error);
-      Alert.alert('Erreur', 'Impossible de charger les opportunités');
-      // Fallback to mock data if API fails
       initializeMockData();
     } finally {
       setLoading(false);
@@ -123,30 +157,8 @@ function DealsScreen({ navigation }: DealsScreenProps) {
         name: 'Prospection',
         color: '#FF9500',
         deals: [
-          {
-            id: 'd1',
-            title: 'Audit Système IT',
-            company: 'TechCorp',
-            contact: 'Jean Dupont',
-            value: 45000,
-            probability: 30,
-            stageId: '1',
-            stageName: 'Prospection',
-            expectedCloseDate: '2025-12-15',
-            notes: 'Premier contact réussi',
-          },
-          {
-            id: 'd2',
-            title: 'Formation CRM',
-            company: 'Global Solutions',
-            contact: 'Marie Martin',
-            value: 32000,
-            probability: 40,
-            stageId: '1',
-            stageName: 'Prospection',
-            expectedCloseDate: '2025-12-20',
-            notes: 'En attente du devis',
-          },
+          { id: 'd1', title: 'Audit Systeme IT', company: 'TechCorp', contact: 'Jean Dupont', value: 45000, probability: 30, stageId: '1', stageName: 'Prospection', expectedCloseDate: '2025-12-15', notes: 'Premier contact reussi' },
+          { id: 'd2', title: 'Formation CRM', company: 'Global Solutions', contact: 'Marie Martin', value: 32000, probability: 40, stageId: '1', stageName: 'Prospection', expectedCloseDate: '2025-12-20', notes: 'En attente du devis' },
         ],
       },
       {
@@ -154,18 +166,7 @@ function DealsScreen({ navigation }: DealsScreenProps) {
         name: 'Qualification',
         color: '#007AFF',
         deals: [
-          {
-            id: 'd3',
-            title: 'Solution E-commerce',
-            company: 'StartupXYZ',
-            contact: 'Pierre Leroy',
-            value: 58000,
-            probability: 60,
-            stageId: '2',
-            stageName: 'Qualification',
-            expectedCloseDate: '2025-12-10',
-            notes: 'Budget approuvé par manager',
-          },
+          { id: 'd3', title: 'Solution E-commerce', company: 'StartupXYZ', contact: 'Pierre Leroy', value: 58000, probability: 60, stageId: '2', stageName: 'Qualification', expectedCloseDate: '2025-12-10', notes: 'Budget approuve par manager' },
         ],
       },
       {
@@ -173,52 +174,19 @@ function DealsScreen({ navigation }: DealsScreenProps) {
         name: 'Proposition',
         color: '#5856D6',
         deals: [
-          {
-            id: 'd4',
-            title: 'Maintenance Annuelle',
-            company: 'Enterprise Ltd',
-            contact: 'Sophie Durand',
-            value: 75000,
-            probability: 75,
-            stageId: '3',
-            stageName: 'Proposition',
-            expectedCloseDate: '2025-11-30',
-            notes: 'Devis envoyé',
-          },
+          { id: 'd4', title: 'Maintenance Annuelle', company: 'Enterprise Ltd', contact: 'Sophie Durand', value: 75000, probability: 75, stageId: '3', stageName: 'Proposition', expectedCloseDate: '2025-11-30', notes: 'Devis envoye' },
         ],
       },
       {
         id: '4',
-        name: 'Négociation',
+        name: 'Negociation',
         color: '#34C759',
         deals: [
-          {
-            id: 'd5',
-            title: 'Licence CRM',
-            company: 'Acme Corp',
-            contact: 'Laurent Michel',
-            value: 120000,
-            probability: 85,
-            stageId: '4',
-            stageName: 'Négociation',
-            expectedCloseDate: '2025-11-25',
-            notes: 'Négociation en cours sur le prix',
-          },
-          {
-            id: 'd6',
-            title: 'Intégration Système',
-            company: 'Acme Corp',
-            contact: 'Laurent Michel',
-            value: 45000,
-            probability: 80,
-            stageId: '4',
-            stageName: 'Négociation',
-            expectedCloseDate: '2025-12-05',
-          },
+          { id: 'd5', title: 'Licence CRM', company: 'Acme Corp', contact: 'Laurent Michel', value: 120000, probability: 85, stageId: '4', stageName: 'Negociation', expectedCloseDate: '2025-11-25', notes: 'Negociation en cours sur le prix' },
+          { id: 'd6', title: 'Integration Systeme', company: 'Acme Corp', contact: 'Laurent Michel', value: 45000, probability: 80, stageId: '4', stageName: 'Negociation', expectedCloseDate: '2025-12-05' },
         ],
       },
     ];
-
     setStages(mockStages);
   };
 
@@ -230,60 +198,78 @@ function DealsScreen({ navigation }: DealsScreenProps) {
     return stageDeals.reduce((sum, deal) => sum + (deal.value * deal.probability / 100), 0);
   };
 
-  const handleCreateDeal = () => {
+  const getTotalDeals = () => stages.reduce((sum, stage) => sum + stage.deals.length, 0);
+  const getTotalValue = () => stages.reduce((sum, stage) => sum + getTotalValueByStage(stage.deals), 0);
+  const getTotalWeightedValue = () => stages.reduce((sum, stage) => sum + getTotalProbabilityValue(stage.deals), 0);
+
+  const handleCreateDeal = async () => {
     if (!newDealForm.title.trim() || !newDealForm.company.trim()) {
       Alert.alert('Erreur', 'Veuillez remplir le titre et l\'entreprise');
       return;
     }
 
-    const newDeal: Deal = {
-      id: `d${Date.now()}`,
-      title: newDealForm.title,
-      company: newDealForm.company,
-      contact: newDealForm.contact,
-      value: parseInt(newDealForm.value) || 0,
-      probability: parseInt(newDealForm.probability) || 25,
-      stageId: newDealForm.stageId,
-      stageName: stages.find(s => s.id === newDealForm.stageId)?.name || 'Prospection',
-      expectedCloseDate: newDealForm.expectedCloseDate,
-    };
+    try {
+      await dealsService.create({
+        title: newDealForm.title,
+        company_name: newDealForm.company,
+        contact_name: newDealForm.contact,
+        value: parseFloat(newDealForm.value) || 0,
+        probability: parseInt(newDealForm.probability) || 25,
+        stage_id: newDealForm.stageId,
+        expected_close_date: newDealForm.expectedCloseDate,
+      });
 
-    // Add deal to the correct stage
-    const updatedStages = stages.map(stage => {
-      if (stage.id === newDealForm.stageId) {
-        return { ...stage, deals: [...stage.deals, newDeal] };
-      }
-      return stage;
-    });
+      resetDealForm();
+      setNewDealModalVisible(false);
+      fetchDealsData();
+      Alert.alert('Succes', 'Deal cree avec succes!');
+    } catch (error) {
+      console.error('Error creating deal:', error);
+      // Fallback to local creation
+      const newDeal: Deal = {
+        id: `d${Date.now()}`,
+        title: newDealForm.title,
+        company: newDealForm.company,
+        contact: newDealForm.contact,
+        value: parseInt(newDealForm.value) || 0,
+        probability: parseInt(newDealForm.probability) || 25,
+        stageId: newDealForm.stageId,
+        stageName: stages.find(s => s.id === newDealForm.stageId)?.name || 'Prospection',
+        expectedCloseDate: newDealForm.expectedCloseDate,
+      };
 
-    setStages(updatedStages);
+      const updatedStages = stages.map(stage => {
+        if (stage.id === newDealForm.stageId) {
+          return { ...stage, deals: [...stage.deals, newDeal] };
+        }
+        return stage;
+      });
+
+      setStages(updatedStages);
+      resetDealForm();
+      setNewDealModalVisible(false);
+    }
+  };
+
+  const resetDealForm = () => {
     setNewDealForm({
       title: '',
       company: '',
       contact: '',
       value: '',
       probability: '25',
-      stageId: 'prospection',
+      stageId: stages[0]?.id || '',
       expectedCloseDate: '',
     });
-    setNewDealModalVisible(false);
-    Alert.alert('Succès', `Deal "${newDeal.title}" créé avec succès!`);
   };
 
-  const handleResetDealForm = () => {
-    setNewDealForm({
-      title: '',
-      company: '',
-      contact: '',
-      value: '',
-      probability: '25',
-      stageId: 'prospection',
-      expectedCloseDate: '',
-    });
-    setNewDealModalVisible(false);
-  };
+  const handleMoveDeal = async (dealId: string, fromStageId: string, toStageId: string) => {
+    try {
+      await dealsService.update(dealId, { stage_id: toStageId });
+    } catch (error) {
+      console.error('Error moving deal:', error);
+    }
 
-  const handleMoveDeal = (dealId: string, fromStageId: string, toStageId: string) => {
     const updatedStages = stages.map(stage => {
       if (stage.id === fromStageId) {
         return {
@@ -296,16 +282,29 @@ function DealsScreen({ navigation }: DealsScreenProps) {
         if (deal) {
           return {
             ...stage,
-            deals: [...stage.deals, { ...deal, stageId: toStageId }],
+            deals: [...stage.deals, { ...deal, stageId: toStageId, stageName: stage.name }],
           };
         }
       }
       return stage;
     });
     setStages(updatedStages);
+    setModalVisible(false);
   };
 
-  const renderDealCard = (deal: Deal, stageId: string) => (
+  const getProbabilityColor = (probability: number) => {
+    if (probability >= 70) return '#34C759';
+    if (probability >= 50) return '#FF9500';
+    return '#FF3B30';
+  };
+
+  const formatCurrency = (value: number) => {
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
+    return value.toLocaleString('fr-FR');
+  };
+
+  const renderDealCard = (deal: Deal, stageId: string, stageColor: string) => (
     <TouchableOpacity
       key={deal.id}
       style={styles.dealCard}
@@ -313,79 +312,131 @@ function DealsScreen({ navigation }: DealsScreenProps) {
         setSelectedDeal(deal);
         setModalVisible(true);
       }}
+      activeOpacity={0.7}
     >
-      <View style={styles.dealCardHeader}>
-        <Text style={styles.dealTitle} numberOfLines={2}>{deal.title}</Text>
-        <View style={[styles.probabilityBadge, {
-          backgroundColor: deal.probability > 70 ? '#34C75920' :
-                          deal.probability > 50 ? '#FF950020' : '#FF3B3020'
-        }]}>
-          <Text style={[styles.probabilityText, {
-            color: deal.probability > 70 ? '#34C759' :
-                   deal.probability > 50 ? '#FF9500' : '#FF3B30'
-          }]}>
-            {deal.probability}%
-          </Text>
+      <View style={styles.dealCardInner}>
+        {/* Header */}
+        <View style={styles.dealCardHeader}>
+          <Text style={styles.dealTitle} numberOfLines={2}>{deal.title}</Text>
+          <View style={[
+            styles.probabilityBadge,
+            { backgroundColor: `${getProbabilityColor(deal.probability)}15` }
+          ]}>
+            <Text style={[styles.probabilityText, { color: getProbabilityColor(deal.probability) }]}>
+              {deal.probability}%
+            </Text>
+          </View>
         </View>
-      </View>
 
-      <Text style={styles.dealCompany}>{deal.company}</Text>
-      <Text style={styles.dealContact}>{deal.contact}</Text>
+        {/* Company & Contact */}
+        <Text style={styles.dealCompany}>{deal.company}</Text>
+        <Text style={styles.dealContact}>{deal.contact}</Text>
 
-      <View style={styles.dealFooter}>
-        <View style={styles.dealValue}>
-          <DollarIcon size={14} color="#34C759" />
-          <Text style={styles.dealValueText}>
-            {(deal.value / 1000).toFixed(0)}k
-          </Text>
+        {/* Progress Bar */}
+        <View style={styles.dealProgressContainer}>
+          <View style={styles.dealProgressTrack}>
+            <View
+              style={[
+                styles.dealProgressFill,
+                {
+                  width: `${deal.probability}%`,
+                  backgroundColor: stageColor,
+                }
+              ]}
+            />
+          </View>
         </View>
-        <View style={styles.dealDate}>
-          <CalendarIcon size={14} color="#8E8E93" />
-          <Text style={styles.dealDateText}>
-            {new Date(deal.expectedCloseDate).toLocaleDateString('fr-FR', { month: 'short', day: 'numeric' })}
-          </Text>
+
+        {/* Footer */}
+        <View style={styles.dealFooter}>
+          <View style={styles.dealValue}>
+            <DollarIcon size={14} color="#34C759" />
+            <Text style={styles.dealValueText}>{formatCurrency(deal.value)} EUR</Text>
+          </View>
+          {deal.expectedCloseDate && (
+            <View style={styles.dealDate}>
+              <CalendarIcon size={14} color="#8E8E93" />
+              <Text style={styles.dealDateText}>{deal.expectedCloseDate}</Text>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>
   );
 
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <GlassLoadingState
+          type="spinner"
+          message="Chargement du pipeline..."
+          size="large"
+        />
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        }
+      ]}
+    >
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
+        <View style={styles.headerTop}>
           <View>
-            <Text style={styles.headerTitle}>📊 Pipeline Kanban</Text>
-            <Text style={styles.headerSubtitle}>Gérez vos deals par étape</Text>
+            <Text style={styles.headerTitle}>Pipeline</Text>
+            <Text style={styles.headerSubtitle}>Gerez vos opportunites</Text>
           </View>
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => setNewDealModalVisible(true)}
           >
-            <Text style={styles.addButtonText}>+</Text>
+            <LinearGradient
+              colors={['#007AFF', '#5AC8FA']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.addButtonGradient}
+            >
+              <PlusIcon size={20} color="#FFFFFF" />
+            </LinearGradient>
           </TouchableOpacity>
         </View>
-      </View>
 
-      {/* Pipeline Overview */}
-      <View style={styles.overviewCard}>
-        <View style={styles.overviewItem}>
-          <Text style={styles.overviewLabel}>Total Deals</Text>
-          <Text style={styles.overviewValue}>
-            {stages.reduce((sum, stage) => sum + stage.deals.length, 0)}
-          </Text>
-        </View>
-        <View style={styles.overviewItem}>
-          <Text style={styles.overviewLabel}>Valeur Total</Text>
-          <Text style={styles.overviewValue}>
-            {(stages.reduce((sum, stage) => sum + getTotalValueByStage(stage.deals), 0) / 1000).toFixed(0)}k
-          </Text>
-        </View>
-        <View style={styles.overviewItem}>
-          <Text style={styles.overviewLabel}>Valeur Pondérée</Text>
-          <Text style={styles.overviewValue}>
-            {(stages.reduce((sum, stage) => sum + getTotalProbabilityValue(stage.deals), 0) / 1000).toFixed(0)}k
-          </Text>
+        {/* Stats Overview */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statCard}>
+            <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
+              <TrendingUpIcon size={18} color="#007AFF" />
+            </View>
+            <View style={styles.statContent}>
+              <Text style={styles.statValue}>{getTotalDeals()}</Text>
+              <Text style={styles.statLabel}>Deals actifs</Text>
+            </View>
+          </View>
+          <View style={styles.statCard}>
+            <View style={[styles.statIconContainer, { backgroundColor: 'rgba(52, 199, 89, 0.1)' }]}>
+              <DollarIcon size={18} color="#34C759" />
+            </View>
+            <View style={styles.statContent}>
+              <Text style={styles.statValue}>{formatCurrency(getTotalValue())}</Text>
+              <Text style={styles.statLabel}>Valeur totale</Text>
+            </View>
+          </View>
+          <View style={styles.statCard}>
+            <View style={[styles.statIconContainer, { backgroundColor: 'rgba(255, 149, 0, 0.1)' }]}>
+              <TrendingUpIcon size={18} color="#FF9500" />
+            </View>
+            <View style={styles.statContent}>
+              <Text style={styles.statValue}>{formatCurrency(getTotalWeightedValue())}</Text>
+              <Text style={styles.statLabel}>Ponderee</Text>
+            </View>
+          </View>
         </View>
       </View>
 
@@ -396,444 +447,508 @@ function DealsScreen({ navigation }: DealsScreenProps) {
         style={styles.kanbanScroll}
         contentContainerStyle={styles.kanbanContent}
       >
-        {stages.map(stage => (
-          <View key={stage.id} style={styles.stageColumn}>
+        {stages.map((stage, stageIndex) => (
+          <Animated.View
+            key={stage.id}
+            style={[
+              styles.stageColumn,
+              {
+                opacity: fadeAnim,
+                transform: [{
+                  translateX: fadeAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [50 * stageIndex, 0],
+                  }),
+                }],
+              },
+            ]}
+          >
             {/* Stage Header */}
-            <View style={[styles.stageHeader, { backgroundColor: `${stage.color}20` }]}>
-              <View style={[styles.stageDot, { backgroundColor: stage.color }]} />
-              <Text style={styles.stageName}>{stage.name}</Text>
-              <View style={styles.stageBadge}>
-                <Text style={styles.stageBadgeText}>{stage.deals.length}</Text>
-              </View>
+            <View style={styles.stageHeader}>
+              <LinearGradient
+                colors={[`${stage.color}20`, `${stage.color}10`]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.stageHeaderGradient}
+              >
+                <View style={[styles.stageDot, { backgroundColor: stage.color }]} />
+                <Text style={styles.stageName}>{stage.name}</Text>
+                <View style={styles.stageBadge}>
+                  <Text style={styles.stageBadgeText}>{stage.deals.length}</Text>
+                </View>
+              </LinearGradient>
             </View>
 
             {/* Stage Stats */}
             <View style={styles.stageStats}>
-              <Text style={styles.stageStatsLabel}>
-                {(getTotalValueByStage(stage.deals) / 1000).toFixed(0)}k
-              </Text>
-              <Text style={styles.stageStatsLabel}>
-                {getTotalProbabilityValue(stage.deals).toFixed(0)} $
-              </Text>
+              <View style={styles.stageStatItem}>
+                <Text style={styles.stageStatValue}>{formatCurrency(getTotalValueByStage(stage.deals))}</Text>
+                <Text style={styles.stageStatLabel}>Total</Text>
+              </View>
+              <View style={styles.stageStatDivider} />
+              <View style={styles.stageStatItem}>
+                <Text style={styles.stageStatValue}>{formatCurrency(getTotalProbabilityValue(stage.deals))}</Text>
+                <Text style={styles.stageStatLabel}>Pondere</Text>
+              </View>
             </View>
 
-            {/* Deals Container */}
+            {/* Deals */}
             <ScrollView
               nestedScrollEnabled
               style={styles.dealsContainer}
               showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.dealsContent}
             >
               {stage.deals.length > 0 ? (
-                stage.deals.map(deal => renderDealCard(deal, stage.id))
+                stage.deals.map(deal => renderDealCard(deal, stage.id, stage.color))
               ) : (
                 <View style={styles.emptyStage}>
-                  <Text style={styles.emptyText}>Pas de deals</Text>
+                  <Text style={styles.emptyStageText}>Pas de deals</Text>
+                  <Text style={styles.emptyStageSubtext}>Glissez un deal ici</Text>
                 </View>
               )}
             </ScrollView>
 
-            {/* Add Deal Button */}
-            <TouchableOpacity style={styles.addDealButton}>
-              <Text style={styles.addDealText}>+ Ajouter</Text>
+            {/* Add Deal to Stage */}
+            <TouchableOpacity
+              style={styles.addDealButton}
+              onPress={() => {
+                setNewDealForm(prev => ({ ...prev, stageId: stage.id }));
+                setNewDealModalVisible(true);
+              }}
+            >
+              <PlusIcon size={16} color="#007AFF" />
+              <Text style={styles.addDealText}>Ajouter un deal</Text>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         ))}
       </ScrollView>
 
       {/* Deal Details Modal */}
-      <Modal
+      <GlassModal
         visible={modalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
+        onClose={() => setModalVisible(false)}
+        title={selectedDeal?.title || 'Details du deal'}
+        size="large"
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{selectedDeal?.title}</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Text style={styles.closeButton}>✕</Text>
-              </TouchableOpacity>
+        {selectedDeal && (
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Deal Value Card */}
+            <View style={styles.modalValueCard}>
+              <LinearGradient
+                colors={['rgba(52, 199, 89, 0.1)', 'rgba(52, 199, 89, 0.05)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.modalValueGradient}
+              >
+                <Text style={styles.modalValueLabel}>Valeur du deal</Text>
+                <Text style={styles.modalValueAmount}>
+                  {selectedDeal.value.toLocaleString('fr-FR')} EUR
+                </Text>
+              </LinearGradient>
             </View>
 
-            <ScrollView style={styles.modalScroll}>
-              <View style={styles.modalSection}>
-                <Text style={styles.modalLabel}>Entreprise</Text>
-                <Text style={styles.modalValue}>{selectedDeal?.company}</Text>
+            {/* Info Grid */}
+            <View style={styles.modalInfoGrid}>
+              <View style={styles.modalInfoItem}>
+                <Text style={styles.modalInfoLabel}>Entreprise</Text>
+                <Text style={styles.modalInfoValue}>{selectedDeal.company}</Text>
               </View>
-
-              <View style={styles.modalSection}>
-                <Text style={styles.modalLabel}>Contact</Text>
-                <Text style={styles.modalValue}>{selectedDeal?.contact}</Text>
+              <View style={styles.modalInfoItem}>
+                <Text style={styles.modalInfoLabel}>Contact</Text>
+                <Text style={styles.modalInfoValue}>{selectedDeal.contact}</Text>
               </View>
-
-              <View style={styles.modalSection}>
-                <Text style={styles.modalLabel}>Valeur du Deal</Text>
-                <Text style={styles.modalValue}>
-                  {(selectedDeal?.value || 0).toLocaleString('fr-FR')} €
+              <View style={styles.modalInfoItem}>
+                <Text style={styles.modalInfoLabel}>Date de cloture</Text>
+                <Text style={styles.modalInfoValue}>
+                  {selectedDeal.expectedCloseDate || 'Non definie'}
                 </Text>
               </View>
-
-              <View style={styles.modalSection}>
-                <Text style={styles.modalLabel}>Probabilité</Text>
-                <View style={styles.probabilityBar}>
-                  <View
-                    style={[
-                      styles.probabilityBarFill,
-                      { width: `${selectedDeal?.probability || 0}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.probabilityValue}>
-                  {selectedDeal?.probability}%
-                </Text>
+              <View style={styles.modalInfoItem}>
+                <Text style={styles.modalInfoLabel}>Etape actuelle</Text>
+                <Text style={styles.modalInfoValue}>{selectedDeal.stageName}</Text>
               </View>
-
-              <View style={styles.modalSection}>
-                <Text style={styles.modalLabel}>Date de Clôture Estimée</Text>
-                <Text style={styles.modalValue}>
-                  {selectedDeal?.expectedCloseDate
-                    ? new Date(selectedDeal.expectedCloseDate).toLocaleDateString('fr-FR')
-                    : '-'}
-                </Text>
-              </View>
-
-              {selectedDeal?.notes && (
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalLabel}>Notes</Text>
-                  <Text style={styles.modalValue}>{selectedDeal.notes}</Text>
-                </View>
-              )}
-
-              <View style={styles.stageTransition}>
-                <Text style={styles.modalLabel}>Passer à</Text>
-                <View style={styles.transitionButtons}>
-                  {stages
-                    .filter(stage => stage.id !== selectedDeal?.stageId)
-                    .map(stage => (
-                      <TouchableOpacity
-                        key={stage.id}
-                        style={[styles.transitionButton, { backgroundColor: `${stage.color}20` }]}
-                        onPress={() => {
-                          if (selectedDeal) {
-                            handleMoveDeal(selectedDeal.id, selectedDeal.stageId, stage.id);
-                            setModalVisible(false);
-                          }
-                        }}
-                      >
-                        <Text style={[styles.transitionButtonText, { color: stage.color }]}>
-                          {stage.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                </View>
-              </View>
-            </ScrollView>
-
-            <TouchableOpacity
-              style={styles.closeModal}
-              onPress={() => setModalVisible(false)}
-            >
-              <Text style={styles.closeModalText}>Fermer</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Create Deal Modal */}
-      <Modal
-        visible={newDealModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={handleResetDealForm}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nouveau Deal</Text>
-              <TouchableOpacity onPress={handleResetDealForm}>
-                <Text style={styles.closeButton}>✕</Text>
-              </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalScrollContent} showsVerticalScrollIndicator={false}>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Titre du deal *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ex: Licence CRM"
-                  value={newDealForm.title}
-                  onChangeText={(text) => setNewDealForm({ ...newDealForm, title: text })}
-                  placeholderTextColor="#C7C7CC"
-                />
-              </View>
+            {/* Probability Section */}
+            <View style={styles.modalSection}>
+              <Text style={styles.modalSectionTitle}>Probabilite de succes</Text>
+              <GlassProgressBar
+                value={selectedDeal.probability}
+                maxValue={100}
+                gradient={[getProbabilityColor(selectedDeal.probability), getProbabilityColor(selectedDeal.probability)]}
+                height={10}
+                valueFormatter={(value) => `${value}%`}
+              />
+              <Text style={styles.probabilityHint}>
+                Valeur ponderee: {formatCurrency(selectedDeal.value * selectedDeal.probability / 100)} EUR
+              </Text>
+            </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Entreprise *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ex: Acme Corp"
-                  value={newDealForm.company}
-                  onChangeText={(text) => setNewDealForm({ ...newDealForm, company: text })}
-                  placeholderTextColor="#C7C7CC"
-                />
+            {/* Notes */}
+            {selectedDeal.notes && (
+              <View style={styles.modalSection}>
+                <Text style={styles.modalSectionTitle}>Notes</Text>
+                <View style={styles.notesCard}>
+                  <Text style={styles.notesText}>{selectedDeal.notes}</Text>
+                </View>
               </View>
+            )}
 
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Contact</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ex: Laurent Michel"
-                  value={newDealForm.contact}
-                  onChangeText={(text) => setNewDealForm({ ...newDealForm, contact: text })}
-                  placeholderTextColor="#C7C7CC"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Valeur (€) *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="50000"
-                  value={newDealForm.value}
-                  onChangeText={(text) => setNewDealForm({ ...newDealForm, value: text })}
-                  keyboardType="numeric"
-                  placeholderTextColor="#C7C7CC"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Probabilité (%)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="25"
-                  value={newDealForm.probability}
-                  onChangeText={(text) => setNewDealForm({ ...newDealForm, probability: text })}
-                  keyboardType="numeric"
-                  placeholderTextColor="#C7C7CC"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Étape</Text>
-                <ScrollView style={styles.stageSelectContainer} scrollEnabled={false}>
-                  {stages.map(stage => (
+            {/* Move to Stage */}
+            <View style={styles.modalSection}>
+              <Text style={styles.modalSectionTitle}>Deplacer vers</Text>
+              <View style={styles.stageButtons}>
+                {stages
+                  .filter(stage => stage.id !== selectedDeal.stageId)
+                  .map(stage => (
                     <TouchableOpacity
                       key={stage.id}
-                      style={[
-                        styles.stageOption,
-                        newDealForm.stageId === stage.id && styles.stageOptionActive,
-                      ]}
-                      onPress={() => setNewDealForm({ ...newDealForm, stageId: stage.id })}
+                      style={[styles.stageButton, { borderColor: stage.color }]}
+                      onPress={() => handleMoveDeal(selectedDeal.id, selectedDeal.stageId, stage.id)}
                     >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <View style={[styles.stageDot, { backgroundColor: stage.color }]} />
-                        <Text
-                          style={[
-                            styles.stageOptionText,
-                            newDealForm.stageId === stage.id && styles.stageOptionTextActive,
-                          ]}
-                        >
-                          {stage.name}
-                        </Text>
-                      </View>
+                      <View style={[styles.stageButtonDot, { backgroundColor: stage.color }]} />
+                      <Text style={[styles.stageButtonText, { color: stage.color }]}>
+                        {stage.name}
+                      </Text>
                     </TouchableOpacity>
                   ))}
-                </ScrollView>
               </View>
+            </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Date Prévue de Clôture</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="2025-12-31"
-                  value={newDealForm.expectedCloseDate}
-                  onChangeText={(text) => setNewDealForm({ ...newDealForm, expectedCloseDate: text })}
-                  placeholderTextColor="#C7C7CC"
-                />
-              </View>
+            {/* Actions */}
+            <View style={styles.modalActions}>
+              <GlassButton
+                title="Fermer"
+                onPress={() => setModalVisible(false)}
+                variant="primary"
+                fullWidth
+              />
+            </View>
+          </ScrollView>
+        )}
+      </GlassModal>
 
-              <Text style={styles.formNote}>
-                Les champs avec * sont obligatoires.
-              </Text>
-            </ScrollView>
+      {/* Create Deal Modal */}
+      <GlassModal
+        visible={newDealModalVisible}
+        onClose={() => { setNewDealModalVisible(false); resetDealForm(); }}
+        title="Nouveau Deal"
+        size="large"
+      >
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <GlassInput
+            label="Titre du deal *"
+            placeholder="Ex: Licence CRM"
+            value={newDealForm.title}
+            onChangeText={(text) => setNewDealForm({ ...newDealForm, title: text })}
+          />
+          <GlassInput
+            label="Entreprise *"
+            placeholder="Ex: Acme Corp"
+            value={newDealForm.company}
+            onChangeText={(text) => setNewDealForm({ ...newDealForm, company: text })}
+          />
+          <GlassInput
+            label="Contact"
+            placeholder="Ex: Laurent Michel"
+            value={newDealForm.contact}
+            onChangeText={(text) => setNewDealForm({ ...newDealForm, contact: text })}
+          />
+          <GlassInput
+            label="Valeur (EUR)"
+            placeholder="50000"
+            value={newDealForm.value}
+            onChangeText={(text) => setNewDealForm({ ...newDealForm, value: text })}
+            keyboardType="numeric"
+          />
+          <GlassInput
+            label="Probabilite (%)"
+            placeholder="25"
+            value={newDealForm.probability}
+            onChangeText={(text) => setNewDealForm({ ...newDealForm, probability: text })}
+            keyboardType="numeric"
+          />
 
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.button, styles.buttonSecondary]}
-                onPress={handleResetDealForm}
-              >
-                <Text style={styles.buttonSecondaryText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.button, styles.buttonPrimary]}
-                onPress={handleCreateDeal}
-              >
-                <Text style={styles.buttonPrimaryText}>Créer Deal</Text>
-              </TouchableOpacity>
+          {/* Stage Selection */}
+          <View style={styles.formSection}>
+            <Text style={styles.formLabel}>Etape</Text>
+            <View style={styles.stageSelectGrid}>
+              {stages.map(stage => (
+                <TouchableOpacity
+                  key={stage.id}
+                  style={[
+                    styles.stageSelectOption,
+                    newDealForm.stageId === stage.id && {
+                      borderColor: stage.color,
+                      backgroundColor: `${stage.color}10`,
+                    },
+                  ]}
+                  onPress={() => setNewDealForm({ ...newDealForm, stageId: stage.id })}
+                >
+                  <View style={[styles.stageSelectDot, { backgroundColor: stage.color }]} />
+                  <Text style={[
+                    styles.stageSelectText,
+                    newDealForm.stageId === stage.id && { color: stage.color, fontWeight: '600' },
+                  ]}>
+                    {stage.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
+
+          <GlassInput
+            label="Date prevue de cloture"
+            placeholder="AAAA-MM-JJ"
+            value={newDealForm.expectedCloseDate}
+            onChangeText={(text) => setNewDealForm({ ...newDealForm, expectedCloseDate: text })}
+          />
+
+          <Text style={styles.formNote}>* Champs obligatoires</Text>
+        </ScrollView>
+
+        <View style={styles.modalFooter}>
+          <GlassButton
+            title="Annuler"
+            onPress={() => { setNewDealModalVisible(false); resetDealForm(); }}
+            variant="outline"
+            style={{ flex: 1 }}
+          />
+          <GlassButton
+            title="Creer"
+            onPress={handleCreateDeal}
+            variant="primary"
+            style={{ flex: 1 }}
+          />
         </View>
-      </Modal>
-    </View>
+      </GlassModal>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: glassTheme.colors.background.primary,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: glassTheme.colors.background.primary,
   },
   header: {
-    backgroundColor: '#FFFFFF',
-    paddingTop: Platform.OS === 'ios' ? 60 : 20,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingTop: glassTheme.spacing.md,
+    paddingHorizontal: glassTheme.spacing.md,
+    paddingBottom: glassTheme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+    borderBottomColor: 'rgba(0, 0, 0, 0.04)',
+    ...(Platform.OS === 'web' ? {
+      // @ts-ignore
+      backdropFilter: 'blur(20px)',
+    } : {}),
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: glassTheme.spacing.md,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#000000',
+    ...glassTheme.typography.displaySmall,
+    color: glassTheme.colors.text.primary,
     marginBottom: 4,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: '#8E8E93',
+    ...glassTheme.typography.body,
+    color: glassTheme.colors.text.tertiary,
   },
-  overviewCard: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 12,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+  addButton: {
+    borderRadius: glassTheme.radius.full,
+    overflow: 'hidden',
+    ...withShadow('md'),
   },
-  overviewItem: {
-    flex: 1,
+  addButtonGradient: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  overviewLabel: {
-    fontSize: 11,
-    color: '#8E8E93',
-    fontWeight: '500',
-    marginBottom: 4,
+  statsContainer: {
+    flexDirection: 'row',
+    gap: glassTheme.spacing.sm,
   },
-  overviewValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#000000',
+  statCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: glassTheme.radius.md,
+    padding: glassTheme.spacing.sm,
+    gap: glassTheme.spacing.sm,
+    ...withShadow('sm'),
+  },
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: glassTheme.radius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statContent: {
+    flex: 1,
+  },
+  statValue: {
+    ...glassTheme.typography.h3,
+    color: glassTheme.colors.text.primary,
+  },
+  statLabel: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
   },
   kanbanScroll: {
     flex: 1,
   },
   kanbanContent: {
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingHorizontal: glassTheme.spacing.md,
+    paddingVertical: glassTheme.spacing.md,
+    gap: glassTheme.spacing.md,
   },
   stageColumn: {
-    width: 320,
-    backgroundColor: '#F2F2F7',
-    borderRadius: 12,
+    width: STAGE_WIDTH,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    borderRadius: glassTheme.radius.xl,
     overflow: 'hidden',
-    marginRight: 12,
+    marginRight: glassTheme.spacing.md,
+    ...withShadow('sm'),
+    ...(Platform.OS === 'web' ? {
+      // @ts-ignore
+      backdropFilter: 'blur(10px)',
+    } : {}),
   },
   stageHeader: {
+    overflow: 'hidden',
+  },
+  stageHeaderGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 8,
+    paddingHorizontal: glassTheme.spacing.md,
+    paddingVertical: glassTheme.spacing.sm,
+    gap: glassTheme.spacing.sm,
   },
   stageDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   stageName: {
+    ...glassTheme.typography.h3,
     flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#000000',
+    color: glassTheme.colors.text.primary,
   },
   stageBadge: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: glassTheme.radius.full,
+    ...withShadow('sm'),
   },
   stageBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#000000',
+    ...glassTheme.typography.captionBold,
+    color: glassTheme.colors.text.primary,
   },
   stageStats: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingBottom: 8,
+    paddingHorizontal: glassTheme.spacing.md,
+    paddingVertical: glassTheme.spacing.sm,
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
   },
-  stageStatsLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#8E8E93',
+  stageStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  stageStatValue: {
+    ...glassTheme.typography.bodySmall,
+    fontWeight: '700',
+    color: glassTheme.colors.text.primary,
+  },
+  stageStatLabel: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+  },
+  stageStatDivider: {
+    width: 1,
+    height: '100%',
+    backgroundColor: 'rgba(0, 0, 0, 0.06)',
   },
   dealsContainer: {
     flex: 1,
-    paddingHorizontal: 8,
+    maxHeight: height - 380,
+  },
+  dealsContent: {
+    padding: glassTheme.spacing.sm,
+    gap: glassTheme.spacing.sm,
   },
   dealCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: glassTheme.radius.lg,
+    overflow: 'hidden',
+    ...withShadow('sm'),
+    ...(Platform.OS === 'web' ? {
+      // @ts-ignore
+      transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+    } : {}),
+  },
+  dealCardInner: {
+    padding: glassTheme.spacing.sm,
   },
   dealCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: glassTheme.spacing.xs,
   },
   dealTitle: {
+    ...glassTheme.typography.bodySmall,
+    fontWeight: '600',
+    color: glassTheme.colors.text.primary,
     flex: 1,
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#000000',
-    marginRight: 8,
+    marginRight: glassTheme.spacing.sm,
   },
   probabilityBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: glassTheme.radius.sm,
   },
   probabilityText: {
-    fontSize: 11,
+    ...glassTheme.typography.caption,
     fontWeight: '700',
   },
   dealCompany: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#000000',
+    ...glassTheme.typography.caption,
+    fontWeight: '500',
+    color: glassTheme.colors.text.secondary,
     marginBottom: 2,
   },
   dealContact: {
-    fontSize: 11,
-    color: '#8E8E93',
-    marginBottom: 8,
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+    marginBottom: glassTheme.spacing.sm,
+  },
+  dealProgressContainer: {
+    marginBottom: glassTheme.spacing.sm,
+  },
+  dealProgressTrack: {
+    height: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.06)',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  dealProgressFill: {
+    height: '100%',
+    borderRadius: 2,
   },
   dealFooter: {
     flexDirection: 'row',
@@ -846,7 +961,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   dealValueText: {
-    fontSize: 12,
+    ...glassTheme.typography.caption,
     fontWeight: '700',
     color: '#34C759',
   },
@@ -856,221 +971,175 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   dealDateText: {
-    fontSize: 11,
-    color: '#8E8E93',
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
   },
   emptyStage: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
+    paddingVertical: glassTheme.spacing.xl,
   },
-  emptyText: {
-    fontSize: 13,
-    color: '#C7C7CC',
-    fontWeight: '500',
+  emptyStageText: {
+    ...glassTheme.typography.body,
+    color: glassTheme.colors.text.tertiary,
+  },
+  emptyStageSubtext: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.quaternary,
+    marginTop: 4,
   },
   addDealButton: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    margin: 8,
-    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: glassTheme.spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.04)',
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
   addDealText: {
-    fontSize: 12,
+    ...glassTheme.typography.bodySmall,
     fontWeight: '600',
     color: '#007AFF',
   },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    maxHeight: '90%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000000',
-  },
-  closeButton: {
-    fontSize: 24,
-    color: '#8E8E93',
-  },
-  modalScroll: {
-    maxHeight: 400,
-  },
-  modalSection: {
-    marginBottom: 16,
-  },
-  modalLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-    marginBottom: 6,
-  },
-  modalValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#000000',
-  },
-  probabilityBar: {
-    height: 6,
-    backgroundColor: '#F2F2F7',
-    borderRadius: 3,
+  // Modal styles
+  modalValueCard: {
+    borderRadius: glassTheme.radius.lg,
     overflow: 'hidden',
-    marginBottom: 8,
+    marginBottom: glassTheme.spacing.lg,
   },
-  probabilityBarFill: {
-    height: '100%',
-    backgroundColor: '#34C759',
+  modalValueGradient: {
+    padding: glassTheme.spacing.lg,
+    alignItems: 'center',
   },
-  probabilityValue: {
-    fontSize: 12,
-    fontWeight: '600',
+  modalValueLabel: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+    marginBottom: 4,
+  },
+  modalValueAmount: {
+    ...glassTheme.typography.displayMedium,
     color: '#34C759',
   },
-  stageTransition: {
-    marginTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#F2F2F7',
-    paddingTop: 16,
-  },
-  transitionButtons: {
+  modalInfoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 12,
+    gap: glassTheme.spacing.sm,
+    marginBottom: glassTheme.spacing.lg,
   },
-  transitionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+  modalInfoItem: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: glassTheme.radius.md,
+    padding: glassTheme.spacing.sm,
   },
-  transitionButtonText: {
-    fontSize: 12,
+  modalInfoLabel: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+    marginBottom: 2,
+  },
+  modalInfoValue: {
+    ...glassTheme.typography.body,
     fontWeight: '600',
+    color: glassTheme.colors.text.primary,
   },
-  closeModal: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 20,
+  modalSection: {
+    marginBottom: glassTheme.spacing.lg,
   },
-  closeModalText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  modalSectionTitle: {
+    ...glassTheme.typography.label,
+    color: glassTheme.colors.text.tertiary,
+    marginBottom: glassTheme.spacing.sm,
   },
-  headerContent: {
+  probabilityHint: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+    marginTop: glassTheme.spacing.xs,
+    textAlign: 'center',
+  },
+  notesCard: {
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: glassTheme.radius.md,
+    padding: glassTheme.spacing.md,
+  },
+  notesText: {
+    ...glassTheme.typography.body,
+    color: glassTheme.colors.text.secondary,
+  },
+  stageButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: glassTheme.spacing.sm,
   },
-  addButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
+  stageButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: glassTheme.spacing.md,
+    paddingVertical: glassTheme.spacing.sm,
+    borderRadius: glassTheme.radius.full,
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
   },
-  addButtonText: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  stageButtonDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  modalScrollContent: {
-    maxHeight: 400,
-    marginBottom: 16,
-  },
-  formGroup: {
-    marginBottom: 16,
-  },
-  formLabel: {
-    fontSize: 12,
+  stageButtonText: {
+    ...glassTheme.typography.bodySmall,
     fontWeight: '600',
-    color: '#8E8E93',
-    marginBottom: 8,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#000000',
-  },
-  stageSelectContainer: {
-    gap: 8,
-  },
-  stageOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#F2F2F7',
-    borderRadius: 8,
-  },
-  stageOptionActive: {
-    backgroundColor: '#007AFF20',
-  },
-  stageOptionText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  stageOptionTextActive: {
-    color: '#007AFF',
-  },
-  formNote: {
-    fontSize: 11,
-    color: '#8E8E93',
-    fontStyle: 'italic',
-    marginTop: 16,
-    marginBottom: 8,
+  modalActions: {
+    marginTop: glassTheme.spacing.lg,
   },
   modalFooter: {
     flexDirection: 'row',
-    gap: 8,
-    paddingTop: 16,
-    paddingBottom: 20,
+    gap: glassTheme.spacing.sm,
+    marginTop: glassTheme.spacing.lg,
+    paddingTop: glassTheme.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.06)',
   },
-  button: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
+  formSection: {
+    marginBottom: glassTheme.spacing.md,
+  },
+  formLabel: {
+    ...glassTheme.typography.bodySmall,
+    fontWeight: '600',
+    color: glassTheme.colors.text.secondary,
+    marginBottom: glassTheme.spacing.sm,
+  },
+  stageSelectGrid: {
+    gap: glassTheme.spacing.sm,
+  },
+  stageSelectOption: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: glassTheme.spacing.sm,
+    paddingHorizontal: glassTheme.spacing.md,
+    paddingVertical: glassTheme.spacing.sm,
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: glassTheme.radius.md,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
-  buttonPrimary: {
-    backgroundColor: '#007AFF',
+  stageSelectDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
-  buttonPrimaryText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  stageSelectText: {
+    ...glassTheme.typography.body,
+    color: glassTheme.colors.text.secondary,
   },
-  buttonSecondary: {
-    backgroundColor: '#F2F2F7',
-  },
-  buttonSecondaryText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#8E8E93',
+  formNote: {
+    ...glassTheme.typography.caption,
+    color: glassTheme.colors.text.tertiary,
+    fontStyle: 'italic',
+    marginTop: glassTheme.spacing.md,
   },
 });
 

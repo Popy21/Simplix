@@ -644,5 +644,85 @@ export const emailsService = {
     api.get('/email-campaigns/logs', { params }),
 };
 
+// Credit Notes API
+export const creditNotesService = {
+  getAll: (params?: { page?: number; limit?: number; status?: string }) =>
+    api.get('/credit-notes', { params }),
+  getById: (id: string) => api.get(`/credit-notes/${id}`),
+  create: (data: any) => api.post('/credit-notes', data),
+  update: (id: string, data: any) => api.put(`/credit-notes/${id}`, data),
+  delete: (id: string) => api.delete(`/credit-notes/${id}`),
+  createFromInvoice: (invoiceId: string, data: any) =>
+    api.post(`/credit-notes/from-invoice/${invoiceId}`, data),
+  downloadPdf: (id: string) => api.get(`/credit-notes/${id}/pdf`, { responseType: 'blob' }),
+};
+
+// Recurring Invoices API
+export const recurringInvoicesService = {
+  getAll: (params?: { page?: number; limit?: number; status?: string }) =>
+    api.get('/recurring-invoices', { params }),
+  getById: (id: string) => api.get(`/recurring-invoices/${id}`),
+  create: (data: any) => api.post('/recurring-invoices', data),
+  update: (id: string, data: any) => api.put(`/recurring-invoices/${id}`, data),
+  delete: (id: string) => api.delete(`/recurring-invoices/${id}`),
+  pause: (id: string) => api.post(`/recurring-invoices/${id}/pause`),
+  resume: (id: string) => api.post(`/recurring-invoices/${id}/resume`),
+  generateNow: (id: string) => api.post(`/recurring-invoices/${id}/generate`),
+};
+
+// Cashflow API
+export const cashflowService = {
+  getForecast: (params?: { months?: number }) =>
+    api.get('/cashflow/forecast', { params }),
+  getHistory: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/cashflow/history', { params }),
+  getSummary: () => api.get('/cashflow/summary'),
+};
+
+// Bank Reconciliation API
+export const bankReconciliationService = {
+  getTransactions: (params?: { page?: number; limit?: number; status?: string; startDate?: string; endDate?: string }) =>
+    api.get('/bank-reconciliation/transactions', { params }),
+  importTransactions: (data: FormData) =>
+    api.post('/bank-reconciliation/import', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  matchTransaction: (transactionId: string, data: { invoice_id?: string; expense_id?: string; payment_id?: string }) =>
+    api.post(`/bank-reconciliation/transactions/${transactionId}/match`, data),
+  unmatchTransaction: (transactionId: string) =>
+    api.post(`/bank-reconciliation/transactions/${transactionId}/unmatch`),
+  getSuggestions: (transactionId: string) =>
+    api.get(`/bank-reconciliation/transactions/${transactionId}/suggestions`),
+  getStats: () => api.get('/bank-reconciliation/stats'),
+};
+
+// Reminders API
+export const remindersService = {
+  getAll: (params?: { page?: number; limit?: number; status?: string }) =>
+    api.get('/reminders', { params }),
+  getSettings: () => api.get('/reminders/settings'),
+  updateSettings: (data: any) => api.put('/reminders/settings', data),
+  getHistory: (params?: { invoiceId?: string; limit?: number }) =>
+    api.get('/reminders/history', { params }),
+  sendManual: (invoiceId: string, data?: { message?: string }) =>
+    api.post(`/reminders/send/${invoiceId}`, data),
+  getOverdueInvoices: () => api.get('/reminders/overdue'),
+};
+
+// Accounting API
+export const accountingService = {
+  getIncomeStatement: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/accounting/income-statement', { params }),
+  getBalanceSheet: (params?: { date?: string }) =>
+    api.get('/accounting/balance-sheet', { params }),
+  getVatSummary: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/accounting/vat-summary', { params }),
+  exportFec: (params: { startDate: string; endDate: string }) =>
+    api.get('/exports/fec', { params, responseType: 'blob' }),
+  exportAccounting: (params: { format: string; startDate: string; endDate: string }) =>
+    api.get('/accounting/export', { params, responseType: 'blob' }),
+  getCurrencies: () => api.get('/accounting/currencies'),
+  convertAmount: (data: { amount: number; from: string; to: string }) =>
+    api.post('/accounting/convert', data),
+};
+
 // Export api instance for direct usage
 export { api };

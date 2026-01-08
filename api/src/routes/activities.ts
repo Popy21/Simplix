@@ -216,7 +216,7 @@ router.get('/contact/:contactId', authenticateToken, async (req: AuthRequest, re
  */
 router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { type, description, contact_id, deal_id, activity_date, scheduled_at } = req.body;
+    const { type, description, subject, contact_id, deal_id, scheduled_at } = req.body;
     const orgId = '00000000-0000-0000-0000-000000000001';
     const userId = req.user?.id;
 
@@ -231,14 +231,14 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         contact_id,
         deal_id,
         type,
+        subject,
         description,
-        activity_date,
         scheduled_at,
         created_by,
         created_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
       RETURNING *`,
-      [orgId, contact_id || null, deal_id || null, type, description, activity_date || null, scheduled_at || null, userId]
+      [orgId, contact_id || null, deal_id || null, type, subject || description, description, scheduled_at || null, userId]
     );
 
     res.status(201).json(result.rows[0]);
@@ -373,10 +373,10 @@ router.post('/meeting', authenticateToken, async (req: AuthRequest, res: Respons
         contact_id,
         deal_id,
         type,
+        subject,
         description,
-        activity_date,
-        status,
-        metadata,
+        scheduled_at,
+        location,
         created_by
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *`,
@@ -386,9 +386,9 @@ router.post('/meeting', authenticateToken, async (req: AuthRequest, res: Respons
         deal_id || null,
         'meeting',
         title,
+        notes || title,
         start_time,
-        status,
-        JSON.stringify({ end_time, location, attendees, notes }),
+        location || null,
         userId,
       ]
     );

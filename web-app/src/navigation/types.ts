@@ -24,6 +24,13 @@ export type RootStackParamList = {
   // Finance
   Expenses: undefined;
   Suppliers: undefined;
+  CreditNotes: undefined;
+  RecurringInvoices: undefined;
+  Cashflow: undefined;
+  BankReconciliation: undefined;
+  Reminders: undefined;
+  Accounting: undefined;
+  Reports: undefined;
 
   // Automation
   Workflows: undefined;
