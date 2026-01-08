@@ -43,6 +43,8 @@ const TEST_CATEGORIES: TestCategory[] = [
       { name: 'Login invalide', endpoint: '/auth/login', method: 'POST', body: { email: 'test@test.com', password: 'wrong' }, requiresAuth: false, expectedStatus: [401] },
       { name: 'Me (profil)', endpoint: '/auth/me', method: 'GET', requiresAuth: true },
       { name: 'Refresh token', endpoint: '/auth/refresh', method: 'POST', body: { refreshToken: 'test' }, requiresAuth: false, expectedStatus: [200, 401] },
+      { name: 'Validation mot de passe', endpoint: '/auth/validate-password', method: 'POST', body: { password: 'Test@12345' }, requiresAuth: false, expectedStatus: [200] },
+      { name: '2FA Status', endpoint: '/auth/2fa/status', method: 'GET', requiresAuth: true, expectedStatus: [200, 404] },
     ],
   },
   // ==================== CONTACTS ====================
@@ -152,9 +154,12 @@ const TEST_CATEGORIES: TestCategory[] = [
     tests: [
       { name: 'Liste pipelines', endpoint: '/pipelines', method: 'GET', requiresAuth: true },
       { name: 'Stages pipeline', endpoint: '/pipeline/stages', method: 'GET', requiresAuth: true },
+      { name: 'Pipeline stats', endpoint: '/pipeline/stats', method: 'GET', requiresAuth: true },
       { name: 'Liste deals', endpoint: '/deals', method: 'GET', requiresAuth: true },
       { name: 'Deals (stage=new)', endpoint: '/deals?stage=new', method: 'GET', requiresAuth: true },
       { name: 'Deals (pagination)', endpoint: '/deals?page=1&limit=10', method: 'GET', requiresAuth: true },
+      { name: 'Stats deals', endpoint: '/deals/stats', method: 'GET', requiresAuth: true },
+      { name: 'Créer deal', endpoint: '/deals', method: 'POST', body: { name: `Deal${Date.now()}`, value: 5000, stage: 'new' }, requiresAuth: true },
     ],
   },
   // ==================== LEADS ====================
@@ -240,13 +245,24 @@ const TEST_CATEGORIES: TestCategory[] = [
     tests: [
       { name: 'Dashboard stats', endpoint: '/dashboard/stats', method: 'GET', requiresAuth: true },
       { name: 'KPIs', endpoint: '/dashboard/kpis', method: 'GET', requiresAuth: true },
+      { name: 'Dashboard revenue', endpoint: '/dashboard/revenue', method: 'GET', requiresAuth: true },
+      { name: 'Dashboard cashflow', endpoint: '/dashboard/cashflow', method: 'GET', requiresAuth: true },
+      { name: 'Quick stats', endpoint: '/dashboard/quick-stats', method: 'GET', requiresAuth: true },
+      { name: 'Top clients', endpoint: '/dashboard/top-customers', method: 'GET', requiresAuth: true },
+      { name: 'Top produits', endpoint: '/dashboard/top-products', method: 'GET', requiresAuth: true },
+      { name: 'Activité récente', endpoint: '/dashboard/recent-activity', method: 'GET', requiresAuth: true },
+      { name: 'Métriques factures', endpoint: '/dashboard/invoices-metrics', method: 'GET', requiresAuth: true },
+      { name: 'Métriques clients', endpoint: '/dashboard/customer-metrics', method: 'GET', requiresAuth: true },
+      { name: 'Projections', endpoint: '/dashboard/projections', method: 'GET', requiresAuth: true },
       { name: 'Analytics dashboard', endpoint: '/analytics/dashboard', method: 'GET', requiresAuth: true },
       { name: 'Analytics ventes', endpoint: '/analytics/sales', method: 'GET', requiresAuth: true },
       { name: 'Analytics revenue', endpoint: '/analytics/revenue', method: 'GET', requiresAuth: true },
       { name: 'Analytics contacts', endpoint: '/analytics/contacts', method: 'GET', requiresAuth: true },
       { name: 'Revenue summary', endpoint: '/revenue/summary', method: 'GET', requiresAuth: true },
       { name: 'Cashflow forecast', endpoint: '/cashflow/forecast', method: 'GET', requiresAuth: true },
+      { name: 'Cashflow prévisions', endpoint: '/cashflow/forecasts', method: 'GET', requiresAuth: true },
       { name: 'Balance âgée', endpoint: '/aged-balance', method: 'GET', requiresAuth: true },
+      { name: 'Balance fournisseurs', endpoint: '/aged-balance/suppliers', method: 'GET', requiresAuth: true },
     ],
   },
   // ==================== ÉQUIPES ====================
@@ -256,6 +272,9 @@ const TEST_CATEGORIES: TestCategory[] = [
     tests: [
       { name: 'Liste équipes', endpoint: '/teams', method: 'GET', requiresAuth: true },
       { name: 'Permissions', endpoint: '/permissions', method: 'GET', requiresAuth: true },
+      { name: 'Rôles', endpoint: '/permissions/roles', method: 'GET', requiresAuth: true },
+      { name: 'Utilisateurs', endpoint: '/users', method: 'GET', requiresAuth: true },
+      { name: 'Organisations', endpoint: '/organizations', method: 'GET', requiresAuth: true },
     ],
   },
   // ==================== DOCUMENTS ====================
@@ -265,6 +284,7 @@ const TEST_CATEGORIES: TestCategory[] = [
     tests: [
       { name: 'Liste documents', endpoint: '/documents', method: 'GET', requiresAuth: true },
       { name: 'Documents (pagination)', endpoint: '/documents?page=1&limit=10', method: 'GET', requiresAuth: true },
+      { name: 'Documents récents', endpoint: '/documents?sort=created_at&order=desc', method: 'GET', requiresAuth: true },
     ],
   },
   // ==================== EMAILS ====================
@@ -274,6 +294,8 @@ const TEST_CATEGORIES: TestCategory[] = [
     tests: [
       { name: 'Templates email', endpoint: '/emails/templates', method: 'GET', requiresAuth: true },
       { name: 'Campagnes email', endpoint: '/email-campaigns', method: 'GET', requiresAuth: true },
+      { name: 'Historique emails', endpoint: '/email-logs', method: 'GET', requiresAuth: true },
+      { name: 'Paramètres email', endpoint: '/email-settings', method: 'GET', requiresAuth: true },
     ],
   },
   // ==================== WORKFLOWS ====================
@@ -283,6 +305,8 @@ const TEST_CATEGORIES: TestCategory[] = [
     tests: [
       { name: 'Liste workflows', endpoint: '/workflows', method: 'GET', requiresAuth: true },
       { name: 'Workflows (pagination)', endpoint: '/workflows?page=1&limit=10', method: 'GET', requiresAuth: true },
+      { name: 'Modèles workflows', endpoint: '/workflows/templates/list', method: 'GET', requiresAuth: true },
+      { name: 'Créer workflow', endpoint: '/workflows', method: 'POST', body: { name: `Workflow${Date.now()}`, trigger: 'contact_created', enabled: false }, requiresAuth: true },
     ],
   },
   // ==================== TVA & COMPTABILITÉ ====================
@@ -292,9 +316,14 @@ const TEST_CATEGORIES: TestCategory[] = [
     tests: [
       { name: 'Taux TVA', endpoint: '/vat/rates', method: 'GET', requiresAuth: true },
       { name: 'Régime TVA', endpoint: '/vat/regime', method: 'GET', requiresAuth: true },
+      { name: 'Déclaration TVA', endpoint: '/vat/declaration', method: 'GET', requiresAuth: true },
+      { name: 'Factures intracom', endpoint: '/vat/intracom-invoices', method: 'GET', requiresAuth: true },
       { name: 'Export comptable', endpoint: '/accounting/export', method: 'GET', requiresAuth: true },
       { name: 'Export FEC', endpoint: '/accounting/export?format=fec', method: 'GET', requiresAuth: true },
-      { name: 'Factures intracom', endpoint: '/vat/intracom-invoices', method: 'GET', requiresAuth: true },
+      { name: 'Compte de résultat', endpoint: '/accounting/income-statement', method: 'GET', requiresAuth: true },
+      { name: 'Plan comptable', endpoint: '/accounting/chart-of-accounts', method: 'GET', requiresAuth: true },
+      { name: 'Devises', endpoint: '/accounting/currencies', method: 'GET', requiresAuth: true },
+      { name: 'Taux de change', endpoint: '/accounting/exchange-rates', method: 'GET', requiresAuth: true },
     ],
   },
   // ==================== CONFIGURATION ====================
@@ -327,6 +356,10 @@ const TEST_CATEGORIES: TestCategory[] = [
     tests: [
       { name: 'Notifications', endpoint: '/notifications', method: 'GET', requiresAuth: true },
       { name: 'Relances', endpoint: '/reminders', method: 'GET', requiresAuth: true },
+      { name: 'Paramètres relances', endpoint: '/reminders/settings', method: 'GET', requiresAuth: true },
+      { name: 'Factures en retard', endpoint: '/reminders/overdue', method: 'GET', requiresAuth: true },
+      { name: 'File relances', endpoint: '/reminders/queue', method: 'GET', requiresAuth: true },
+      { name: 'Stats relances', endpoint: '/reminders/stats', method: 'GET', requiresAuth: true },
     ],
   },
   // ==================== RECHERCHE & RAPPORTS ====================
@@ -346,6 +379,11 @@ const TEST_CATEGORIES: TestCategory[] = [
     tests: [
       { name: 'Export contacts CSV', endpoint: '/exports/contacts?format=csv', method: 'GET', requiresAuth: true },
       { name: 'Export contacts JSON', endpoint: '/exports/contacts?format=json', method: 'GET', requiresAuth: true },
+      { name: 'Export factures', endpoint: '/exports/invoices', method: 'GET', requiresAuth: true },
+      { name: 'Export devis', endpoint: '/exports/quotes', method: 'GET', requiresAuth: true },
+      { name: 'Export produits', endpoint: '/exports/products', method: 'GET', requiresAuth: true },
+      { name: 'Export clients', endpoint: '/exports/customers', method: 'GET', requiresAuth: true },
+      { name: 'Export paiements', endpoint: '/exports/payments', method: 'GET', requiresAuth: true },
     ],
   },
   // ==================== BANQUE ====================
@@ -353,7 +391,11 @@ const TEST_CATEGORIES: TestCategory[] = [
     name: 'Banque',
     icon: '🏦',
     tests: [
+      { name: 'Vue d\'ensemble', endpoint: '/bank', method: 'GET', requiresAuth: true },
       { name: 'Rapprochement bancaire', endpoint: '/bank/reconciliation', method: 'GET', requiresAuth: true },
+      { name: 'Comptes bancaires', endpoint: '/bank/accounts', method: 'GET', requiresAuth: true },
+      { name: 'Suggestions rapprochement', endpoint: '/bank/suggestions', method: 'GET', requiresAuth: true },
+      { name: 'Stats bancaires', endpoint: '/bank/stats', method: 'GET', requiresAuth: true },
     ],
   },
   // ==================== FACTUR-X ====================
@@ -370,6 +412,27 @@ const TEST_CATEGORIES: TestCategory[] = [
     icon: '📬',
     tests: [
       { name: 'Méthodes livraison', endpoint: '/shipping/methods', method: 'GET', requiresAuth: true },
+      { name: 'Zones livraison', endpoint: '/shipping/zones', method: 'GET', requiresAuth: true },
+    ],
+  },
+  // ==================== WEBHOOKS & INTÉGRATIONS ====================
+  {
+    name: 'Webhooks & API',
+    icon: '🔗',
+    tests: [
+      { name: 'Liste webhooks', endpoint: '/webhooks', method: 'GET', requiresAuth: true },
+      { name: 'Intégrations', endpoint: '/integrations', method: 'GET', requiresAuth: true },
+      { name: 'API Keys', endpoint: '/api-keys', method: 'GET', requiresAuth: true },
+    ],
+  },
+  // ==================== CATALOGUE & VITRINE ====================
+  {
+    name: 'Catalogue',
+    icon: '🛍️',
+    tests: [
+      { name: 'Catalogue public', endpoint: '/catalog', method: 'GET', requiresAuth: true },
+      { name: 'Vitrine', endpoint: '/showcase', method: 'GET', requiresAuth: true },
+      { name: 'Config vitrine', endpoint: '/showcase/config', method: 'GET', requiresAuth: true },
     ],
   },
 ];
