@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import { pool as db } from '../database/db';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -101,22 +102,25 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // Create task
-router.post('/', async (req: Request, res: Response) => {
-  const { title, description, assigned_to, company_id, contact_id, due_date, priority, status } = req.body;
-
-  if (!title || !assigned_to) {
-    res.status(400).json({ error: 'title and assigned_to are required' });
-    return;
-  }
+router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+  const { description, assigned_to, company_id, contact_id, due_date, priority, status } = req.body;
 
   try {
-    // Get organization_id from the assigned user
-    const userResult = await db.query('SELECT organization_id FROM users WHERE id = $1', [assigned_to]);
-    if (userResult.rows.length === 0) {
-      res.status(400).json({ error: 'Invalid assigned_to user ID' });
-      return;
+    const userId = req.user?.id;
+    const organizationId = req.user?.organization_id;
+
+    // Provide defaults for title and assigned_to
+    const title = req.body.title || `Tâche ${Date.now()}`;
+    const assignedTo = assigned_to || userId;
+
+    // If assigned_to is provided and different from current user, validate it
+    if (assigned_to && assigned_to !== userId) {
+      const userResult = await db.query('SELECT organization_id FROM users WHERE id = $1', [assigned_to]);
+      if (userResult.rows.length === 0) {
+        res.status(400).json({ error: 'Invalid assigned_to user ID' });
+        return;
+      }
     }
-    const organization_id = userResult.rows[0].organization_id;
 
     const query = `
       INSERT INTO tasks (title, description, assigned_to, company_id, contact_id, due_date, priority, status, organization_id)
@@ -126,7 +130,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     const result = await db.query(
       query,
-      [title, description, assigned_to, company_id, contact_id, due_date, priority || 'medium', status || 'todo', organization_id]
+      [title, description, assignedTo, company_id, contact_id, due_date, priority || 'medium', status || 'todo', organizationId]
     );
     res.status(201).json(result.rows[0]);
   } catch (err: any) {

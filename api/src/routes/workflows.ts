@@ -20,12 +20,19 @@ interface WorkflowAction {
  */
 router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { organizationId, name, description, trigger, actions, enabled } = req.body;
+    const { description, enabled } = req.body;
     const userId = req.user!.id;
+    // Get organizationId from body or from user token
+    const organizationId = req.body.organizationId || req.user?.organization_id;
 
-    if (!organizationId || !name || !trigger || !actions) {
+    // Provide defaults for required fields if not provided
+    const name = req.body.name || `Workflow ${Date.now()}`;
+    const trigger = req.body.trigger || { type: 'manual', conditions: {} };
+    const actions = req.body.actions || [];
+
+    if (!organizationId) {
       return res.status(400).json({
-        error: 'organizationId, name, trigger et actions sont requis',
+        error: 'organizationId requis (dans body ou token utilisateur)',
       });
     }
 
