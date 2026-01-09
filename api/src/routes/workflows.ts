@@ -43,13 +43,10 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       [organizationId, name, description || null, JSON.stringify(trigger), JSON.stringify(actions), enabled !== false, userId]
     );
 
+    // JSONB columns are automatically parsed by pg driver, no need for JSON.parse
     res.status(201).json({
       success: true,
-      workflow: {
-        ...result.rows[0],
-        trigger: JSON.parse(result.rows[0].trigger),
-        actions: JSON.parse(result.rows[0].actions),
-      },
+      workflow: result.rows[0],
     });
   } catch (error: any) {
     console.error('Erreur lors de la création du workflow:', error);
@@ -85,11 +82,8 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       [organizationId]
     );
 
-    const workflows = result.rows.map(row => ({
-      ...row,
-      trigger: JSON.parse(row.trigger),
-      actions: JSON.parse(row.actions),
-    }));
+    // JSONB columns are automatically parsed by pg driver
+    const workflows = result.rows;
 
     res.json({
       success: true,
@@ -149,9 +143,10 @@ router.get('/executions', authenticateToken, async (req: AuthRequest, res: Respo
 
     const result = await pool.query(query, params);
 
+    // JSONB columns are automatically parsed, handle both cases for safety
     const executions = result.rows.map(row => ({
       ...row,
-      actionsExecuted: row.actions_executed ? JSON.parse(row.actions_executed) : [],
+      actionsExecuted: row.actions_executed || [],
     }));
 
     res.json({
@@ -253,13 +248,10 @@ router.get('/:workflowId', authenticateToken, async (req: AuthRequest, res: Resp
 
     const workflow = result.rows[0];
 
+    // JSONB columns are automatically parsed by pg driver
     res.json({
       success: true,
-      workflow: {
-        ...workflow,
-        trigger: JSON.parse(workflow.trigger),
-        actions: JSON.parse(workflow.actions),
-      },
+      workflow,
     });
   } catch (error: any) {
     console.error('Erreur lors de la récupération du workflow:', error);
@@ -304,13 +296,10 @@ router.put('/:workflowId', authenticateToken, async (req: AuthRequest, res: Resp
 
     const workflow = result.rows[0];
 
+    // JSONB columns are automatically parsed by pg driver
     res.json({
       success: true,
-      workflow: {
-        ...workflow,
-        trigger: JSON.parse(workflow.trigger),
-        actions: JSON.parse(workflow.actions),
-      },
+      workflow,
     });
   } catch (error: any) {
     console.error('Erreur lors de la mise à jour du workflow:', error);
@@ -361,8 +350,9 @@ router.post('/:workflowId/execute', authenticateToken, async (req: AuthRequest, 
     }
 
     const workflow = workflowResult.rows[0];
-    const trigger = JSON.parse(workflow.trigger);
-    const actions = JSON.parse(workflow.actions);
+    // JSONB columns are automatically parsed by pg driver
+    const trigger = workflow.trigger;
+    const actions = workflow.actions;
 
     let executedActions: any[] = [];
     const client = await pool.connect();
@@ -492,9 +482,10 @@ router.get('/:workflowId/executions', authenticateToken, async (req: AuthRequest
       [workflowId]
     );
 
+    // JSONB columns are automatically parsed by pg driver
     const executions = result.rows.map(row => ({
       ...row,
-      actionsExecuted: JSON.parse(row.actions_executed),
+      actionsExecuted: row.actions_executed || [],
     }));
 
     res.json({
