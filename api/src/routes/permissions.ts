@@ -103,10 +103,8 @@ router.get('/roles', authenticateToken, async (req: AuthRequest, res: Response) 
 
     const result = await pool.query(`
       SELECT r.id, r.name, r.description, r.created_at,
-             COUNT(rp.permission_id) as permissions_count
+             COALESCE(jsonb_array_length(r.permissions), 0) as permissions_count
       FROM roles r
-      LEFT JOIN role_permissions rp ON r.id = rp.role_id
-      GROUP BY r.id, r.name, r.description, r.created_at
       ORDER BY r.name
     `);
 

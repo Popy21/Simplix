@@ -264,6 +264,55 @@ router.get('/stats', authenticateToken, requireOrganization, async (req: AuthReq
   }
 });
 
+// Get deleted contacts (full route) - MUST BE BEFORE /:id
+router.get('/deleted/list', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+    const { page = '1', limit = '50' } = req.query;
+    const pageNum = Math.max(1, parseInt(page as string) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 50));
+    const offset = (pageNum - 1) * limitNum;
+
+    const query = `
+      SELECT
+        c.id,
+        c.first_name,
+        c.last_name,
+        c.full_name,
+        c.email,
+        c.phone,
+        c.company_id,
+        co.name as company_name,
+        c.deleted_at,
+        c.created_at
+      FROM contacts c
+      LEFT JOIN companies co ON c.company_id = co.id
+      WHERE c.organization_id = $1 AND c.deleted_at IS NOT NULL
+      ORDER BY c.deleted_at DESC
+      LIMIT $2 OFFSET $3
+    `;
+
+    const result = await pool.query(query, [orgId, limitNum, offset]);
+
+    const countResult = await pool.query(
+      'SELECT COUNT(*) as total FROM contacts WHERE organization_id = $1 AND deleted_at IS NOT NULL',
+      [orgId]
+    );
+
+    res.json({
+      data: result.rows,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: parseInt(countResult.rows[0].total),
+        pages: Math.ceil(parseInt(countResult.rows[0].total) / limitNum)
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get contact by ID
 router.get('/:id', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {
@@ -393,55 +442,6 @@ router.put('/:id', authenticateToken, requireOrganization, async (req: AuthReque
     }
 
     res.json(result.rows[0]);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Get deleted contacts (full route)
-router.get('/deleted/list', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
-  try {
-    const orgId = getOrgIdFromRequest(req);
-    const { page = '1', limit = '50' } = req.query;
-    const pageNum = Math.max(1, parseInt(page as string) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 50));
-    const offset = (pageNum - 1) * limitNum;
-
-    const query = `
-      SELECT
-        c.id,
-        c.first_name,
-        c.last_name,
-        c.full_name,
-        c.email,
-        c.phone,
-        c.company_id,
-        co.name as company_name,
-        c.deleted_at,
-        c.created_at
-      FROM contacts c
-      LEFT JOIN companies co ON c.company_id = co.id
-      WHERE c.organization_id = $1 AND c.deleted_at IS NOT NULL
-      ORDER BY c.deleted_at DESC
-      LIMIT $2 OFFSET $3
-    `;
-
-    const result = await pool.query(query, [orgId, limitNum, offset]);
-
-    const countResult = await pool.query(
-      'SELECT COUNT(*) as total FROM contacts WHERE organization_id = $1 AND deleted_at IS NOT NULL',
-      [orgId]
-    );
-
-    res.json({
-      data: result.rows,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total: parseInt(countResult.rows[0].total),
-        pages: Math.ceil(parseInt(countResult.rows[0].total) / limitNum)
-      }
-    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

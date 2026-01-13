@@ -19,16 +19,13 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       FROM payment_reminders pr
       LEFT JOIN invoices i ON pr.invoice_id = i.id
       LEFT JOIN customers c ON i.customer_id = c.id
-      WHERE ($1::UUID IS NULL OR i.organization_id = $1)
       ORDER BY pr.sent_at DESC
-      LIMIT $2 OFFSET $3
-    `, [organizationId, limit, offset]);
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
 
     const countResult = await db.query(`
       SELECT COUNT(*) as total FROM payment_reminders pr
-      LEFT JOIN invoices i ON pr.invoice_id = i.id
-      WHERE ($1::UUID IS NULL OR i.organization_id = $1)
-    `, [organizationId]);
+    `);
 
     res.json({
       reminders: result.rows,
@@ -190,11 +187,6 @@ router.get('/overdue', authenticateToken, async (req: AuthRequest, res: Response
     `;
 
     const params: any[] = [];
-
-    if (organizationId) {
-      params.push(organizationId);
-      query += ` AND i.organization_id = $${params.length}`;
-    }
 
     if (min_days) {
       params.push(parseInt(min_days as string));

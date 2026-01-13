@@ -838,7 +838,6 @@ router.get('/invoices', authenticateToken, requireOrganization, async (req: Auth
  */
 router.get('/quotes', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {
-    const orgId = getOrgIdFromRequest(req);
     const { from_date, to_date, format = 'json' } = req.query;
 
     const result = await pool.query(`
@@ -853,15 +852,13 @@ router.get('/quotes', authenticateToken, requireOrganization, async (req: AuthRe
         q.tax_amount,
         q.total_amount,
         q.status,
-        q.notes
+        q.title as notes
       FROM quotes q
       LEFT JOIN customers c ON q.customer_id = c.id
-      WHERE q.organization_id = $1
-        AND ($2::DATE IS NULL OR q.created_at >= $2)
-        AND ($3::DATE IS NULL OR q.created_at <= $3)
-        AND q.deleted_at IS NULL
+      WHERE ($1::DATE IS NULL OR q.created_at >= $1)
+        AND ($2::DATE IS NULL OR q.created_at <= $2)
       ORDER BY q.created_at DESC
-    `, [orgId, from_date || null, to_date || null]);
+    `, [from_date || null, to_date || null]);
 
     if (format === 'csv') {
       const headers = ['Numéro', 'Date', 'Validité', 'Client', 'Email', 'HT', 'TVA', 'TTC', 'Statut'];
@@ -950,7 +947,6 @@ router.get('/products', authenticateToken, requireOrganization, async (req: Auth
  */
 router.get('/customers', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {
-    const orgId = getOrgIdFromRequest(req);
     const { format = 'json' } = req.query;
 
     const result = await pool.query(`
@@ -961,18 +957,13 @@ router.get('/customers', authenticateToken, requireOrganization, async (req: Aut
         c.phone,
         c.company,
         c.address,
-        c.city,
-        c.postal_code,
-        c.country,
-        c.tax_id,
         c.created_at
       FROM customers c
-      WHERE c.organization_id = $1 AND c.deleted_at IS NULL
       ORDER BY c.name
-    `, [orgId]);
+    `);
 
     if (format === 'csv') {
-      const headers = ['Nom', 'Email', 'Téléphone', 'Société', 'Adresse', 'Ville', 'Code postal', 'Pays', 'N° TVA', 'Date création'];
+      const headers = ['Nom', 'Email', 'Téléphone', 'Société', 'Adresse', 'Date création'];
       let csv = headers.join(';') + '\n';
       for (const row of result.rows) {
         csv += [
@@ -981,10 +972,6 @@ router.get('/customers', authenticateToken, requireOrganization, async (req: Aut
           row.phone || '',
           `"${row.company || ''}"`,
           `"${row.address || ''}"`,
-          `"${row.city || ''}"`,
-          row.postal_code || '',
-          row.country || '',
-          row.tax_id || '',
           new Date(row.created_at).toLocaleDateString('fr-FR')
         ].join(';') + '\n';
       }

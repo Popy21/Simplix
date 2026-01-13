@@ -41,6 +41,96 @@ router.get('/dashboard', async (req: Request, res: Response) => {
   }
 });
 
+// Get analytics overview - combines key metrics
+router.get('/overview', async (req: Request, res: Response) => {
+  try {
+    const { period = 'month' } = req.query;
+    const now = new Date();
+    let startDate: Date;
+
+    switch (period) {
+      case 'week':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      case 'quarter':
+        const quarter = Math.floor(now.getMonth() / 3);
+        startDate = new Date(now.getFullYear(), quarter * 3, 1);
+        break;
+      case 'month':
+      default:
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    const [revenue, invoices, quotes, contacts, products] = await Promise.all([
+      db.query(`
+        SELECT
+          COALESCE(SUM(total_amount), 0) as total_revenue,
+          COUNT(*) as invoice_count
+        FROM invoices
+        WHERE status = 'paid' AND invoice_date >= $1
+      `, [startDate]),
+
+      db.query(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE status = 'paid') as paid,
+          COUNT(*) FILTER (WHERE status IN ('sent', 'pending')) as pending,
+          COUNT(*) FILTER (WHERE status = 'overdue') as overdue
+        FROM invoices WHERE invoice_date >= $1
+      `, [startDate]),
+
+      db.query(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE status = 'accepted') as accepted,
+          COUNT(*) FILTER (WHERE status = 'sent') as pending,
+          COALESCE(SUM(total_amount) FILTER (WHERE status = 'accepted'), 0) as accepted_value
+        FROM quotes WHERE created_at >= $1
+      `, [startDate]),
+
+      db.query(`
+        SELECT COUNT(*) as total FROM contacts WHERE deleted_at IS NULL
+      `),
+
+      db.query(`
+        SELECT COUNT(*) as total FROM products WHERE deleted_at IS NULL
+      `)
+    ]);
+
+    res.json({
+      period,
+      startDate,
+      revenue: {
+        total: parseFloat(revenue.rows[0].total_revenue) || 0,
+        invoiceCount: parseInt(revenue.rows[0].invoice_count) || 0
+      },
+      invoices: {
+        total: parseInt(invoices.rows[0].total) || 0,
+        paid: parseInt(invoices.rows[0].paid) || 0,
+        pending: parseInt(invoices.rows[0].pending) || 0,
+        overdue: parseInt(invoices.rows[0].overdue) || 0
+      },
+      quotes: {
+        total: parseInt(quotes.rows[0].total) || 0,
+        accepted: parseInt(quotes.rows[0].accepted) || 0,
+        pending: parseInt(quotes.rows[0].pending) || 0,
+        acceptedValue: parseFloat(quotes.rows[0].accepted_value) || 0
+      },
+      contacts: {
+        total: parseInt(contacts.rows[0].total) || 0
+      },
+      products: {
+        total: parseInt(products.rows[0].total) || 0
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get sales analytics summary
 router.get('/sales', async (req: Request, res: Response) => {
   try {

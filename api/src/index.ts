@@ -208,7 +208,7 @@ app.get('/api/users', authenticateToken, async (req: any, res: Response) => {
   try {
     const organizationId = req.user?.organization_id;
     const result = await pool.query(`
-      SELECT id, email, first_name, last_name, role, status, avatar_url, created_at
+      SELECT id, email, first_name, last_name, status, avatar_url, created_at
       FROM users
       WHERE organization_id = $1 AND deleted_at IS NULL
       ORDER BY last_name, first_name

@@ -402,6 +402,37 @@ router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) 
 });
 
 /**
+ * GET /api/leads/stats/distribution
+ * Statistiques de distribution des leads par score
+ */
+router.get('/stats/distribution', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = '00000000-0000-0000-0000-000000000001';
+
+    const result = await db.query(
+      `SELECT
+        COUNT(*) FILTER (WHERE score >= 0 AND score < 20) as very_cold,
+        COUNT(*) FILTER (WHERE score >= 20 AND score < 40) as cold,
+        COUNT(*) FILTER (WHERE score >= 40 AND score < 60) as warm,
+        COUNT(*) FILTER (WHERE score >= 60 AND score < 80) as hot,
+        COUNT(*) FILTER (WHERE score >= 80) as very_hot,
+        AVG(score) as avg_score,
+        MAX(score) as max_score,
+        MIN(score) as min_score,
+        COUNT(*) as total_leads
+      FROM contacts
+      WHERE organization_id = $1 AND deleted_at IS NULL`,
+      [orgId]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    console.error('Error fetching lead distribution:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/leads/:id
  * Récupérer les détails d'un lead avec scoring breakdown
  */
@@ -501,37 +532,6 @@ router.post('/:id/assign', authenticateToken, async (req: AuthRequest, res: Resp
     res.json(result.rows[0]);
   } catch (err: any) {
     console.error('Error assigning lead:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * GET /api/leads/stats/distribution
- * Statistiques de distribution des leads par score
- */
-router.get('/stats/distribution', authenticateToken, async (req: AuthRequest, res: Response) => {
-  try {
-    const orgId = '00000000-0000-0000-0000-000000000001';
-
-    const result = await db.query(
-      `SELECT
-        COUNT(*) FILTER (WHERE score >= 0 AND score < 20) as very_cold,
-        COUNT(*) FILTER (WHERE score >= 20 AND score < 40) as cold,
-        COUNT(*) FILTER (WHERE score >= 40 AND score < 60) as warm,
-        COUNT(*) FILTER (WHERE score >= 60 AND score < 80) as hot,
-        COUNT(*) FILTER (WHERE score >= 80) as very_hot,
-        AVG(score) as avg_score,
-        MAX(score) as max_score,
-        MIN(score) as min_score,
-        COUNT(*) as total_leads
-      FROM contacts
-      WHERE organization_id = $1 AND deleted_at IS NULL`,
-      [orgId]
-    );
-
-    res.json(result.rows[0]);
-  } catch (err: any) {
-    console.error('Error fetching lead stats:', err);
     res.status(500).json({ error: err.message });
   }
 });

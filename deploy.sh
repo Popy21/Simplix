@@ -40,15 +40,32 @@ remote_exec "
 echo -e "${GREEN}✅ Database migrations completed${NC}"
 echo ""
 
-# Step 2: Pull latest code
+# Step 2: Pull latest code (preserve uploads folder)
 echo -e "${YELLOW}📥 Step 2/5: Pulling latest code from Git...${NC}"
 remote_exec "
     cd $APP_DIR
+    # Backup uploads folder before git operations
+    if [ -d api/uploads ]; then
+        cp -r api/uploads /tmp/simplix_uploads_backup
+    fi
+
     git fetch origin main
     git reset --hard origin/main
-    git clean -fd
+    git clean -fd -e 'api/uploads'
+
+    # Restore uploads folder if backup exists
+    if [ -d /tmp/simplix_uploads_backup ]; then
+        mkdir -p api/uploads
+        cp -r /tmp/simplix_uploads_backup/* api/uploads/ 2>/dev/null || true
+        rm -rf /tmp/simplix_uploads_backup
+    fi
+
+    # Ensure uploads directory exists with correct permissions
+    mkdir -p api/uploads
+    chown -R www-data:www-data api/uploads
+    chmod 755 api/uploads
 "
-echo -e "${GREEN}✅ Code updated${NC}"
+echo -e "${GREEN}✅ Code updated (uploads preserved)${NC}"
 echo ""
 
 # Step 3: Build and deploy backend API

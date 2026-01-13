@@ -181,6 +181,39 @@ router.get('/conversion-rate',
  * GET /api/deals/stats
  * Alias pour stats/summary (pour compatibilité)
  */
+/**
+ * GET /api/deals/stats/summary
+ * Récupérer les statistiques résumées des deals
+ */
+router.get('/stats/summary',
+  authenticateToken,
+  requireOrganization,
+  async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = getOrgIdFromRequest(req);
+
+    const result = await db.query(
+      `SELECT
+        COUNT(*) as total_deals,
+        COUNT(*) FILTER (WHERE status = 'open') as open_deals,
+        COUNT(*) FILTER (WHERE status = 'won') as won_deals,
+        COUNT(*) FILTER (WHERE status = 'lost') as lost_deals,
+        COALESCE(SUM(value), 0) as total_value,
+        COALESCE(SUM(value) FILTER (WHERE status = 'open'), 0) as open_value,
+        COALESCE(SUM(value) FILTER (WHERE status = 'won'), 0) as won_value,
+        AVG(probability) as avg_probability
+      FROM deals
+      WHERE organization_id = $1 AND deleted_at IS NULL`,
+      [orgId]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    console.error('Error fetching deal stats summary:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/stats',
   authenticateToken,
   requireOrganization,
@@ -722,40 +755,6 @@ router.post('/:id/add-activity',
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
     console.error('Error adding activity:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * GET /api/deals/stats/summary
- * Récupérer les statistiques des deals
- */
-router.get('/stats/summary', 
-  authenticateToken, 
-  requireOrganization,
-  async (req: AuthRequest, res: Response) => {
-  try {
-    const orgId = getOrgIdFromRequest(req);
-
-    const result = await db.query(
-      `SELECT 
-        COUNT(*) as total_deals,
-        COUNT(*) FILTER (WHERE status = 'open') as open_deals,
-        COUNT(*) FILTER (WHERE status = 'won') as won_deals,
-        COUNT(*) FILTER (WHERE status = 'lost') as lost_deals,
-        COALESCE(SUM(value), 0) as total_value,
-        COALESCE(SUM(value) FILTER (WHERE status = 'open'), 0) as open_value,
-        COALESCE(SUM(value) FILTER (WHERE status = 'won'), 0) as won_value,
-        AVG(probability) as avg_probability,
-        AVG(EXTRACT(DAY FROM (expected_close_date - created_at::timestamp))) as avg_days_in_pipeline
-      FROM deals
-      WHERE organization_id = $1 AND deleted_at IS NULL`,
-      [orgId]
-    );
-
-    res.json(result.rows[0]);
-  } catch (err: any) {
-    console.error('Error fetching deal stats:', err);
     res.status(500).json({ error: err.message });
   }
 });

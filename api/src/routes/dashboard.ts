@@ -325,7 +325,7 @@ router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) 
       db.query(`
         SELECT
           COUNT(*) as total,
-          COUNT(*) FILTER (WHERE track_stock = true AND stock_quantity <= COALESCE(stock_min_alert, 0)) as low_stock
+          COUNT(*) FILTER (WHERE stock_quantity <= 5) as low_stock
         FROM products WHERE organization_id = $1 AND deleted_at IS NULL
       `, [organizationId])
     ]);

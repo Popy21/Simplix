@@ -60,6 +60,21 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         show_payment_terms,
         show_bank_details,
         show_legal_mentions,
+        cgv_text,
+        custom_note,
+        footer_custom_text,
+        background_image_url,
+        decimal_places,
+        column_description_label,
+        column_quantity_label,
+        column_unit_price_label,
+        column_vat_label,
+        column_total_label,
+        show_cgv,
+        show_custom_note,
+        date_format,
+        currency_symbol,
+        currency_position,
         created_at,
         updated_at
       FROM invoice_templates
@@ -132,6 +147,21 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
         show_payment_terms,
         show_bank_details,
         show_legal_mentions,
+        cgv_text,
+        custom_note,
+        footer_custom_text,
+        background_image_url,
+        decimal_places,
+        column_description_label,
+        column_quantity_label,
+        column_unit_price_label,
+        column_vat_label,
+        column_total_label,
+        show_cgv,
+        show_custom_note,
+        date_format,
+        currency_symbol,
+        currency_position,
         created_at,
         updated_at
       FROM invoice_templates
@@ -259,6 +289,22 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       show_payment_terms,
       show_bank_details,
       show_legal_mentions,
+      // New fields
+      cgv_text,
+      custom_note,
+      footer_custom_text,
+      background_image_url,
+      decimal_places,
+      column_description_label,
+      column_quantity_label,
+      column_unit_price_label,
+      column_vat_label,
+      column_total_label,
+      show_cgv,
+      show_custom_note,
+      date_format,
+      currency_symbol,
+      currency_position,
     } = req.body;
 
     if (!name) {
@@ -294,12 +340,17 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
           table_header_description, table_header_quantity, table_header_unit_price, table_header_total,
           sample_item_description, subtotal_label, vat_label, total_label,
           payment_terms, bank_iban, bank_bic, bank_name,
-          show_logo, show_header, show_footer, show_payment_terms, show_bank_details, show_legal_mentions
+          show_logo, show_header, show_footer, show_payment_terms, show_bank_details, show_legal_mentions,
+          cgv_text, custom_note, footer_custom_text, background_image_url,
+          decimal_places, column_description_label, column_quantity_label, column_unit_price_label,
+          column_vat_label, column_total_label, show_cgv, show_custom_note,
+          date_format, currency_symbol, currency_position
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
           $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28,
           $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41,
-          $42, $43, $44, $45, $46, $47, $48, $49, $50
+          $42, $43, $44, $45, $46, $47, $48, $49, $50,
+          $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65
         )
         RETURNING *
       `, [
@@ -309,14 +360,19 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         is_micro_entreprise || false, late_payment_penalty, recovery_indemnity,
         primary_color || '#2563EB', secondary_color, text_color, secondary_text_color,
         table_header_color, border_color, header_background_color, total_color,
-        template_layout || 'professional', font_family, header_text, footer_text,
+        template_layout || 'professional', font_family || 'Inter', header_text, footer_text,
         invoice_title, invoice_number_prefix, client_label,
         client_name_placeholder, client_address_placeholder,
         table_header_description, table_header_quantity, table_header_unit_price, table_header_total,
         sample_item_description, subtotal_label, vat_label, total_label,
         payment_terms, bank_iban, bank_bic, bank_name,
         show_logo !== false, show_header !== false, show_footer !== false,
-        show_payment_terms !== false, show_bank_details !== false, show_legal_mentions !== false
+        show_payment_terms !== false, show_bank_details !== false, show_legal_mentions !== false,
+        cgv_text, custom_note, footer_custom_text, background_image_url,
+        decimal_places || 2, column_description_label || 'Description', column_quantity_label || 'Quantité',
+        column_unit_price_label || 'Prix unitaire', column_vat_label || 'TVA', column_total_label || 'Total',
+        show_cgv !== false, show_custom_note || false,
+        date_format || 'dd/MM/yyyy', currency_symbol || '€', currency_position || 'after'
       ]);
 
       await client.query('COMMIT');
@@ -389,6 +445,22 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
       show_payment_terms,
       show_bank_details,
       show_legal_mentions,
+      // New fields
+      cgv_text,
+      custom_note,
+      footer_custom_text,
+      background_image_url,
+      decimal_places,
+      column_description_label,
+      column_quantity_label,
+      column_unit_price_label,
+      column_vat_label,
+      column_total_label,
+      show_cgv,
+      show_custom_note,
+      date_format,
+      currency_symbol,
+      currency_position,
     } = req.body;
 
     const client = await pool.connect();
@@ -424,8 +496,12 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
           payment_terms = $41, bank_iban = $42, bank_bic = $43, bank_name = $44,
           show_logo = $45, show_header = $46, show_footer = $47,
           show_payment_terms = $48, show_bank_details = $49, show_legal_mentions = $50,
+          cgv_text = $51, custom_note = $52, footer_custom_text = $53, background_image_url = $54,
+          decimal_places = $55, column_description_label = $56, column_quantity_label = $57,
+          column_unit_price_label = $58, column_vat_label = $59, column_total_label = $60,
+          show_cgv = $61, show_custom_note = $62, date_format = $63, currency_symbol = $64, currency_position = $65,
           updated_at = NOW()
-        WHERE id = $51
+        WHERE id = $66
         RETURNING *
       `, [
         name, is_default, logo_url,
@@ -444,6 +520,10 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
         payment_terms, bank_iban, bank_bic, bank_name,
         show_logo, show_header, show_footer,
         show_payment_terms, show_bank_details, show_legal_mentions,
+        cgv_text, custom_note, footer_custom_text, background_image_url,
+        decimal_places, column_description_label, column_quantity_label,
+        column_unit_price_label, column_vat_label, column_total_label,
+        show_cgv, show_custom_note, date_format, currency_symbol, currency_position,
         id,
       ]);
 

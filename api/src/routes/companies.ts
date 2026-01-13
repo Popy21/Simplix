@@ -10,36 +10,33 @@ const router = express.Router();
 router.get('/', authenticateToken, requireOrganization, async (req: AuthRequest, res: Response) => {
   try {
     const orgId = getOrgIdFromRequest(req);
-    const { is_professional } = req.query;
 
     let query = `SELECT
         id,
         name,
+        legal_name,
         industry,
         website,
         logo_url,
         phone,
         email,
         address,
-        siret,
-        tva_number,
-        is_professional,
-        payment_terms_days,
-        credit_limit,
-        billing_address,
-        shipping_address,
-        ape_code,
+        company_size,
+        annual_revenue,
+        description,
+        linkedin_url,
+        twitter_url,
+        facebook_url,
+        owner_id,
+        assigned_to,
+        tags,
+        custom_fields,
         created_at,
         updated_at
       FROM companies
       WHERE organization_id = $1 AND deleted_at IS NULL`;
 
     const params: any[] = [orgId];
-
-    if (is_professional !== undefined) {
-      query += ` AND is_professional = $2`;
-      params.push(is_professional === 'true');
-    }
 
     query += ` ORDER BY name ASC`;
 
@@ -61,20 +58,23 @@ router.get('/:id', authenticateToken, requireOrganization, async (req: AuthReque
       `SELECT
         id,
         name,
+        legal_name,
         industry,
         website,
         logo_url,
         phone,
         email,
         address,
-        siret,
-        tva_number,
-        is_professional,
-        payment_terms_days,
-        credit_limit,
-        billing_address,
-        shipping_address,
-        ape_code,
+        company_size,
+        annual_revenue,
+        description,
+        linkedin_url,
+        twitter_url,
+        facebook_url,
+        owner_id,
+        assigned_to,
+        tags,
+        custom_fields,
         created_at,
         updated_at
       FROM companies
@@ -98,22 +98,24 @@ router.post('/', authenticateToken, requireOrganization, async (req: AuthRequest
   try {
     const {
       name,
+      legal_name,
       industry,
       website,
       logo_url,
       phone,
       email,
       address,
-      siret,
-      tva_number,
-      is_professional,
-      payment_terms_days,
-      credit_limit,
-      billing_address,
-      shipping_address,
-      ape_code
+      company_size,
+      annual_revenue,
+      description,
+      linkedin_url,
+      twitter_url,
+      facebook_url,
+      tags,
+      custom_fields
     } = req.body;
     const orgId = getOrgIdFromRequest(req);
+    const userId = req.user?.id;
 
     if (!name) {
       res.status(400).json({ error: 'Name is required' });
@@ -134,39 +136,27 @@ router.post('/', authenticateToken, requireOrganization, async (req: AuthRequest
     };
 
     const addressData = parseAddress(address);
-    const billingData = parseAddress(billing_address);
-    const shippingData = parseAddress(shipping_address);
 
     const result = await pool.query(
       `INSERT INTO companies (
-        organization_id, name, industry, website, logo_url, phone, email, address,
-        siret, tva_number, is_professional, payment_terms_days, credit_limit,
-        billing_address, shipping_address, ape_code
+        organization_id, name, legal_name, industry, website, logo_url, phone, email, address,
+        company_size, annual_revenue, description, linkedin_url, twitter_url, facebook_url,
+        owner_id, created_by, tags, custom_fields
       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16, $17, $18)
        RETURNING *`,
       [
-        orgId, name, industry, website, logo_url, phone, email,
-        addressData ? JSON.stringify(addressData) : null,
-        siret || null,
-        tva_number || null,
-        is_professional || false,
-        payment_terms_days || 30,
-        credit_limit || null,
-        billingData ? JSON.stringify(billingData) : null,
-        shippingData ? JSON.stringify(shippingData) : null,
-        ape_code || null
+        orgId, name, legal_name || null, industry || null, website || null, logo_url || null,
+        phone || null, email || null, addressData ? JSON.stringify(addressData) : null,
+        company_size || null, annual_revenue || null, description || null,
+        linkedin_url || null, twitter_url || null, facebook_url || null,
+        userId, tags || null, custom_fields || '{}'
       ]
     );
 
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
     console.error('Error creating company:', err);
-    // Handle SIRET/TVA validation errors from triggers
-    if (err.message.includes('SIRET') || err.message.includes('TVA')) {
-      res.status(400).json({ error: err.message });
-      return;
-    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -177,20 +167,22 @@ router.put('/:id', authenticateToken, requireOrganization, async (req: AuthReque
     const { id } = req.params;
     const {
       name,
+      legal_name,
       industry,
       website,
       logo_url,
       phone,
       email,
       address,
-      siret,
-      tva_number,
-      is_professional,
-      payment_terms_days,
-      credit_limit,
-      billing_address,
-      shipping_address,
-      ape_code
+      company_size,
+      annual_revenue,
+      description,
+      linkedin_url,
+      twitter_url,
+      facebook_url,
+      assigned_to,
+      tags,
+      custom_fields
     } = req.body;
     const orgId = getOrgIdFromRequest(req);
 
@@ -208,28 +200,21 @@ router.put('/:id', authenticateToken, requireOrganization, async (req: AuthReque
     };
 
     const addressData = parseAddress(address);
-    const billingData = parseAddress(billing_address);
-    const shippingData = parseAddress(shipping_address);
 
     const result = await pool.query(
       `UPDATE companies
-       SET name = $1, industry = $2, website = $3, logo_url = $4, phone = $5, email = $6,
-           address = $7, siret = $8, tva_number = $9, is_professional = $10,
-           payment_terms_days = $11, credit_limit = $12, billing_address = $13,
-           shipping_address = $14, ape_code = $15, updated_at = NOW()
-       WHERE id = $16 AND organization_id = $17 AND deleted_at IS NULL
+       SET name = $1, legal_name = $2, industry = $3, website = $4, logo_url = $5, phone = $6,
+           email = $7, address = $8, company_size = $9, annual_revenue = $10, description = $11,
+           linkedin_url = $12, twitter_url = $13, facebook_url = $14, assigned_to = $15,
+           tags = $16, custom_fields = COALESCE($17, custom_fields), updated_at = NOW()
+       WHERE id = $18 AND organization_id = $19 AND deleted_at IS NULL
        RETURNING *`,
       [
-        name, industry, website, logo_url, phone, email,
-        addressData ? JSON.stringify(addressData) : null,
-        siret || null,
-        tva_number || null,
-        is_professional !== undefined ? is_professional : false,
-        payment_terms_days || 30,
-        credit_limit || null,
-        billingData ? JSON.stringify(billingData) : null,
-        shippingData ? JSON.stringify(shippingData) : null,
-        ape_code || null,
+        name, legal_name || null, industry || null, website || null, logo_url || null,
+        phone || null, email || null, addressData ? JSON.stringify(addressData) : null,
+        company_size || null, annual_revenue || null, description || null,
+        linkedin_url || null, twitter_url || null, facebook_url || null,
+        assigned_to || null, tags || null, custom_fields,
         id, orgId
       ]
     );
@@ -242,11 +227,6 @@ router.put('/:id', authenticateToken, requireOrganization, async (req: AuthReque
     res.json(result.rows[0]);
   } catch (err: any) {
     console.error('Error updating company:', err);
-    // Handle SIRET/TVA validation errors from triggers
-    if (err.message.includes('SIRET') || err.message.includes('TVA')) {
-      res.status(400).json({ error: err.message });
-      return;
-    }
     res.status(500).json({ error: err.message });
   }
 });

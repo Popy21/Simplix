@@ -441,32 +441,30 @@ router.get('/declaration', authenticateToken, async (req: AuthRequest, res: Resp
     // TVA collectée (ventes)
     const salesResult = await db.query(`
       SELECT
-        COALESCE(ii.vat_rate, 20) as taux,
-        SUM(ii.subtotal) as base_ht,
-        SUM(COALESCE(ii.vat_amount, ii.subtotal * COALESCE(ii.vat_rate, 20) / 100)) as tva_collectee
+        COALESCE(ii.tax_rate, 20) as taux,
+        SUM(ii.quantity * ii.unit_price) as base_ht,
+        SUM(COALESCE(ii.total_price - (ii.quantity * ii.unit_price), (ii.quantity * ii.unit_price) * COALESCE(ii.tax_rate, 20) / 100)) as tva_collectee
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE i.invoice_date >= $1 AND i.invoice_date <= $2
         AND i.status NOT IN ('draft', 'cancelled')
-        AND i.deleted_at IS NULL
-        AND ($3::UUID IS NULL OR i.organization_id = $3)
-      GROUP BY ii.vat_rate
-      ORDER BY ii.vat_rate DESC
-    `, [startDate, endDate, organizationId]);
+      GROUP BY ii.tax_rate
+      ORDER BY ii.tax_rate DESC
+    `, [startDate, endDate]);
 
     // TVA déductible (achats)
     const purchasesResult = await db.query(`
       SELECT
-        COALESCE(e.vat_rate, 20) as taux,
+        20 as taux,
         SUM(e.amount) as base_ht,
-        SUM(COALESCE(e.tax_amount, e.amount * COALESCE(e.vat_rate, 20) / 100)) as tva_deductible
+        SUM(COALESCE(e.tax_amount, e.amount * 20 / 100)) as tva_deductible
       FROM expenses e
       WHERE e.expense_date >= $1 AND e.expense_date <= $2
-        AND e.status NOT IN ('draft', 'cancelled')
+        AND e.status IN ('approved', 'paid')
         AND e.deleted_at IS NULL
         AND ($3::UUID IS NULL OR e.organization_id = $3)
-      GROUP BY e.vat_rate
-      ORDER BY e.vat_rate DESC
+      GROUP BY 1
+      ORDER BY 1 DESC
     `, [startDate, endDate, organizationId]);
 
     // Calculate totals

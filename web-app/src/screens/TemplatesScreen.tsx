@@ -19,7 +19,7 @@ import { Picker } from '@react-native-picker/picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { toAbsoluteUrl } from '../utils/url';
-import { FileTextIcon, EditIcon, TrashIcon, CheckCircleIcon } from '../components/Icons';
+import { FileTextIcon, EditIcon, TrashIcon, CheckCircleIcon, EyeIcon } from '../components/Icons';
 import { templatesService, uploadService, companyProfileService } from '../services/api';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -87,6 +87,22 @@ interface InvoiceTemplate {
   show_payment_terms: boolean;
   show_bank_details: boolean;
   show_legal_mentions?: boolean;
+  // New advanced fields
+  cgv_text?: string;
+  custom_note?: string;
+  footer_custom_text?: string;
+  background_image_url?: string;
+  decimal_places?: number;
+  column_description_label?: string;
+  column_quantity_label?: string;
+  column_unit_price_label?: string;
+  column_vat_label?: string;
+  column_total_label?: string;
+  show_cgv?: boolean;
+  show_custom_note?: boolean;
+  date_format?: string;
+  currency_symbol?: string;
+  currency_position?: 'before' | 'after';
   created_at?: string;
   updated_at?: string;
 }
@@ -104,6 +120,8 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
   const [activeEditField, setActiveEditField] = useState<string | null>(null);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState<{ id: string; name: string; is_default: boolean } | null>(null);
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [editingInline, setEditingInline] = useState<string | null>(null);
   const [companyProfileModalVisible, setCompanyProfileModalVisible] = useState(false);
   const [companyProfileData, setCompanyProfileData] = useState<any>({
@@ -187,6 +205,22 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
     show_payment_terms: true,
     show_bank_details: true,
     show_legal_mentions: true,
+    // New fields
+    cgv_text: 'Conditions générales de vente disponibles sur demande.',
+    custom_note: '',
+    footer_custom_text: '',
+    background_image_url: '',
+    decimal_places: 2,
+    column_description_label: 'Description',
+    column_quantity_label: 'Quantité',
+    column_unit_price_label: 'Prix unitaire HT',
+    column_vat_label: 'TVA',
+    column_total_label: 'Total HT',
+    show_cgv: true,
+    show_custom_note: false,
+    date_format: 'dd/MM/yyyy',
+    currency_symbol: '€',
+    currency_position: 'after',
   });
 
   useEffect(() => {
@@ -323,8 +357,49 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
       show_payment_terms: true,
       show_bank_details: true,
       show_legal_mentions: true,
+      // New fields
+      cgv_text: 'Conditions générales de vente disponibles sur demande.',
+      custom_note: '',
+      footer_custom_text: '',
+      background_image_url: '',
+      decimal_places: 2,
+      column_description_label: 'Description',
+      column_quantity_label: 'Quantité',
+      column_unit_price_label: 'Prix unitaire HT',
+      column_vat_label: 'TVA',
+      column_total_label: 'Total HT',
+      show_cgv: true,
+      show_custom_note: false,
+      date_format: 'dd/MM/yyyy',
+      currency_symbol: '€',
+      currency_position: 'after',
     });
     setModalVisible(true);
+  };
+
+  // Parser l'adresse combinée en champs séparés
+  const parseAddress = (address: string | undefined) => {
+    if (!address) return { street: '', postal_code: '', city: '' };
+    const parts = address.split(',').map(p => p.trim());
+    if (parts.length >= 3) {
+      return {
+        street: parts[0],
+        postal_code: parts[1],
+        city: parts.slice(2).join(', ')
+      };
+    } else if (parts.length === 2) {
+      // Essayer de détecter le code postal (5 chiffres)
+      const postalMatch = parts[1].match(/^(\d{5})\s*(.*)$/);
+      if (postalMatch) {
+        return {
+          street: parts[0],
+          postal_code: postalMatch[1],
+          city: postalMatch[2] || ''
+        };
+      }
+      return { street: parts[0], postal_code: '', city: parts[1] };
+    }
+    return { street: address, postal_code: '', city: '' };
   };
 
   const openEditModal = (template: InvoiceTemplate) => {
@@ -332,7 +407,15 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
     setPreviewMode(false);
     setSidebarVisible(false);
     setActiveEditField(null);
-    setFormData(template);
+
+    // Parser l'adresse si elle existe
+    const parsedAddress = parseAddress((template as any).company_address);
+    setFormData({
+      ...template,
+      company_street: template.company_street || parsedAddress.street,
+      company_postal_code: template.company_postal_code || parsedAddress.postal_code,
+      company_city: template.company_city || parsedAddress.city,
+    });
     setModalVisible(true);
   };
 
@@ -341,13 +424,29 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
     setPreviewMode(true);
     setSidebarVisible(false);
     setActiveEditField(null);
-    setFormData(template);
+
+    // Parser l'adresse si elle existe
+    const parsedAddress = parseAddress((template as any).company_address);
+    setFormData({
+      ...template,
+      company_street: template.company_street || parsedAddress.street,
+      company_postal_code: template.company_postal_code || parsedAddress.postal_code,
+      company_city: template.company_city || parsedAddress.city,
+    });
     setModalVisible(true);
+  };
+
+  const showError = (message: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(message);
+    } else {
+      Alert.alert('Erreur', message);
+    }
   };
 
   const validateForm = (): boolean => {
     if (!formData.name?.trim()) {
-      Alert.alert('Erreur', 'Le nom du template est obligatoire');
+      showError('Le nom du template est obligatoire');
       // Déclencher le clignotement et ouvrir la sidebar
       setBlinkNameHint(true);
       setSidebarVisible(true);
@@ -355,31 +454,38 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
       return false;
     }
     if (!formData.company_name?.trim()) {
-      Alert.alert('Erreur', 'Le nom de l\'entreprise est obligatoire');
+      showError('Le nom de l\'entreprise est obligatoire');
+      setSidebarVisible(true);
       return false;
     }
     if (!formData.company_siret?.trim()) {
-      Alert.alert('Erreur', 'Le SIRET est obligatoire (14 chiffres)');
+      showError('Le SIRET est obligatoire (14 chiffres)');
+      setSidebarVisible(true);
       return false;
     }
     if (formData.company_siret && !/^\d{14}$/.test(formData.company_siret)) {
-      Alert.alert('Erreur', 'Le SIRET doit contenir exactement 14 chiffres');
+      showError('Le SIRET doit contenir exactement 14 chiffres');
+      setSidebarVisible(true);
       return false;
     }
     if (!formData.company_street?.trim()) {
-      Alert.alert('Erreur', 'La rue de l\'entreprise est obligatoire');
+      showError('La rue de l\'entreprise est obligatoire');
+      setSidebarVisible(true);
       return false;
     }
     if (!formData.company_postal_code?.trim()) {
-      Alert.alert('Erreur', 'Le code postal est obligatoire');
+      showError('Le code postal est obligatoire');
+      setSidebarVisible(true);
       return false;
     }
     if (!formData.company_city?.trim()) {
-      Alert.alert('Erreur', 'La ville est obligatoire');
+      showError('La ville est obligatoire');
+      setSidebarVisible(true);
       return false;
     }
     if (!formData.company_legal_form?.trim()) {
-      Alert.alert('Erreur', 'La forme juridique est obligatoire');
+      showError('La forme juridique est obligatoire');
+      setSidebarVisible(true);
       return false;
     }
     // RCS est optionnel - juste un warning si absent
@@ -394,18 +500,31 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
 
     try {
       setLoading(true);
+
+      // Combiner les champs d'adresse en company_address pour l'API
+      const dataToSend = {
+        ...formData,
+        company_address: [
+          formData.company_street,
+          formData.company_postal_code,
+          formData.company_city
+        ].filter(Boolean).join(', ')
+      };
+
       if (editMode && formData.id) {
-        await templatesService.update(formData.id, formData);
-        Alert.alert('Succès', 'Template mis à jour avec succès');
+        await templatesService.update(formData.id, dataToSend);
+        setSuccessMessage('Template mis à jour avec succès');
       } else {
-        await templatesService.create(formData);
-        Alert.alert('Succès', 'Template créé avec succès');
+        await templatesService.create(dataToSend);
+        setSuccessMessage('Template créé avec succès');
       }
       setModalVisible(false);
+      setSuccessModalVisible(true);
+      setTimeout(() => setSuccessModalVisible(false), 2000);
       fetchTemplates();
     } catch (error) {
       console.error('Error saving template:', error);
-      Alert.alert('Erreur', 'Impossible de sauvegarder le template');
+      showError('Impossible de sauvegarder le template');
     } finally {
       setLoading(false);
     }
@@ -714,14 +833,30 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
               placeholderTextColor="#9CA3AF"
             />
             <TextInput
-              style={[styles.sidebarInput, styles.sidebarInputMultiline]}
-              value={formData.company_address}
-              onChangeText={(text) => setFormData({ ...formData, company_address: text })}
-              placeholder="Adresse complète"
+              style={styles.sidebarInput}
+              value={formData.company_street}
+              onChangeText={(text) => setFormData({ ...formData, company_street: text })}
+              placeholder="Rue *"
               placeholderTextColor="#9CA3AF"
-              multiline
-              numberOfLines={3}
             />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TextInput
+                style={[styles.sidebarInput, { flex: 1 }]}
+                value={formData.company_postal_code}
+                onChangeText={(text) => setFormData({ ...formData, company_postal_code: text })}
+                placeholder="Code postal *"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="numeric"
+                maxLength={5}
+              />
+              <TextInput
+                style={[styles.sidebarInput, { flex: 2 }]}
+                value={formData.company_city}
+                onChangeText={(text) => setFormData({ ...formData, company_city: text })}
+                placeholder="Ville *"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
             <TextInput
               style={styles.sidebarInput}
               value={formData.company_siret}
@@ -926,6 +1061,262 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
               />
             </View>
           </View>
+
+          {/* CGV - Conditions Générales de Vente */}
+          <View style={styles.sidebarSection}>
+            <Text style={styles.sidebarSectionTitle}>Conditions Générales de Vente</Text>
+            <View style={styles.switchRow}>
+              <Text style={styles.switchLabel}>Afficher les CGV</Text>
+              <Switch
+                value={formData.show_cgv}
+                onValueChange={(value) => setFormData({ ...formData, show_cgv: value })}
+              />
+            </View>
+            {formData.show_cgv && (
+              <TextInput
+                style={[styles.sidebarInput, styles.sidebarInputMultiline, { minHeight: 100 }]}
+                value={formData.cgv_text}
+                onChangeText={(text) => setFormData({ ...formData, cgv_text: text })}
+                placeholder="Conditions générales de vente..."
+                placeholderTextColor="#9CA3AF"
+                multiline
+                numberOfLines={5}
+              />
+            )}
+          </View>
+
+          {/* Note personnalisée */}
+          <View style={styles.sidebarSection}>
+            <Text style={styles.sidebarSectionTitle}>Note au client</Text>
+            <View style={styles.switchRow}>
+              <Text style={styles.switchLabel}>Afficher une note personnalisée</Text>
+              <Switch
+                value={formData.show_custom_note}
+                onValueChange={(value) => setFormData({ ...formData, show_custom_note: value })}
+              />
+            </View>
+            {formData.show_custom_note && (
+              <TextInput
+                style={[styles.sidebarInput, styles.sidebarInputMultiline, { minHeight: 80 }]}
+                value={formData.custom_note}
+                onChangeText={(text) => setFormData({ ...formData, custom_note: text })}
+                placeholder="Message personnalisé pour le client..."
+                placeholderTextColor="#9CA3AF"
+                multiline
+                numberOfLines={4}
+              />
+            )}
+          </View>
+
+          {/* Pied de page personnalisé */}
+          <View style={styles.sidebarSection}>
+            <Text style={styles.sidebarSectionTitle}>Pied de page personnalisé</Text>
+            <TextInput
+              style={[styles.sidebarInput, styles.sidebarInputMultiline]}
+              value={formData.footer_custom_text}
+              onChangeText={(text) => setFormData({ ...formData, footer_custom_text: text })}
+              placeholder="Texte supplémentaire pour le pied de page..."
+              placeholderTextColor="#9CA3AF"
+              multiline
+              numberOfLines={3}
+            />
+          </View>
+
+          {/* Police de caractères */}
+          <View style={styles.sidebarSection}>
+            <Text style={styles.sidebarSectionTitle}>Police de caractères</Text>
+            <View style={styles.legalFormButtons}>
+              {['Inter', 'Roboto', 'Arial', 'Times New Roman', 'Georgia', 'Courier New'].map((font) => (
+                <TouchableOpacity
+                  key={font}
+                  style={[
+                    styles.legalFormButton,
+                    formData.font_family === font && styles.legalFormButtonActive
+                  ]}
+                  onPress={() => setFormData({ ...formData, font_family: font })}
+                >
+                  <Text style={[
+                    styles.legalFormButtonText,
+                    formData.font_family === font && styles.legalFormButtonTextActive,
+                    { fontFamily: font === 'Inter' ? undefined : font }
+                  ]}>
+                    {font}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Intitulés des colonnes */}
+          <View style={styles.sidebarSection}>
+            <Text style={styles.sidebarSectionTitle}>Intitulés des colonnes</Text>
+            <TextInput
+              style={styles.sidebarInput}
+              value={formData.column_description_label}
+              onChangeText={(text) => setFormData({ ...formData, column_description_label: text })}
+              placeholder="Colonne Description"
+              placeholderTextColor="#9CA3AF"
+            />
+            <TextInput
+              style={styles.sidebarInput}
+              value={formData.column_quantity_label}
+              onChangeText={(text) => setFormData({ ...formData, column_quantity_label: text })}
+              placeholder="Colonne Quantité"
+              placeholderTextColor="#9CA3AF"
+            />
+            <TextInput
+              style={styles.sidebarInput}
+              value={formData.column_unit_price_label}
+              onChangeText={(text) => setFormData({ ...formData, column_unit_price_label: text })}
+              placeholder="Colonne Prix unitaire"
+              placeholderTextColor="#9CA3AF"
+            />
+            <TextInput
+              style={styles.sidebarInput}
+              value={formData.column_vat_label}
+              onChangeText={(text) => setFormData({ ...formData, column_vat_label: text })}
+              placeholder="Colonne TVA"
+              placeholderTextColor="#9CA3AF"
+            />
+            <TextInput
+              style={styles.sidebarInput}
+              value={formData.column_total_label}
+              onChangeText={(text) => setFormData({ ...formData, column_total_label: text })}
+              placeholder="Colonne Total"
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+
+          {/* Format des nombres et devises */}
+          <View style={styles.sidebarSection}>
+            <Text style={styles.sidebarSectionTitle}>Format des montants</Text>
+            <Text style={styles.sidebarLabel}>Nombre de décimales</Text>
+            <View style={styles.legalFormButtons}>
+              {[0, 1, 2, 3].map((num) => (
+                <TouchableOpacity
+                  key={num}
+                  style={[
+                    styles.legalFormButton,
+                    formData.decimal_places === num && styles.legalFormButtonActive
+                  ]}
+                  onPress={() => setFormData({ ...formData, decimal_places: num })}
+                >
+                  <Text style={[
+                    styles.legalFormButtonText,
+                    formData.decimal_places === num && styles.legalFormButtonTextActive
+                  ]}>
+                    {num}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TextInput
+              style={styles.sidebarInput}
+              value={formData.currency_symbol}
+              onChangeText={(text) => setFormData({ ...formData, currency_symbol: text })}
+              placeholder="Symbole de devise (€, $, £...)"
+              placeholderTextColor="#9CA3AF"
+              maxLength={5}
+            />
+            <Text style={styles.sidebarLabel}>Position du symbole</Text>
+            <View style={styles.legalFormButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.legalFormButton,
+                  formData.currency_position === 'before' && styles.legalFormButtonActive
+                ]}
+                onPress={() => setFormData({ ...formData, currency_position: 'before' })}
+              >
+                <Text style={[
+                  styles.legalFormButtonText,
+                  formData.currency_position === 'before' && styles.legalFormButtonTextActive
+                ]}>
+                  €100 (avant)
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.legalFormButton,
+                  formData.currency_position === 'after' && styles.legalFormButtonActive
+                ]}
+                onPress={() => setFormData({ ...formData, currency_position: 'after' })}
+              >
+                <Text style={[
+                  styles.legalFormButtonText,
+                  formData.currency_position === 'after' && styles.legalFormButtonTextActive
+                ]}>
+                  100€ (après)
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Format de date */}
+          <View style={styles.sidebarSection}>
+            <Text style={styles.sidebarSectionTitle}>Format de date</Text>
+            <View style={styles.legalFormButtons}>
+              {[
+                { value: 'dd/MM/yyyy', label: '31/12/2025' },
+                { value: 'MM/dd/yyyy', label: '12/31/2025' },
+                { value: 'yyyy-MM-dd', label: '2025-12-31' },
+                { value: 'dd MMM yyyy', label: '31 déc 2025' },
+              ].map((format) => (
+                <TouchableOpacity
+                  key={format.value}
+                  style={[
+                    styles.legalFormButton,
+                    formData.date_format === format.value && styles.legalFormButtonActive
+                  ]}
+                  onPress={() => setFormData({ ...formData, date_format: format.value })}
+                >
+                  <Text style={[
+                    styles.legalFormButtonText,
+                    formData.date_format === format.value && styles.legalFormButtonTextActive
+                  ]}>
+                    {format.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Image de fond */}
+          <View style={styles.sidebarSection}>
+            <Text style={styles.sidebarSectionTitle}>Image de fond</Text>
+            <Text style={styles.sidebarHint}>Ajoutez un filigrane ou une image de fond au document</Text>
+            <TextInput
+              style={styles.sidebarInput}
+              value={formData.background_image_url}
+              onChangeText={(text) => setFormData({ ...formData, background_image_url: text })}
+              placeholder="URL de l'image de fond"
+              placeholderTextColor="#9CA3AF"
+            />
+            <TouchableOpacity
+              style={styles.uploadButton}
+              onPress={async () => {
+                if (Platform.OS === 'web') {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = 'image/*';
+                  input.onchange = async (e: any) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      try {
+                        const uploadResponse = await uploadService.uploadImage(file);
+                        setFormData({ ...formData, background_image_url: uploadResponse.data.url });
+                      } catch (error) {
+                        console.error('Error uploading background:', error);
+                        Alert.alert('Erreur', 'Impossible d\'importer l\'image');
+                      }
+                    }
+                  };
+                  input.click();
+                }
+              }}
+            >
+              <Text style={styles.uploadButtonText}>📤 Télécharger une image</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </Animated.View>
     );
@@ -938,31 +1329,33 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
 
     return (
       <View style={styles.fullscreenPreview}>
-        <View style={styles.previewToolbar}>
-          <View style={{ position: 'relative' }}>
-            <TouchableOpacity
-              style={styles.toolbarButton}
-              onPress={() => setSidebarVisible(!sidebarVisible)}
-            >
-              <Text style={styles.toolbarButtonText}>
-                {sidebarVisible ? '◀ Masquer' : '▶ Options'}
-              </Text>
-            </TouchableOpacity>
-            {!sidebarVisible && !formData.name && !editMode && (
-              <View style={styles.nameHintArrow}>
-                <Text style={styles.nameHintText}>← Cliquez ici pour entrer un nom</Text>
-              </View>
-            )}
+        {!previewMode && (
+          <View style={styles.previewToolbar}>
+            <View style={{ position: 'relative' }}>
+              <TouchableOpacity
+                style={styles.toolbarButton}
+                onPress={() => setSidebarVisible(!sidebarVisible)}
+              >
+                <Text style={styles.toolbarButtonText}>
+                  {sidebarVisible ? '◀ Masquer' : '▶ Options'}
+                </Text>
+              </TouchableOpacity>
+              {!sidebarVisible && !formData.name && !editMode && (
+                <View style={styles.nameHintArrow}>
+                  <Text style={styles.nameHintText}>← Cliquez ici pour entrer un nom</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.previewHints}>
+              <Text style={styles.previewHint}>💡 Cliquez sur n'importe quel texte pour le modifier</Text>
+              {!editMode && (
+                <Text style={styles.previewHintSmall}>
+                  💼 Astuce : Créez votre profil entreprise dans les paramètres pour préremplir automatiquement ces champs !
+                </Text>
+              )}
+            </View>
           </View>
-          <View style={styles.previewHints}>
-            <Text style={styles.previewHint}>💡 Cliquez sur n'importe quel texte pour le modifier</Text>
-            {!editMode && (
-              <Text style={styles.previewHintSmall}>
-                💼 Astuce : Créez votre profil entreprise dans les paramètres pour préremplir automatiquement ces champs !
-              </Text>
-            )}
-          </View>
-        </View>
+        )}
 
         <ScrollView style={styles.previewScroll} contentContainerStyle={styles.previewScrollContent}>
           <View style={[styles.invoicePreview, { borderColor: formData.border_color || '#E5E7EB' }]}>
@@ -996,24 +1389,39 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
                   </Text>
                 </View>
                 {formData.show_logo && (
-                  <TouchableOpacity
-                    style={styles.logoPlaceholder}
-                    onPress={handleLogoUpload}
-                    activeOpacity={0.7}
-                  >
-                    {formData.logo_url ? (
-                      <Image
-                        source={{ uri: toAbsoluteUrl(formData.logo_url) }}
-                        style={styles.logoImage}
-                      />
-                    ) : (
-                      <>
-                        <Text style={styles.logoText}>📷</Text>
-                        <Text style={styles.logoText}>Cliquez pour</Text>
-                        <Text style={styles.logoText}>ajouter un logo</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
+                  previewMode ? (
+                    <View style={styles.logoPlaceholder}>
+                      {formData.logo_url ? (
+                        <Image
+                          source={{ uri: toAbsoluteUrl(formData.logo_url) }}
+                          style={styles.logoImage}
+                        />
+                      ) : (
+                        <View style={styles.logoPlaceholderEmpty}>
+                          <Text style={styles.logoText}>Logo</Text>
+                        </View>
+                      )}
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.logoPlaceholder}
+                      onPress={handleLogoUpload}
+                      activeOpacity={0.7}
+                    >
+                      {formData.logo_url ? (
+                        <Image
+                          source={{ uri: toAbsoluteUrl(formData.logo_url) }}
+                          style={styles.logoImage}
+                        />
+                      ) : (
+                        <>
+                          <Text style={styles.logoText}>📷</Text>
+                          <Text style={styles.logoText}>Cliquez pour</Text>
+                          <Text style={styles.logoText}>ajouter un logo</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )
                 )}
               </View>
             )}
@@ -1056,6 +1464,13 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
 
                 {/* Informations légales */}
                 <View style={{ borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingTop: 12 }}>
+                  {formData.company_legal_form && (
+                    <View style={{ marginBottom: 4 }}>
+                      <Text style={[styles.companyDetails, { color: formData.secondary_text_color || '#6B7280', fontWeight: '600' }]}>
+                        {formData.company_legal_form}
+                      </Text>
+                    </View>
+                  )}
                   <View style={{ flexDirection: 'row', marginBottom: 4 }}>
                     <Text style={[styles.companyDetailsLabel, { color: formData.secondary_text_color || '#6B7280' }]}>
                       SIRET :
@@ -1291,6 +1706,39 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
               </View>
             )}
 
+            {/* CGV - Conditions Générales de Vente */}
+            {formData.show_cgv && formData.cgv_text && (
+              <View style={[styles.cgvSection, { borderColor: formData.border_color || '#E5E7EB' }]}>
+                <Text style={[styles.cgvTitle, { color: formData.text_color || '#1F2937' }]}>
+                  Conditions Générales de Vente
+                </Text>
+                <Text style={[styles.cgvText, { color: formData.secondary_text_color || '#6B7280' }]}>
+                  {formData.cgv_text}
+                </Text>
+              </View>
+            )}
+
+            {/* Note personnalisée */}
+            {formData.show_custom_note && formData.custom_note && (
+              <View style={[styles.customNoteSection, { borderColor: formData.primary_color || '#2563EB', backgroundColor: `${formData.primary_color || '#2563EB'}08` }]}>
+                <Text style={[styles.customNoteTitle, { color: formData.primary_color || '#2563EB' }]}>
+                  📝 Note
+                </Text>
+                <Text style={[styles.customNoteText, { color: formData.text_color || '#1F2937' }]}>
+                  {formData.custom_note}
+                </Text>
+              </View>
+            )}
+
+            {/* Footer personnalisé */}
+            {formData.footer_custom_text && (
+              <View style={styles.footerCustomSection}>
+                <Text style={[styles.footerCustomText, { color: formData.secondary_text_color || '#6B7280' }]}>
+                  {formData.footer_custom_text}
+                </Text>
+              </View>
+            )}
+
             {/* Footer */}
             {formData.show_footer && (
               <View style={styles.invoiceFooter}>
@@ -1340,7 +1788,7 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
                 style={styles.actionButton}
                 onPress={() => openPreviewModal(template)}
               >
-                <Text style={styles.actionIcon}>👁️</Text>
+                <EyeIcon size={20} color="#6B7280" />
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionButton}
@@ -1602,6 +2050,18 @@ export default function TemplatesScreen({ navigation }: TemplatesScreenProps) {
                 <Text style={styles.deleteModalConfirmButtonText}>Supprimer</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Success Modal */}
+      <Modal visible={successModalVisible} animationType="fade" transparent>
+        <View style={styles.successModalOverlay}>
+          <View style={styles.successModalContent}>
+            <View style={styles.successIconContainer}>
+              <CheckCircleIcon size={48} color="#10B981" />
+            </View>
+            <Text style={styles.successModalText}>{successMessage}</Text>
           </View>
         </View>
       </Modal>
@@ -2014,6 +2474,10 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     borderStyle: 'dashed',
   },
+  logoPlaceholderEmpty: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   logoImage: {
     width: '100%',
     height: '100%',
@@ -2309,6 +2773,64 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     width: '100%',
   },
+  // CGV Section
+  cgvSection: {
+    borderTopWidth: 1,
+    marginTop: 20,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 8,
+  },
+  cgvTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  cgvText: {
+    fontSize: 10,
+    lineHeight: 16,
+  },
+  // Custom Note Section
+  customNoteSection: {
+    borderWidth: 1,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+  },
+  customNoteTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  customNoteText: {
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  // Footer Custom Section
+  footerCustomSection: {
+    marginTop: 16,
+    paddingTop: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  footerCustomText: {
+    fontSize: 11,
+    lineHeight: 18,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  // Sidebar Hint
+  sidebarHint: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
   inlineEditable: {
     borderRadius: 4,
     padding: 4,
@@ -2374,6 +2896,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#fff',
+  },
+  successModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  successModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  successIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#ECFDF5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  successModalText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    textAlign: 'center',
   },
   companyProfileModalContent: {
     backgroundColor: '#fff',

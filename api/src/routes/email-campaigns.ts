@@ -435,10 +435,10 @@ router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) 
         COUNT(*) FILTER (WHERE status = 'draft') as draft_campaigns,
         COUNT(*) FILTER (WHERE status = 'scheduled') as scheduled_campaigns,
         COALESCE(SUM(sent_count), 0) as total_emails_sent,
-        COALESCE(SUM(open_count), 0) as total_opens,
-        COALESCE(SUM(click_count), 0) as total_clicks,
-        COALESCE(SUM(bounce_count), 0) as total_bounces,
-        COALESCE(SUM(unsubscribe_count), 0) as total_unsubscribes
+        COALESCE(SUM(opened_count), 0) as total_opens,
+        COALESCE(SUM(clicked_count), 0) as total_clicks,
+        COALESCE(SUM(bounced_count), 0) as total_bounces,
+        COALESCE(SUM(unsubscribed_count), 0) as total_unsubscribes
       FROM email_campaigns
       WHERE organization_id = $1
     `, [organizationId]);
@@ -455,13 +455,13 @@ router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) 
     const recentCampaigns = await db.query(`
       SELECT
         id, name, subject, status,
-        sent_count, open_count, click_count, bounce_count,
+        sent_count, opened_count, clicked_count, bounced_count,
         sent_at, created_at,
         CASE WHEN sent_count > 0 THEN
-          ROUND((open_count::numeric / sent_count) * 100, 2)
+          ROUND((opened_count::numeric / sent_count) * 100, 2)
         ELSE 0 END as open_rate,
         CASE WHEN sent_count > 0 THEN
-          ROUND((click_count::numeric / sent_count) * 100, 2)
+          ROUND((clicked_count::numeric / sent_count) * 100, 2)
         ELSE 0 END as click_rate
       FROM email_campaigns
       WHERE organization_id = $1 AND status = 'sent'

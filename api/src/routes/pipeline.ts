@@ -238,6 +238,65 @@ router.get('/opportunities', async (req: Request, res: Response) => {
   }
 });
 
+// Get pipeline summary - MUST be before /opportunities/:id
+router.get('/summary', async (req: Request, res: Response) => {
+  const query = `
+    SELECT
+      s.id as stage_id,
+      s.name as stage_name,
+      s.color as stage_color,
+      COUNT(d.id) as opportunity_count,
+      COALESCE(SUM(d.value), 0) as total_value,
+      COALESCE(AVG(d.probability), 0) as avg_probability
+    FROM pipeline_stages s
+    LEFT JOIN deals d ON s.id = d.stage_id AND d.deleted_at IS NULL
+    GROUP BY s.id
+    ORDER BY s.display_order ASC
+  `;
+
+  try {
+    const result = await db.query(query, []);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get pipeline overview with stats - MUST be before /opportunities/:id
+router.get('/overview', async (req: Request, res: Response) => {
+  try {
+    const result = await db.query(`
+      SELECT
+        p.id,
+        p.name,
+        p.is_default,
+        p.description,
+        COUNT(DISTINCT d.id) as deal_count,
+        COUNT(DISTINCT d.id) FILTER (WHERE d.status = 'open') as open_deals,
+        COUNT(DISTINCT d.id) FILTER (WHERE d.status = 'won') as won_deals,
+        COUNT(DISTINCT d.id) FILTER (WHERE d.status = 'lost') as lost_deals,
+        COALESCE(SUM(d.value), 0) as total_value,
+        COALESCE(SUM(d.value) FILTER (WHERE d.status = 'open'), 0) as open_value,
+        COALESCE(SUM(d.value) FILTER (WHERE d.status = 'won'), 0) as won_value,
+        COALESCE(AVG(d.probability), 0) as avg_probability,
+        COUNT(DISTINCT ps.id) as stage_count,
+        p.created_at,
+        p.updated_at
+      FROM pipelines p
+      LEFT JOIN deals d ON d.pipeline_id = p.id AND d.deleted_at IS NULL
+      LEFT JOIN pipeline_stages ps ON ps.pipeline_id = p.id
+      WHERE p.deleted_at IS NULL
+      GROUP BY p.id, p.name, p.is_default, p.description, p.created_at, p.updated_at
+      ORDER BY p.created_at DESC
+    `);
+
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('Error fetching pipeline overview:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get opportunity by ID
 router.get('/opportunities/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -534,65 +593,6 @@ router.patch('/opportunities/:id/restore', async (req: Request, res: Response) =
     }
     res.json({ message: 'Opportunity restored successfully', opportunity: result.rows[0] });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Get pipeline summary
-router.get('/summary', async (req: Request, res: Response) => {
-  const query = `
-    SELECT
-      s.id as stage_id,
-      s.name as stage_name,
-      s.color as stage_color,
-      COUNT(d.id) as opportunity_count,
-      COALESCE(SUM(d.value), 0) as total_value,
-      COALESCE(AVG(d.probability), 0) as avg_probability
-    FROM pipeline_stages s
-    LEFT JOIN deals d ON s.id = d.stage_id AND d.deleted_at IS NULL
-    GROUP BY s.id
-    ORDER BY s.display_order ASC
-  `;
-
-  try {
-    const result = await db.query(query, []);
-    res.json(result.rows);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Get pipeline overview with stats
-router.get('/overview', async (req: Request, res: Response) => {
-  try {
-    const result = await db.query(`
-      SELECT
-        p.id,
-        p.name,
-        p.is_default,
-        p.description,
-        COUNT(DISTINCT d.id) as deal_count,
-        COUNT(DISTINCT d.id) FILTER (WHERE d.status = 'open') as open_deals,
-        COUNT(DISTINCT d.id) FILTER (WHERE d.status = 'won') as won_deals,
-        COUNT(DISTINCT d.id) FILTER (WHERE d.status = 'lost') as lost_deals,
-        COALESCE(SUM(d.value), 0) as total_value,
-        COALESCE(SUM(d.value) FILTER (WHERE d.status = 'open'), 0) as open_value,
-        COALESCE(SUM(d.value) FILTER (WHERE d.status = 'won'), 0) as won_value,
-        COALESCE(AVG(d.probability), 0) as avg_probability,
-        COUNT(DISTINCT ps.id) as stage_count,
-        p.created_at,
-        p.updated_at
-      FROM pipelines p
-      LEFT JOIN deals d ON d.pipeline_id = p.id AND d.deleted_at IS NULL
-      LEFT JOIN pipeline_stages ps ON ps.pipeline_id = p.id
-      WHERE p.deleted_at IS NULL
-      GROUP BY p.id, p.name, p.is_default, p.description, p.created_at, p.updated_at
-      ORDER BY p.created_at DESC
-    `);
-
-    res.json(result.rows);
-  } catch (err: any) {
-    console.error('Error fetching pipeline overview:', err);
     res.status(500).json({ error: err.message });
   }
 });

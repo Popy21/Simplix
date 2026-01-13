@@ -240,19 +240,17 @@ export default function GlassNavigation() {
   const renderCustomizeModal = () => (
     <Modal
       visible={customizeModalVisible}
-      animationType="fade"
+      animationType="slide"
       transparent
       onRequestClose={() => setCustomizeModalVisible(false)}
     >
       <View style={modalStyles.overlay}>
-        {/* Ambient background effects */}
-        {isWeb && (
-          <>
-            <View style={modalStyles.ambientOrb1} />
-            <View style={modalStyles.ambientOrb2} />
-            <View style={modalStyles.ambientOrb3} />
-          </>
-        )}
+        {/* Zone cliquable pour fermer le modal */}
+        <TouchableOpacity
+          style={modalStyles.overlayClickable}
+          onPress={() => setCustomizeModalVisible(false)}
+          activeOpacity={1}
+        />
 
         <View style={modalStyles.container}>
           {/* Glass effect layer */}
@@ -390,6 +388,35 @@ export default function GlassNavigation() {
               );
             })}
           </ScrollView>
+
+          {/* Aperçu en temps réel des modules épinglés */}
+          <View style={modalStyles.previewSection}>
+            <Text style={modalStyles.previewTitle}>Aperçu de votre navigation</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={modalStyles.previewContent}
+            >
+              {pinnedModules.map((module) => {
+                const Icon = module.icon;
+                return (
+                  <View key={module.id} style={modalStyles.previewItem}>
+                    <LinearGradient
+                      colors={module.gradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={modalStyles.previewIcon}
+                    >
+                      <Icon size={16} color="#FFFFFF" />
+                    </LinearGradient>
+                    <Text style={modalStyles.previewLabel} numberOfLines={1}>
+                      {module.label}
+                    </Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
 
           {/* Footer */}
           <View style={modalStyles.footer}>
@@ -538,73 +565,40 @@ export default function GlassNavigation() {
 const modalStyles = StyleSheet.create({
   overlay: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    flexDirection: 'row',
     ...(isWeb ? {
-      backgroundColor: 'rgba(15, 23, 42, 0.8)',
-      backdropFilter: 'blur(12px)',
+      backgroundColor: 'rgba(0, 0, 0, 0.3)',
     } : {
-      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      backgroundColor: 'rgba(0, 0, 0, 0.4)',
     }),
   },
 
-  // Ambient orbs
-  ambientOrb1: {
-    position: 'absolute',
-    width: 400,
-    height: 400,
-    borderRadius: 200,
-    top: '10%',
-    left: '-10%',
-    ...(isWeb ? {
-      background: 'radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, transparent 70%)',
-      animation: 'float 8s ease-in-out infinite',
-    } : {}),
-  },
-  ambientOrb2: {
-    position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    bottom: '10%',
-    right: '-5%',
-    ...(isWeb ? {
-      background: 'radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, transparent 70%)',
-      animation: 'float 10s ease-in-out infinite reverse',
-    } : {}),
-  },
-  ambientOrb3: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    top: '50%',
-    right: '20%',
-    ...(isWeb ? {
-      background: 'radial-gradient(circle, rgba(236, 72, 153, 0.2) 0%, transparent 70%)',
-      animation: 'float 12s ease-in-out infinite',
-    } : {}),
+  // Zone cliquable pour fermer (côté gauche)
+  overlayClickable: {
+    flex: 1,
+    minWidth: IS_LARGE_SCREEN ? NAV_WIDTH + 40 : 60,
   },
 
   container: {
-    width: '100%',
-    maxWidth: 700,
-    maxHeight: '85%',
-    borderRadius: 28,
+    width: IS_LARGE_SCREEN ? 500 : '90%',
+    maxWidth: 550,
+    height: '100%',
+    borderTopLeftRadius: 28,
+    borderBottomLeftRadius: 28,
     overflow: 'hidden',
     position: 'relative',
     ...(isWeb ? {
-      backgroundColor: 'rgba(30, 41, 59, 0.7)',
+      backgroundColor: 'rgba(30, 41, 59, 0.95)',
       backdropFilter: 'blur(40px) saturate(180%)',
       border: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRightWidth: 0,
       boxShadow: `
-        0 25px 50px -12px rgba(0, 0, 0, 0.5),
+        -10px 0 40px rgba(0, 0, 0, 0.4),
         0 0 0 1px rgba(255, 255, 255, 0.05),
         inset 0 1px 0 rgba(255, 255, 255, 0.1)
       `,
     } : {
-      backgroundColor: 'rgba(30, 41, 59, 0.95)',
+      backgroundColor: 'rgba(30, 41, 59, 0.98)',
     }),
   },
 
@@ -612,8 +606,8 @@ const modalStyles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     ...(isWeb ? {
       background: `
-        linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%),
-        linear-gradient(225deg, rgba(139,92,246,0.1) 0%, transparent 50%)
+        linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 30%),
+        linear-gradient(270deg, rgba(139,92,246,0.1) 0%, transparent 50%)
       `,
     } : {}),
   },
@@ -800,12 +794,54 @@ const modalStyles = StyleSheet.create({
     fontWeight: '700',
   },
 
+  // Preview Section
+  previewSection: {
+    padding: 16,
+    paddingHorizontal: 24,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    ...(isWeb ? {
+      backgroundColor: 'rgba(139, 92, 246, 0.08)',
+    } : {
+      backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    }),
+  },
+  previewTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#a78bfa',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
+  previewContent: {
+    gap: 12,
+    paddingVertical: 4,
+  },
+  previewItem: {
+    alignItems: 'center',
+    width: 64,
+  },
+  previewIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  previewLabel: {
+    fontSize: 10,
+    color: '#94a3b8',
+    textAlign: 'center',
+  },
+
   // Footer
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
     paddingHorizontal: 24,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.08)',

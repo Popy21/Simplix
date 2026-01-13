@@ -8,6 +8,7 @@ api/node_modules/
 api/dist/
 api/data/
 api/.env
+api/uploads/
 
 # Web App
 web-app/node_modules/
