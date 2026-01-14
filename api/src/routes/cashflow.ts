@@ -371,4 +371,153 @@ router.get('/monthly/:year', authenticateToken, async (req: AuthRequest, res: Re
   }
 });
 
+// ==========================================
+// HISTORIQUE DE TRÉSORERIE
+// ==========================================
+
+router.get('/history', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id || '00000000-0000-0000-0000-000000000001';
+    const { startDate, endDate } = req.query;
+
+    // Get payment history
+    const payments = await db.query(`
+      SELECT
+        p.id,
+        p.amount,
+        p.payment_date as date,
+        p.payment_method,
+        'income' as type,
+        i.invoice_number as reference,
+        c.name as party_name
+      FROM payments p
+      LEFT JOIN invoices i ON p.invoice_id = i.id
+      LEFT JOIN contacts c ON i.client_id = c.id
+      WHERE p.payment_date >= COALESCE($2::date, CURRENT_DATE - INTERVAL '6 months')
+        AND p.payment_date <= COALESCE($3::date, CURRENT_DATE)
+      ORDER BY p.payment_date DESC
+      LIMIT 100
+    `, [organizationId, startDate, endDate]);
+
+    // Get expense payments
+    const expensePayments = await db.query(`
+      SELECT
+        e.id,
+        e.amount,
+        e.expense_date as date,
+        e.payment_method,
+        'expense' as type,
+        e.description as reference,
+        s.name as party_name
+      FROM expenses e
+      LEFT JOIN suppliers s ON e.supplier_id = s.id
+      WHERE e.organization_id = $1
+        AND e.payment_status = 'paid'
+        AND e.deleted_at IS NULL
+        AND e.expense_date >= COALESCE($2::date, CURRENT_DATE - INTERVAL '6 months')
+        AND e.expense_date <= COALESCE($3::date, CURRENT_DATE)
+      ORDER BY e.expense_date DESC
+      LIMIT 100
+    `, [organizationId, startDate, endDate]);
+
+    // Combine and sort
+    const history = [...payments.rows, ...expensePayments.rows]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 100);
+
+    res.json({
+      history,
+      period: {
+        startDate: startDate || new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        endDate: endDate || new Date().toISOString().split('T')[0]
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// RÉSUMÉ DE TRÉSORERIE
+// ==========================================
+
+router.get('/summary', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id || '00000000-0000-0000-0000-000000000001';
+
+    // Total received this month
+    const receivedThisMonth = await db.query(`
+      SELECT COALESCE(SUM(amount), 0) as total
+      FROM payments
+      WHERE payment_date >= date_trunc('month', CURRENT_DATE)
+        AND payment_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+    `);
+
+    // Total paid this month
+    const paidThisMonth = await db.query(`
+      SELECT COALESCE(SUM(amount), 0) as total
+      FROM expenses
+      WHERE organization_id = $1
+        AND payment_status = 'paid'
+        AND deleted_at IS NULL
+        AND expense_date >= date_trunc('month', CURRENT_DATE)
+        AND expense_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+    `, [organizationId]);
+
+    // Pending invoices (to receive)
+    const pendingInvoices = await db.query(`
+      SELECT
+        COUNT(*) as count,
+        COALESCE(SUM(total_amount), 0) as total
+      FROM invoices
+      WHERE status IN ('sent', 'pending', 'partial')
+    `);
+
+    // Pending expenses (to pay)
+    const pendingExpenses = await db.query(`
+      SELECT
+        COUNT(*) as count,
+        COALESCE(SUM(amount), 0) as total
+      FROM expenses
+      WHERE organization_id = $1
+        AND payment_status IN ('unpaid', 'partial')
+        AND deleted_at IS NULL
+    `, [organizationId]);
+
+    // Overdue invoices
+    const overdueInvoices = await db.query(`
+      SELECT
+        COUNT(*) as count,
+        COALESCE(SUM(total_amount), 0) as total
+      FROM invoices
+      WHERE status IN ('sent', 'pending', 'partial')
+        AND due_date < CURRENT_DATE
+    `);
+
+    res.json({
+      currentMonth: {
+        income: parseFloat(receivedThisMonth.rows[0].total),
+        expenses: parseFloat(paidThisMonth.rows[0].total),
+        net: parseFloat(receivedThisMonth.rows[0].total) - parseFloat(paidThisMonth.rows[0].total)
+      },
+      pending: {
+        toReceive: {
+          count: parseInt(pendingInvoices.rows[0].count),
+          amount: parseFloat(pendingInvoices.rows[0].total)
+        },
+        toPay: {
+          count: parseInt(pendingExpenses.rows[0].count),
+          amount: parseFloat(pendingExpenses.rows[0].total)
+        }
+      },
+      overdue: {
+        count: parseInt(overdueInvoices.rows[0].count),
+        amount: parseFloat(overdueInvoices.rows[0].total)
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

@@ -420,4 +420,152 @@ router.get('/export', authenticateToken, async (req: AuthRequest, res: Response)
   }
 });
 
+// ==========================================
+// BILAN (BALANCE SHEET)
+// ==========================================
+
+router.get('/balance-sheet', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id || '00000000-0000-0000-0000-000000000001';
+    const { date } = req.query;
+    const asOfDate = date || new Date().toISOString().split('T')[0];
+
+    // Actifs - Créances clients (comptes clients)
+    const receivables = await db.query(`
+      SELECT COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as total
+      FROM invoices
+      WHERE status IN ('sent', 'pending', 'partial')
+        AND created_at <= $1
+    `, [asOfDate]);
+
+    // Passifs - Dettes fournisseurs
+    const payables = await db.query(`
+      SELECT COALESCE(SUM(amount), 0) as total
+      FROM expenses
+      WHERE organization_id = $1
+        AND payment_status IN ('unpaid', 'partial')
+        AND deleted_at IS NULL
+        AND expense_date <= $2
+    `, [organizationId, asOfDate]);
+
+    // Revenus cumulés
+    const totalRevenue = await db.query(`
+      SELECT COALESCE(SUM(total_amount), 0) as total
+      FROM invoices
+      WHERE status = 'paid'
+        AND created_at <= $1
+    `, [asOfDate]);
+
+    // Dépenses cumulées
+    const totalExpenses = await db.query(`
+      SELECT COALESCE(SUM(amount), 0) as total
+      FROM expenses
+      WHERE organization_id = $1
+        AND payment_status = 'paid'
+        AND deleted_at IS NULL
+        AND expense_date <= $2
+    `, [organizationId, asOfDate]);
+
+    const assets = {
+      receivables: parseFloat(receivables.rows[0].total),
+      cash: parseFloat(totalRevenue.rows[0].total) - parseFloat(totalExpenses.rows[0].total),
+      total: 0
+    };
+    assets.total = assets.receivables + assets.cash;
+
+    const liabilities = {
+      payables: parseFloat(payables.rows[0].total),
+      total: parseFloat(payables.rows[0].total)
+    };
+
+    const equity = assets.total - liabilities.total;
+
+    res.json({
+      asOfDate,
+      assets,
+      liabilities,
+      equity,
+      balanced: Math.abs(assets.total - (liabilities.total + equity)) < 0.01
+    });
+  } catch (err: any) {
+    console.error('Erreur bilan:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// RÉSUMÉ TVA
+// ==========================================
+
+router.get('/vat-summary', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const organizationId = req.user?.organization_id || '00000000-0000-0000-0000-000000000001';
+    const { startDate, endDate } = req.query;
+
+    const start = startDate || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+    const end = endDate || new Date().toISOString().split('T')[0];
+
+    // TVA collectée (sur ventes)
+    const vatCollected = await db.query(`
+      SELECT
+        COALESCE(SUM(total_amount - (total_amount / (1 + 0.20))), 0) as vat_20,
+        COALESCE(SUM(
+          CASE WHEN vat_rate = 10 THEN total_amount - (total_amount / 1.10) ELSE 0 END
+        ), 0) as vat_10,
+        COALESCE(SUM(
+          CASE WHEN vat_rate = 5.5 THEN total_amount - (total_amount / 1.055) ELSE 0 END
+        ), 0) as vat_55
+      FROM invoices
+      WHERE status = 'paid'
+        AND created_at >= $1
+        AND created_at <= $2
+    `, [start, end]);
+
+    // TVA déductible (sur achats)
+    const vatDeductible = await db.query(`
+      SELECT
+        COALESCE(SUM(amount * 0.20 / 1.20), 0) as vat_20,
+        COALESCE(SUM(
+          CASE WHEN vat_rate = 10 THEN amount * 0.10 / 1.10 ELSE 0 END
+        ), 0) as vat_10,
+        COALESCE(SUM(
+          CASE WHEN vat_rate = 5.5 THEN amount * 0.055 / 1.055 ELSE 0 END
+        ), 0) as vat_55
+      FROM expenses
+      WHERE organization_id = $1
+        AND payment_status = 'paid'
+        AND deleted_at IS NULL
+        AND expense_date >= $2
+        AND expense_date <= $3
+    `, [organizationId, start, end]);
+
+    const collected = {
+      vat20: parseFloat(vatCollected.rows[0].vat_20 || 0),
+      vat10: parseFloat(vatCollected.rows[0].vat_10 || 0),
+      vat55: parseFloat(vatCollected.rows[0].vat_55 || 0),
+      total: 0
+    };
+    collected.total = collected.vat20 + collected.vat10 + collected.vat55;
+
+    const deductible = {
+      vat20: parseFloat(vatDeductible.rows[0].vat_20 || 0),
+      vat10: parseFloat(vatDeductible.rows[0].vat_10 || 0),
+      vat55: parseFloat(vatDeductible.rows[0].vat_55 || 0),
+      total: 0
+    };
+    deductible.total = deductible.vat20 + deductible.vat10 + deductible.vat55;
+
+    res.json({
+      period: { startDate: start, endDate: end },
+      collected,
+      deductible,
+      balance: collected.total - deductible.total,
+      status: collected.total - deductible.total > 0 ? 'to_pay' : 'credit'
+    });
+  } catch (err: any) {
+    console.error('Erreur résumé TVA:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
